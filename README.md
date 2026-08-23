@@ -59,10 +59,10 @@ pnpm --dir docs build
 | Area | Current state |
 | --- | --- |
 | Core model | Real create/list/test/extract operations with shared safety policy |
-| Desktop | Bilingual modern browser/creator backed by an isolated, cancelable archive worker |
+| Desktop | Bilingual modern browser/creator, isolated archive worker and Windows taskbar progress |
 | CLI | `formats`, `detect`, `list`, `test`, `extract`, and `create` |
 | Archive providers | ZIP/ZIP64/AES, 7z/AES, TAR + gzip/zstd/xz/bzip2, and common streams |
-| Packaging | Real x64/ARM64 runnable directory, standalone EXE and MSIX build path |
+| Packaging | Real x64/ARM64 runnable directory, standalone EXE, MSIX and packaged CLI alias |
 | Distribution | Tag workflow produces checksums, SBOM, provenance and WinGet manifest candidates |
 
 RAR remains disabled pending the explicit license, security and interoperability

@@ -51,7 +51,8 @@ Goal: complete the Windows-focused daily workflow.
 - [x] 7z read/write and AES encryption delivered ahead of plan.
 - [x] Password flow avoids logging or persisting secrets.
 - [x] Windows archive file associations and desktop drag-and-drop.
-- [ ] Taskbar progress and shell commands.
+- [x] Windows taskbar progress and packaged `zifile.exe` App Execution Alias.
+- [ ] Windows 11 File Explorer `IExplorerCommand` context menu extension.
 - [x] Isolated worker process with versioned IPC, cancellation and Windows Job Object limits.
 - [x] x64/ARM64 MSIX and standalone executable packaging.
 - [ ] Signed install, upgrade, repair and uninstall tests.

@@ -29,6 +29,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 桌面端加入简体中文/英文切换、系统语言首启检测和主题/语言持久化；设置文件不包含密码。
 - 归档表格加入路径搜索和每页 500 项的有界分页，并加入 `Ctrl+O`、`Ctrl+N`、`Ctrl+A`、`Escape` 快捷键。
 - 新增版本化 Worker 协议与 `zifile-worker.exe`；桌面列出、校验、解压、创建均跨进程执行。Windows Job Object 限制单进程、4 GiB 内存并启用 kill-on-close；创建和解压先协作取消，2 秒后由进程回收兜底。
+- Worker 进度映射到 Windows 任务栏，并在 MSIX 注册 `zifile.exe` App Execution Alias；现代资源管理器右键命令仍需独立 `IExplorerCommand` COM 扩展。
 
 ### 验证
 
@@ -47,6 +48,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 桌面回归测试用 100,000 个模拟条目证明单页最多构造 500 行；Windows 实机用 1,200 项 ZIP 验证 3 页翻页、路径搜索和 `Ctrl+N`，并在 1182×810 视口检查中英文与深浅主题无裁切。冷启动复测确认语言/主题从严格的两字段设置文件恢复，测试产生的本地设置随后已清理。
 - Worker 协议异常/流式条目单测和真实 IPC 冒烟通过；32 MiB 随机输入的 7z 创建取消测试证明 Worker 在时限内退出，且目标与临时文件均无残留。Windows 实机确认桌面经 Worker 打开并校验 7z。x64 Release MSIX 与完整可运行目录均包含同一次构建的 Worker EXE。
 - 隔离 Worker 批次的 [CI 32661216329](https://github.com/ax2/zifile/actions/runs/32661216329) 全部通过，包括格式、Clippy、30 项 Rust 测试、benchmark 编译、真实取消冒烟、第三方互操作、依赖策略、文档和 fuzz 目标编译。[双架构 Release 验证 32661235460](https://github.com/ax2/zifile/actions/runs/32661235460) 同时通过 x64/ARM64 构建、MSIX、产物证明和上传；下载复核确认两个架构均含 Worker、MSIX、Worker 校验和，并生成 Worker 与协议 crate 的 CycloneDX SBOM。该运行未创建正式 GitHub Release。
+- 任务栏状态映射新增 2 项单测；本地 x64 Release/MSIX `0.1.0.2` 构建成功，MakeAppx 接受 App Execution Alias manifest。实机打开 32 MiB 7z 验证新包 UI 正常；当前测试桌面自动隐藏任务栏且焦点自动化不稳定，因此未把任务栏视觉效果记为已验证。
 
 ### 遗留问题
 
@@ -55,6 +57,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 更广泛的第三方 7-Zip/libarchive 语料、直接归档解析器 fuzz、损坏/截断/压缩炸弹扩展语料。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
 - 完整键盘遍历、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；十万条目的峰值内存与交互延迟仍需正式性能基线。
+- Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；可访问 UI 迁移见 ADR-0005。
 - Partner Center 名称预留、代码签名、WinGet 与 Microsoft Store 提交。
 
 ### 发布结果

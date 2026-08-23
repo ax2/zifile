@@ -38,3 +38,5 @@ All notable changes to ZiFile are documented here. The format follows
 - Windows Job Object containment: one active process, 4 GiB process-memory ceiling,
   kill-on-close behavior, cooperative create/extract cancellation and timed forced
   reclamation as a fallback.
+- Windows taskbar states driven by Worker progress, including indeterminate and
+  cancelling states, plus a packaged `zifile.exe` App Execution Alias.
