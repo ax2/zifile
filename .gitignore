@@ -8,4 +8,5 @@ docs/dist/
 docs/.astro/
 docs/.starlight/
 artifacts/
+/dist/
 .cargo/config.toml

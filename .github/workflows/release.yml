@@ -11,31 +11,142 @@ permissions:
   attestations: write
 
 jobs:
-  windows-x64:
-    runs-on: windows-latest
+  windows:
+    name: Windows ${{ matrix.architecture }}
+    # Pin VS 2022 while the Windows 2025/VS 2026 image has known ARM64
+    # toolset compatibility regressions.
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x64, arm64]
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Test
-        run: cargo test --workspace --locked
-      - name: Build release executables
-        run: cargo build --workspace --release --locked
-      - name: Stage artifacts and checksums
+        with:
+          key: release-${{ matrix.architecture }}
+      - name: Resolve package version
+        id: version
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
-          Copy-Item target/release/zifile.exe artifacts/zifile-cli-x86_64-pc-windows-msvc.exe
-          Copy-Item target/release/zifile-desktop.exe artifacts/zifile-desktop-x86_64-pc-windows-msvc.exe
-          Get-FileHash artifacts/*.exe -Algorithm SHA256 |
+          $tag = '${{ github.ref_name }}'.TrimStart('v')
+          if ($tag -notmatch '^(\d+)\.(\d+)\.(\d+)(?:-[A-Za-z]+\.(\d+))?$') {
+            throw "Tag must look like v1.2.3 or v1.2.3-alpha.4: $tag"
+          }
+          $revision = if ($Matches[4]) { $Matches[4] } else { '0' }
+          "msix=$($Matches[1]).$($Matches[2]).$($Matches[3]).$revision" >> $env:GITHUB_OUTPUT
+      - name: Test workspace
+        if: matrix.architecture == 'x64'
+        run: cargo test --workspace --locked
+      - name: Build MSIX and runnable executables
+        shell: pwsh
+        env:
+          ZIFILE_PFX_BASE64: ${{ secrets.ZIFILE_PFX_BASE64 }}
+          ZIFILE_PFX_PASSWORD: ${{ secrets.ZIFILE_PFX_PASSWORD }}
+          ZIFILE_MSIX_IDENTITY: ${{ secrets.ZIFILE_MSIX_IDENTITY }}
+          ZIFILE_MSIX_PUBLISHER: ${{ secrets.ZIFILE_MSIX_PUBLISHER }}
+        run: |
+          $arguments = @{
+            Version = '${{ steps.version.outputs.msix }}'
+            Architecture = '${{ matrix.architecture }}'
+          }
+          if ($env:ZIFILE_MSIX_IDENTITY) { $arguments.IdentityName = $env:ZIFILE_MSIX_IDENTITY }
+          if ($env:ZIFILE_MSIX_PUBLISHER) { $arguments.Publisher = $env:ZIFILE_MSIX_PUBLISHER }
+          $certificate = Join-Path $env:RUNNER_TEMP 'zifile-signing.pfx'
+          try {
+            if ($env:ZIFILE_PFX_BASE64) {
+              [IO.File]::WriteAllBytes($certificate, [Convert]::FromBase64String($env:ZIFILE_PFX_BASE64))
+              $arguments.CertificatePath = $certificate
+              $arguments.CertificatePassword = ConvertTo-SecureString $env:ZIFILE_PFX_PASSWORD -AsPlainText -Force
+            }
+            ./packaging/msix/Build-Package.ps1 @arguments
+          } finally {
+            if (Test-Path -LiteralPath $certificate) { Remove-Item -LiteralPath $certificate -Force }
+          }
+      - name: Stage release files
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.msix }}'
+          $arch = '${{ matrix.architecture }}'
+          $source = "dist/ZiFile-$version-windows-$arch"
+          $output = "artifacts-$arch"
+          New-Item -ItemType Directory -Path $output -Force | Out-Null
+          Copy-Item -LiteralPath "$source/zifile-desktop.exe" -Destination "$output/zifile-desktop-windows-$arch.exe"
+          Copy-Item -LiteralPath "$source/zifile.exe" -Destination "$output/zifile-cli-windows-$arch.exe"
+          Copy-Item -LiteralPath "dist/ZiFile-$version-windows-$arch.msix" -Destination $output
+          Get-FileHash "$output/*" -Algorithm SHA256 |
+            Sort-Object Path |
             ForEach-Object { "{0}  {1}" -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf) } |
-            Set-Content artifacts/SHA256SUMS.txt
-      - name: Attest release executables
+            Set-Content -LiteralPath "$output/SHA256SUMS-$arch.txt"
+      - name: Attest Windows artifacts
         uses: actions/attest-build-provenance@v4
         with:
-          subject-path: artifacts/*.exe
+          subject-path: artifacts-${{ matrix.architecture }}/*
+      - uses: actions/upload-artifact@v6
+        with:
+          name: windows-${{ matrix.architecture }}
+          path: artifacts-${{ matrix.architecture }}/*
+          if-no-files-found: error
+
+  sbom:
+    name: CycloneDX SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-cyclonedx@0.5.9
+      - run: cargo cyclonedx --format json --all --target all
+      - name: Collect SBOM files
+        shell: bash
+        run: |
+          mkdir -p sbom
+          find . -name 'bom.json' -not -path './target/*' -print0 | while IFS= read -r -d '' file; do
+            name="${file#./}"
+            name="${name%/bom.json}"
+            name="${name//\//-}"
+            cp "$file" "sbom/${name:-workspace}.cdx.json"
+          done
+          test -n "$(find sbom -type f -print -quit)"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: sbom
+          path: sbom/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [windows, sbom]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          path: release
+          merge-multiple: true
+      - name: Generate WinGet submission candidate
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          $x64 = Get-ChildItem -LiteralPath release -Filter '*windows-x64.msix' | Select-Object -Single
+          $arm64 = Get-ChildItem -LiteralPath release -Filter '*windows-arm64.msix' | Select-Object -Single
+          $base = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+          ./packaging/winget/Generate-Manifests.ps1 `
+            -Version $version `
+            -X64InstallerUrl "$base/$($x64.Name)" `
+            -X64InstallerSha256 (Get-FileHash -LiteralPath $x64.FullName -Algorithm SHA256).Hash `
+            -Arm64InstallerUrl "$base/$($arm64.Name)" `
+            -Arm64InstallerSha256 (Get-FileHash -LiteralPath $arm64.FullName -Algorithm SHA256).Hash
+          Copy-Item -Path "target/winget/ZiCode.ZiFile/$version/*.yaml" -Destination release
+      - name: Attest SBOM
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: release/*.cdx.json
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
-          files: artifacts/*
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release/*

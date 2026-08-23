@@ -3,7 +3,7 @@
 This roadmap is the source of truth for planned delivery. GitHub milestones and
 the Starlight roadmap page must remain synchronized with it.
 
-## Stage 0 — Foundation (current)
+## Stage 0 — Foundation
 
 Goal: prove the product identity, repository structure, Rust UI direction,
 documentation system, and engineering gates.
@@ -25,13 +25,17 @@ passes its acceptance checklist; open architecture risks have ADRs.
 
 Goal: safely open, list, create, and extract common archives.
 
-- ZIP read/write, including ZIP64.
-- TAR and gzip/zstd/xz/bzip2/lz4/brotli stream composition.
-- Signature-based format detection.
-- Archive browser, selected extraction, destination and conflict policies.
-- Background task queue with progress and cancellation.
-- Path traversal, link escape, reserved-name, collision, and expansion-limit defenses.
-- Interoperability corpus and continuous fuzzing.
+- [x] ZIP read/write, including ZIP64 and AES-encrypted entries.
+- [x] 7z read/write with optional AES encryption.
+- [x] TAR and gzip/zstd/xz/bzip2 stream composition; lz4/brotli are available as single streams.
+- [x] Signature-based format detection.
+- [x] Archive browser, selected extraction, destination and conflict policies.
+- [x] Background execution with cooperative cancellation.
+- [x] Determinate byte/entry progress for extraction and creation.
+- [ ] Queued multi-operation scheduling.
+- [x] Path traversal, link escape, reserved-name, collision, and expansion-limit defenses.
+- [x] Fuzz targets compile continuously in CI.
+- [ ] Interoperability corpus and scheduled fuzz execution.
 
 Exit criteria: ZIP and TAR-family round trips interoperate with reference tools;
 all security fixtures pass; no archive task blocks the UI thread.
@@ -40,11 +44,13 @@ all security fixtures pass; no archive task blocks the UI thread.
 
 Goal: complete the Windows-focused daily workflow.
 
-- 7z read/write and AES encryption.
-- Password flow with secret-safe handling.
-- Windows file associations, drag-and-drop, taskbar progress, and shell commands.
+- [x] 7z read/write and AES encryption delivered ahead of plan.
+- [x] Password flow avoids logging or persisting secrets.
+- [x] Windows archive file associations and desktop drag-and-drop.
+- [ ] Taskbar progress and shell commands.
 - Isolated worker process with Windows Job Object limits.
-- MSI/MSIX packaging and upgrade tests.
+- [x] x64/ARM64 MSIX and standalone executable packaging.
+- [ ] Signed install, upgrade, repair and uninstall tests.
 - Performance baselines for throughput, memory, startup, and large listings.
 
 Exit criteria: signed Beta packages install, upgrade, repair, and uninstall on
@@ -59,7 +65,8 @@ Goal: distribution, accessibility, localization, and hardening.
 - Windows Application Certification Kit run.
 - WinGet manifest submission.
 - Microsoft Store submission and certification.
-- SBOM, provenance attestation, checksums, and reproducible-build documentation.
+- [x] Tag workflow for SBOM, provenance attestation and checksums.
+- [ ] Reproducible-build documentation and comparison evidence.
 
 ## Stage 4 — 1.0
 

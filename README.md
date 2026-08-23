@@ -4,10 +4,10 @@ ZiFile is a modern, open-source archive and file utility for Windows. It is
 being written from scratch with Rust, including the desktop UI, and is licensed
 under MIT.
 
-The project is currently in **Stage 0 — Foundation**. The repository contains a
-working Rust workspace, a small Iced desktop shell, a CLI format registry,
-tests, a benchmark, CI, and the first complete set of product and architecture
-documents. Archive I/O begins in Stage 1.
+The project is currently in **Stage 1 — Alpha development**. ZIP, encrypted
+ZIP, 7z, TAR compositions and common compression streams have working create,
+list, integrity-test and safe-extraction paths shared by the CLI and Iced
+desktop application.
 
 ## Project identity
 
@@ -19,11 +19,14 @@ documents. Archive I/O begins in Stage 1.
 - WinGet package ID: `ZiCode.ZiFile` (planned)
 - License: [MIT](LICENSE)
 
-## Run the current foundation
+## Run ZiFile
 
 ```powershell
 cargo test --workspace
 cargo run -p zifile-cli -- formats
+cargo run -p zifile-cli -- list archive.zip
+cargo run -p zifile-cli -- extract archive.zip output --conflict rename
+cargo run -p zifile-cli -- create output.7z files --format seven-zip
 cargo run -p zifile-desktop
 ```
 
@@ -43,18 +46,20 @@ pnpm --dir docs build
 - [Testing strategy](docs/src/content/docs/development/testing.md)
 - [Release process](docs/src/content/docs/development/releasing.md)
 - [Stage 0 work log](docs/src/content/docs/releases/stage-0.md)
+- [Stage 1 work log](docs/src/content/docs/releases/stage-1.md)
 
 ## Status
 
 | Area | Current state |
 | --- | --- |
-| Core model | Format registry and safety limits implemented |
-| Desktop | Iced technology shell implemented |
-| CLI | `formats` and extension-based `detect` commands implemented |
-| Archive providers | Planned for Stage 1 and Stage 2 |
-| Packaging | Structure reserved; MSIX/MSI work begins in Stage 2 |
-| Distribution | GitHub Actions foundation present; WinGet and Store planned |
+| Core model | Real create/list/test/extract operations with shared safety policy |
+| Desktop | Modern archive browser, selection, extraction, integrity test and creation workflow |
+| CLI | `formats`, `detect`, `list`, `test`, `extract`, and `create` |
+| Archive providers | ZIP/ZIP64/AES, 7z/AES, TAR + gzip/zstd/xz/bzip2, and common streams |
+| Packaging | Real x64/ARM64 runnable directory, standalone EXE and MSIX build path |
+| Distribution | Tag workflow produces checksums, SBOM, provenance and WinGet manifest candidates |
 
-ZiFile does not currently extract or create archives. The UI labels and CLI
-output intentionally describe roadmap capability rather than claiming shipped
-support.
+RAR remains disabled pending the explicit license, security and interoperability
+review required by this repository. Signing, worker-process isolation, shell
+integration, accessibility certification and Store submission are still in
+progress, so no production release has been tagged yet.

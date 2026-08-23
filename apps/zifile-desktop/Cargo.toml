@@ -7,7 +7,12 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+build = "build.rs"
 
 [dependencies]
 iced.workspace = true
+rfd.workspace = true
 zifile-core.workspace = true
+
+[build-dependencies]
+winresource.workspace = true
