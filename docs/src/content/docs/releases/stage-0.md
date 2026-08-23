@@ -31,6 +31,8 @@ description: ZiFile Foundation 阶段的目标、发现、修改、验证和遗�
 - Foundation 冒烟测试通过：CLI 格式表、复合扩展名识别、桌面 EXE 生成与三秒启动存活检查成功。
 - Criterion 首次基线通过：连续识别 5 个常见文件名约 633 ns；该结果只作为本机 Stage 0 基线，不作为跨机器性能承诺。
 - `pnpm build` 通过：Astro 类型检查 0 错误、0 警告，Starlight 生成 12 个静态页面及 Pagefind 搜索索引。
+- GitHub 主分支 CI 通过：Windows Rust 格式、Clippy、单元测试和冒烟测试，以及 Linux 依赖许可策略和文档构建全部成功。
+- GitHub Pages 发布通过，`https://ax2.github.io/zifile/` 返回 HTTP 200；仓库已配置阶段里程碑和 Stage 0 跟踪议题。
 - 本机全局 Cargo 的旧 USTC `git://` 索引不可达；本地验证临时改用 HTTPS sparse 镜像，没有修改用户全局设置，也没有把镜像选择提交到仓库。
 
 ### 遗留问题
