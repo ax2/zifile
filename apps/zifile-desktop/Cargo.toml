@@ -10,7 +10,7 @@ repository.workspace = true
 build = "build.rs"
 
 [features]
-accessible-ui = ["dep:dioxus", "dep:tokio"]
+accessible-ui = ["dep:dioxus", "dep:dioxus-html", "dep:tokio"]
 
 [[bin]]
 name = "zifile-desktop-accessible"
@@ -19,6 +19,7 @@ required-features = ["accessible-ui"]
 
 [dependencies]
 dioxus = { workspace = true, optional = true }
+dioxus-html = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 iced.workspace = true
 rfd.workspace = true

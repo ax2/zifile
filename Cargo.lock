@@ -8464,6 +8464,7 @@ name = "zifile-desktop"
 version = "0.1.0-alpha.1"
 dependencies = [
  "dioxus",
+ "dioxus-html",
  "iced",
  "rfd",
  "serde_json",
