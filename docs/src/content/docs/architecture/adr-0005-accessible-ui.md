@@ -27,4 +27,4 @@ ZiFile 的上架质量要求包含键盘、Narrator/UI Automation、高对比度
 
 仓库已加入需显式启用 `accessible-ui` feature 的 `zifile-desktop-accessible` 候选。它复用设置、任务栏、版本化 Worker IPC 和核心安全限制，包含首页、命令行打开、归档列表/筛选/分页/选择、完整性校验、解压配置、创建来源/格式/压缩等级/密码、进度与取消。
 
-Windows 实机 UI Automation 已识别主导航、标题层级、归档表格、复选框、组合框、滑块、密码框和 live status。真实 ZIP 经命令行打开后列出 2 个项目并完成完整性校验。候选现已接入原生文件拖放、`Ctrl+O`、`Ctrl+N` 与 `Escape`，并用 CSP 将脚本、样式、图像和连接限制到内联 UI、本地 Dioxus 协议及回环 WebSocket；实机确认收紧后界面和语义树仍可运行。该证据不等同于 Narrator 认证，也没有证明高对比度、中文 IME、每显示器 DPI、真实跨窗口拖放或 ARM64 包功能对等。
+Windows 实机 UI Automation 已识别主导航、标题层级、归档表格、复选框、组合框、滑块、密码框和 live status。真实 ZIP 经命令行打开后列出 2 个项目并完成完整性校验。候选现已接入原生文件拖放、`Ctrl+O`、`Ctrl+N` 与 `Escape`，并用 CSP 将脚本、样式、图像和连接限制到内联 UI、本地 Dioxus 协议及回环 WebSocket；实机确认收紧后界面和语义树仍可运行。Release 演练 32667737142 已为 x64/ARM64 构建、打包、证明并上传候选 EXE 与 MSIX，下载复核的 12 个校验目标全部匹配，PE 架构标识正确且无 ZIP 发布物。该证据不等同于 Narrator 认证，也没有证明高对比度、中文 IME、每显示器 DPI、真实跨窗口拖放或 ARM64 实机运行。

@@ -18,8 +18,8 @@ An opt-in Dioxus/WebView2 accessibility candidate now exercises the same isolate
 Worker through semantic navigation, archive, integrity-test, extraction and creation
 screens. It is not yet the packaged default: Narrator/Accessibility Insights,
 high-contrast, IME, DPI and ARM64 runtime gates remain open. The candidate now has
-local-only WebView resources, native drop handling, core shortcuts and a verified x64
-MSIX/runnable-directory path.
+local-only WebView resources, native drop handling, core shortcuts, a locally exercised
+x64 package and cloud-verified x64/ARM64 MSIX and executable artifacts.
 
 ## Project identity
 
