@@ -5,6 +5,7 @@ use std::time::Duration;
 
 mod i18n;
 mod settings;
+mod taskbar;
 mod worker_client;
 
 use iced::widget::{
@@ -572,6 +573,14 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             _ => {}
         },
     }
+    taskbar::sync(
+        state.busy,
+        state
+            .cancellation
+            .as_ref()
+            .is_some_and(CancellationToken::is_cancelled),
+        state.progress.as_ref().map(OperationProgress::snapshot),
+    );
     Task::none()
 }
 
