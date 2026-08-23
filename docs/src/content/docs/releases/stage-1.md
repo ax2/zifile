@@ -35,6 +35,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 8 MiB 本地基准中，ZIP 创建约 262–275 MiB/s，完整性校验约 3.04–3.15 GiB/s；该数字只作为首轮机器基线。
 - 在本机 Windows SDK 上成功生成 `ZiFile-0.1.0.0-windows-x64.msix` 和完整可运行目录；当前为开发 Identity、未签名包，不构成 Store 认证证据。
 - ARM64 Rust 目标已安装，但本机没有 Visual C++ ARM64 交叉工具链，`zstd-sys` 交叉编译因此被正确阻止；发布作业固定到包含该工具链的 Windows 2022 Runner，仍需由远程 CI 给出最终双架构证据。
+- 首次非发布打包演练确认 `cargo-cyclonedx` 0.5.9 按 crate 输出 `*.cdx.json`；收集规则已改为匹配真实产物名，而不是旧版文档中的 `bom.json`。
 
 ### 遗留问题
 
