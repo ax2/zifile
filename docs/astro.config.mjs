@@ -2,7 +2,8 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
-  site: 'https://zifile.zicode.com',
+  site: 'https://ax2.github.io',
+  base: '/zifile',
   integrations: [
     starlight({
       title: 'ZiFile 文档',

@@ -13,7 +13,7 @@ rust-version = "1.88"
 authors = ["ZiCode <ax2@zicode.com>"]
 license = "MIT"
 repository = "https://github.com/ax2/zifile"
-homepage = "https://zifile.zicode.com"
+homepage = "https://ax2.github.io/zifile/"
 
 [workspace.dependencies]
 clap = { version = "4.6.6", features = ["derive"] }

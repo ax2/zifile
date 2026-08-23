@@ -13,7 +13,8 @@ documents. Archive I/O begins in Stage 1.
 
 - Product: **ZiFile**
 - Publisher: **ZiCode**
-- Website: <https://zifile.zicode.com>
+- Documentation: <https://ax2.github.io/zifile/>
+- Planned product domain: `zifile.zicode.com`
 - Repository: <https://github.com/ax2/zifile>
 - WinGet package ID: `ZiCode.ZiFile` (planned)
 - License: [MIT](LICENSE)

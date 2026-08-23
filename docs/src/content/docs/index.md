@@ -6,7 +6,7 @@ hero:
   tagline: 使用 Rust 从零构建的现代 Windows 压缩与文件工具
   actions:
     - text: 查看路线图
-      link: /product/roadmap/
+      link: product/roadmap/
       icon: right-arrow
     - text: GitHub
       link: https://github.com/ax2/zifile
