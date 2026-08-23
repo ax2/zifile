@@ -52,6 +52,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - Windows 集成批次的 [CI 32663024457](https://github.com/ax2/zifile/actions/runs/32663024457) 与 [双架构 Release 32663037787](https://github.com/ax2/zifile/actions/runs/32663037787) 全部成功，复验了依赖策略、32 项测试、真实冒烟、x64/ARM64 MSIX、SBOM、产物证明和上传。该运行未创建正式 GitHub Release。
 - 建立 opt-in Dioxus/WebView2 可访问 UI 候选，复用现有设置、任务栏和隔离 Worker。候选具备语义首页、归档表格/筛选/分页/选择、完整性校验、解压配置、创建来源/格式/等级/密码、进度/取消及命令行打开。严格全工作区 Clippy 通过；全 feature 运行通过 41 次 Rust 测试（候选二进制的 9 次包含 2 项候选专属测试与 7 项共享模块复验）及两项 benchmark smoke。
 - Windows UI Automation 实机识别候选的 landmark、标题、导航、表格、复选框、组合框、滑块、密码输入和 live status。用 ZiFile 创建的 2 文件 ZIP 通过命令行打开，条目列表和 3.8 KB 展开大小正确，随后 Worker 完整性校验成功。1180×760 深色中文首屏、归档页和创建页无裁切。此记录不宣称 Narrator/Accessibility Insights 认证。
+- 候选首次云端依赖策略检查只拒绝 `libfuzzer-sys` 的 `NCSA` 和 `target-lexicon` 的 `Apache-2.0 WITH LLVM-exception` 许可证表达式；两者均为 OSI 认可的宽松许可证/例外。策略仅显式增加这两项，没有放宽未知来源、通配依赖或其他许可证检查。
 
 ### 遗留问题
 
