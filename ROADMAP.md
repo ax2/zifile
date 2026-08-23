@@ -68,7 +68,8 @@ Goal: distribution, accessibility, localization, and hardening.
 - [x] Simplified Chinese and English desktop UI with persisted language/theme preferences.
 - [x] Build an opt-in Dioxus/WebView2 accessibility candidate with semantic archive and create workflows over the isolated Worker.
 - [x] Add candidate CSP/offline resource policy, native drop handling, core shortcuts and local x64 MSIX validation.
-- [ ] Validate the candidate MSIX and runnable directory on ARM64.
+- [x] Cross-build, package, attest and checksum the candidate MSIX and executables for x64 and ARM64.
+- [ ] Run the candidate MSIX and runnable directory on physical ARM64 Windows hardware.
 - [ ] Complete equivalent Simplified Chinese and English product documentation.
 - [ ] Complete keyboard-only (including Ctrl+A), Narrator, Accessibility Insights, high-contrast, IME and per-monitor DPI verification before replacing Iced.
 - [ ] Windows Application Certification Kit run.
