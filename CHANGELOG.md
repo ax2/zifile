@@ -40,3 +40,6 @@ All notable changes to ZiFile are documented here. The format follows
   reclamation as a fallback.
 - Windows taskbar states driven by Worker progress, including indeterminate and
   cancelling states, plus a packaged `zifile.exe` App Execution Alias.
+- Opt-in Dioxus/WebView2 accessibility candidate, written in Rust RSX, with semantic
+  navigation, archive tables, native form controls, live status/progress, bilingual
+  themes, command-line archive opening, and Worker-backed list/test/extract/create flows.

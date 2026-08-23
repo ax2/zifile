@@ -48,7 +48,7 @@ jobs:
           "msix=$($Matches[1]).$($Matches[2]).$($Matches[3]).$revision" >> $env:GITHUB_OUTPUT
       - name: Test workspace
         if: matrix.architecture == 'x64'
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --all-targets --all-features --locked
       - name: Build MSIX and runnable executables
         shell: pwsh
         env:

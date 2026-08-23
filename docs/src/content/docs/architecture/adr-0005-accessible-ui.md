@@ -5,7 +5,7 @@ description: Iced 辅助功能缺口、许可约束和候选迁移路线。
 
 ## 状态
 
-提议，2026-08-24。Iced 版本保持可发布基线，候选 UI 在功能对等、许可证和双架构验证完成前不替换它。
+接受并进入验证，2026-08-24。Iced 版本保持可发布基线，候选 UI 在功能对等、许可证和双架构验证完成前不替换它。
 
 ## 背景
 
@@ -22,3 +22,9 @@ ZiFile 的上架质量要求包含键盘、Narrator/UI Automation、高对比度
 以 Dioxus Desktop + WebView2 建立功能对等候选：保留 Rust 状态与 Worker IPC，UI 使用语义 HTML、键盘焦点顺序、landmark、live region 和原生表单控件。候选必须先通过格式/Worker 功能对等、x64/ARM64 MSIX、离线资源、CSP、无远程导航、Narrator 和 Accessibility Insights，才替换 Iced。
 
 在迁移完成前，文档不得宣称当前桌面已通过屏幕阅读器认证。Slint 保留为技术备选，但只有在许可选择被明确记录并通过依赖策略后才能引入。
+
+## 当前证据
+
+仓库已加入需显式启用 `accessible-ui` feature 的 `zifile-desktop-accessible` 候选。它复用设置、任务栏、版本化 Worker IPC 和核心安全限制，包含首页、命令行打开、归档列表/筛选/分页/选择、完整性校验、解压配置、创建来源/格式/压缩等级/密码、进度与取消。
+
+Windows 实机 UI Automation 已识别主导航、标题层级、归档表格、复选框、组合框、滑块、密码框和 live status。真实 ZIP 经命令行打开后列出 2 个项目并完成完整性校验。该证据证明语义路径可行，但不等同于 Narrator 认证，也没有证明高对比度、中文 IME、每显示器 DPI、拖放、快捷键和双架构包功能对等。

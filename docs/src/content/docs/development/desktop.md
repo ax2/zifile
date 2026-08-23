@@ -31,3 +31,14 @@ Worker 的字节进度（无字节总量时回退到条目进度）同步到 Win
 自动测试已覆盖 100,000 个模拟条目的过滤和有界分页；Windows 实机已检查 1,200 项 ZIP 的三页翻页、搜索、中英文、深浅主题及 `Ctrl+N`。
 
 这些检查尚不等同于完整辅助功能认证。当前 Iced 0.14 UI 不能宣称具备完整的 Windows UI Automation/Narrator 语义树。中文 IME、全流程 Tab/方向键遍历、屏幕阅读器、高对比度、每显示器 DPI、Windows Application Certification Kit，以及十万真实条目的峰值内存/响应时间仍是上架前门禁。可访问 UI 路线见 ADR-0005。
+
+## 可访问 UI 候选
+
+开发者可用以下命令构建候选；它不会替换默认 Iced 可执行文件：
+
+```powershell
+cargo build -p zifile-desktop --features accessible-ui --bin zifile-desktop-accessible
+target\debug\zifile-desktop-accessible.exe sample.zip
+```
+
+候选使用 Rust RSX + Dioxus Desktop/WebView2，并复用 `zifile-worker.exe`。当前可执行打开、列出、校验、选择性解压和创建流程；命令行参数可直接打开归档。发布包仍需完成双架构接线、离线/CSP/导航限制、拖放与快捷键对等以及完整辅助功能验证。

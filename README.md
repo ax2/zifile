@@ -14,6 +14,11 @@ system language on first launch, and persists only the selected language and
 theme. Archive rows are searchable and paged in bounded groups of 500 so very
 large listings do not create an unbounded widget tree.
 
+An opt-in Dioxus/WebView2 accessibility candidate now exercises the same isolated
+Worker through semantic navigation, archive, integrity-test, extraction and creation
+screens. It is not yet the packaged default: Narrator/Accessibility Insights,
+high-contrast, IME, DPI and x64/ARM64 packaging gates remain open.
+
 ## Project identity
 
 - Product: **ZiFile**
