@@ -25,3 +25,4 @@ All notable changes to ZiFile are documented here. The format follows
 - Deterministic Windows assets, x64/ARM64 MSIX packaging and archive file associations.
 - Tag-driven checksums, CycloneDX SBOM, provenance and WinGet 1.12 manifest generation.
 - Security-focused fuzz targets and archive throughput benchmarks.
+- Bidirectional ZIP and tar.gz interoperability tests against Windows reference tools.

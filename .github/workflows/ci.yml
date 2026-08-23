@@ -29,6 +29,9 @@ jobs:
       - name: Foundation smoke test
         shell: pwsh
         run: ./tests/smoke/foundation.ps1 -SkipDesktopLaunch
+      - name: Reference-tool interoperability
+        shell: pwsh
+        run: ./tests/interoperability/windows-tools.ps1 -SkipBuild
 
   licenses:
     name: Dependency policy
