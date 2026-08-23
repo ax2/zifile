@@ -31,7 +31,7 @@ jobs:
             ForEach-Object { "{0}  {1}" -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf) } |
             Set-Content artifacts/SHA256SUMS.txt
       - name: Attest release executables
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: artifacts/*.exe
       - name: Publish GitHub release
