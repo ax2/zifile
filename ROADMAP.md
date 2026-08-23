@@ -57,7 +57,8 @@ Goal: complete the Windows-focused daily workflow.
 - [x] x64/ARM64 MSIX and standalone executable packaging.
 - [ ] Signed install, upgrade, repair and uninstall tests.
 - [x] Establish throughput, 100,000-entry UI-model, idle startup and process-tree memory baselines.
-- [ ] Measure end-to-end peak memory, first-content latency and scrolling with a real 100,000-entry archive.
+- [x] Exercise Worker listing, bounded first-page rendering, search and pagination with a real 100,000-entry archive.
+- [ ] Add repeatable first-content/scroll latency and simultaneous process-tree peak-memory instrumentation for the real 100,000-entry archive.
 
 Exit criteria: signed Beta packages install, upgrade, repair, and uninstall on
 supported Windows 10/11 environments.

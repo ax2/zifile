@@ -49,3 +49,5 @@ All notable changes to ZiFile are documented here. The format follows
   forced-colors styling for Windows high-contrast modes.
 - Shared 100,000-entry browser benchmarks plus a repeatable Windows startup and
   desktop-process-tree memory baseline script.
+- Real 100,000-entry ZIP UI exercise through the isolated Worker, including a
+  bounded 500-row UI Automation tree, search, pagination and process-tree memory sampling.

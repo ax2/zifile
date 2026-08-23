@@ -59,6 +59,9 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - [Release 演练 32667737142](https://github.com/ax2/zifile/actions/runs/32667737142) 全部成功：x64、ARM64 和 CycloneDX SBOM 作业通过，两个架构都完成默认与候选 MSIX/EXE 构建、staging、来源证明和上传。下载复核确认每个架构 6 个校验目标全部匹配，x64/ARM64 EXE 的 PE machine 分别为 `0x8664`/`0xAA64`，发布目录无 ZIP。ARM64 物理设备运行仍未验证。
 - 候选 `Ctrl+A` 仅在条目区域拥有焦点时拦截，不影响密码/搜索输入；真实窗口从 0 项经单项焦点后全选 2 项，动态 UI Automation 标签从“0 项已选择”更新到“2 项已选择”，live status 同步报告结果。CSS 已加入 `forced-colors: active` 系统颜色映射，但尚未完成 Windows 高对比度实机视觉检查。
 - Iced 与候选共用十万条目筛选/分页模块。Criterion 基线为选择性计数 16.90–17.62 ms、有界 500 项页收集 15.46–15.96 ms；五轮优化版桌面基线记录 Iced/候选窗口启动中位数 668.79/294.25 ms，稳定工作集 225.87/405.91 MiB，稳定私有内存 265.05/206.62 MiB。该基线不等同于真实十万项归档端到端峰值。
+- 真实 100,000 空条目 ZIP 通过隔离 Worker 在候选版打开，UI Automation 报告 100,000 项、200 页且当前表格仅 500 行；末项搜索和三页筛选导航通过。操作后 7 进程当前工作集/私有内存为 552.70/313.04 MiB，各进程峰值工作集之和 693.72 MiB；后者不是同时刻整树峰值。测试结束应用与 Worker 均退出。
+- [CI 32671611160](https://github.com/ax2/zifile/actions/runs/32671611160) 全部成功，复验依赖、格式、严格 Clippy、44 次 Rust 测试、全工作区优化 benchmark 编译、真实 Worker 取消冒烟、ZIP/tar.gz/7z 互操作、文档和 fuzz 目标编译。
+- [Release 演练 32671977951](https://github.com/ax2/zifile/actions/runs/32671977951) 全部成功。下载复核确认 x64/ARM64 每架构 6 个校验目标全部匹配，4 个 EXE 的 PE machine 分别统一为 `0x8664`/`0xAA64`，5 个 CycloneDX 1.3 JSON 可解析，发布目录无 ZIP；ARM64 实机运行仍未验证。
 
 ### 遗留问题
 
@@ -66,7 +69,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - Worker 仍继承当前用户权限，尚未采用 AppContainer；CPU 时间限制和 Broker 模型待后续纵深防御评估。
 - 更广泛的第三方 7-Zip/libarchive 语料、直接归档解析器 fuzz、损坏/截断/压缩炸弹扩展语料。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
-- 完整键盘遍历、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；真实十万项归档的端到端峰值内存、首屏和滚动延迟仍需补证。
+- 完整键盘遍历、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索和翻页，仍需可重复的首屏/滚动延迟与同时刻整树峰值仪器化。
 - Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树、Worker 功能路径、核心快捷键、本地 x64 运行及云端 x64/ARM64 打包，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、真实拖放和 ARM64 候选实机运行门禁约束。
 - Partner Center 名称预留、代码签名、WinGet 与 Microsoft Store 提交。
 
