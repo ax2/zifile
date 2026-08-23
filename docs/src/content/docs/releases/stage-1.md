@@ -37,11 +37,12 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 本机没有 Visual C++ ARM64 交叉工具链，`zstd-sys` 本地交叉编译因此被正确阻止；Windows 2022 Runner 已成功完成全部 ARM64 Rust/C 依赖和应用的优化构建。首次打包随后发现脚本误运行 ARM64 版 `MakeAppx.exe`；现按宿主架构选择 SDK 工具，同时仍把包清单标记为目标架构。
 - 首次非发布打包演练确认 `cargo-cyclonedx` 0.5.9 按 crate 输出 `*.cdx.json`；收集规则已改为匹配真实产物名，而不是旧版文档中的 `bom.json`。
 - GitHub Actions 非发布演练 `32655897142` 全部通过：Windows x64、Windows ARM64 和 CycloneDX SBOM 三个作业成功，公开 Release 作业按设计跳过。两个架构均完成优化构建、MSIX、独立 EXE、SHA-256、来源证明和 artifact 上传。
+- Windows PowerShell ZIP 与系统 bsdtar 的双向互操作通过：两类参考工具创建的 ZIP/tar.gz 可由 ZiFile 校验和解压，ZiFile 创建的包也可由参考工具解压并核对 Unicode 文件内容。
 
 ### 遗留问题
 
 - 多任务队列和独立 Worker 进程；TAR/7z 后端的单个超大文件目前只能在条目边界更新部分状态。
-- 参考工具互操作语料、定时 fuzz、损坏/截断/压缩炸弹扩展语料。
+- 7z 与更广泛 libarchive 互操作语料、定时 fuzz、损坏/截断/压缩炸弹扩展语料。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
 - 键盘、屏幕阅读器、高对比度、中文 IME、DPI 和十万条目验证。
 - Partner Center 名称预留、代码签名、WinGet 与 Microsoft Store 提交。

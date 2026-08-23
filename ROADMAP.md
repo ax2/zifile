@@ -35,7 +35,8 @@ Goal: safely open, list, create, and extract common archives.
 - [ ] Queued multi-operation scheduling.
 - [x] Path traversal, link escape, reserved-name, collision, and expansion-limit defenses.
 - [x] Fuzz targets compile continuously in CI.
-- [ ] Interoperability corpus and scheduled fuzz execution.
+- [x] ZIP/tar.gz bidirectional interoperability with Windows reference tools.
+- [ ] Broader 7-Zip/libarchive corpus and scheduled fuzz execution.
 
 Exit criteria: ZIP and TAR-family round trips interoperate with reference tools;
 all security fixtures pass; no archive task blocks the UI thread.
