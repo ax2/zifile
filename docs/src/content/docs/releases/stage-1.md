@@ -42,6 +42,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - Windows PowerShell ZIP 与系统 bsdtar 的双向互操作通过：两类参考工具创建的 ZIP/tar.gz 可由 ZiFile 校验和解压，ZiFile 创建的包也可由参考工具解压并核对 Unicode 文件内容。
 - 7z 双向参考互操作已加入同一 Windows 门禁：系统 bsdtar/libarchive 创建的 7z 可由 ZiFile 校验和解压，ZiFile 创建的 7z 可由 bsdtar 解压并核对 Unicode 内容。
 - 新增每周定时 fuzz，对路径策略和格式识别各执行 180 秒有界 campaign；失败时保留崩溃产物 14 天。
+- 首次手动演练暴露 `cargo-fuzz` 从安装工具环境推断为 musl 目标，ASan 无法与静态 libc 配合；工作流随后与持续集成保持一致，显式固定 `x86_64-unknown-linux-gnu`，等待修正后演练结果。
 - 桌面回归测试用 100,000 个模拟条目证明单页最多构造 500 行；Windows 实机用 1,200 项 ZIP 验证 3 页翻页、路径搜索和 `Ctrl+N`，并在 1182×810 视口检查中英文与深浅主题无裁切。冷启动复测确认语言/主题从严格的两字段设置文件恢复，测试产生的本地设置随后已清理。
 
 ### 遗留问题
