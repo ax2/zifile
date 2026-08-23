@@ -84,6 +84,7 @@ jobs:
           New-Item -ItemType Directory -Path $output -Force | Out-Null
           Copy-Item -LiteralPath "$source/zifile-desktop.exe" -Destination "$output/zifile-desktop-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile.exe" -Destination "$output/zifile-cli-windows-$arch.exe"
+          Copy-Item -LiteralPath "$source/zifile-worker.exe" -Destination "$output/zifile-worker-windows-$arch.exe"
           Copy-Item -LiteralPath "dist/ZiFile-$version-windows-$arch.msix" -Destination $output
           Get-FileHash "$output/*" -Algorithm SHA256 |
             Sort-Object Path |

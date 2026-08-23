@@ -48,6 +48,91 @@ try {
         throw 'CLI archive integrity smoke test failed.'
     }
 
+    $workerPath = Join-Path $repoRoot 'target\debug\zifile-worker.exe'
+    if (-not (Test-Path -LiteralPath $workerPath)) {
+        throw 'Worker executable was not produced.'
+    }
+    $workerRequest = @{
+        version = 1
+        payload = @{
+            operation = 'list'
+            archive = $archivePath
+            password = $null
+        }
+    } | ConvertTo-Json -Depth 5 -Compress
+    $workerOutput = ($workerRequest | & $workerPath) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or $workerOutput -notmatch 'archive_start' -or
+        $workerOutput -notmatch 'unicode-测试.txt' -or $workerOutput -notmatch 'archive_end') {
+        throw 'Isolated worker IPC smoke test failed.'
+    }
+
+    $cancelRoot = Join-Path $smokeRoot 'worker-cancel'
+    New-Item -ItemType Directory -Path $cancelRoot | Out-Null
+    $cancelSource = Join-Path $cancelRoot 'random.bin'
+    $cancelDestination = Join-Path $cancelRoot 'cancelled.7z'
+    $sourceStream = [System.IO.File]::Create($cancelSource)
+    try {
+        $buffer = New-Object byte[] (1024 * 1024)
+        for ($index = 0; $index -lt 32; $index++) {
+            [System.Security.Cryptography.RandomNumberGenerator]::Fill($buffer)
+            $sourceStream.Write($buffer, 0, $buffer.Length)
+        }
+    }
+    finally {
+        $sourceStream.Dispose()
+    }
+    $createRequest = @{
+        version = 1
+        payload = @{
+            operation = 'create'
+            sources = @($cancelSource)
+            destination = $cancelDestination
+            format = 'SevenZip'
+            compression_level = 9
+            password = $null
+        }
+    } | ConvertTo-Json -Depth 6 -Compress
+    $cancelRequest = @{
+        version = 1
+        payload = @{ control = 'cancel' }
+    } | ConvertTo-Json -Depth 4 -Compress
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $workerPath
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $worker = [System.Diagnostics.Process]::new()
+    $worker.StartInfo = $startInfo
+    if (-not $worker.Start()) {
+        throw 'Cancellation smoke worker did not start.'
+    }
+    $cancelOutputTask = $worker.StandardOutput.ReadToEndAsync()
+    $cancelErrorTask = $worker.StandardError.ReadToEndAsync()
+    $worker.StandardInput.WriteLine($createRequest)
+    $worker.StandardInput.Flush()
+    Start-Sleep -Milliseconds 100
+    $worker.StandardInput.WriteLine($cancelRequest)
+    $worker.StandardInput.Close()
+    if (-not $worker.WaitForExit(10000)) {
+        $worker.Kill()
+        throw 'Worker did not stop after cooperative cancellation.'
+    }
+    $cancelOutput = $cancelOutputTask.Result
+    $cancelError = $cancelErrorTask.Result
+    if ($worker.ExitCode -eq 0 -or $cancelOutput -notmatch '"event":"error"' -or
+        $cancelOutput -notmatch 'Cancelled') {
+        throw "Worker did not acknowledge cancellation. stdout: $cancelOutput stderr: $cancelError"
+    }
+    if (Test-Path -LiteralPath $cancelDestination) {
+        throw 'Cancelled archive destination remained on disk.'
+    }
+    $cancelArtifacts = @(Get-ChildItem -LiteralPath $cancelRoot -Force |
+        Where-Object Name -ne 'random.bin')
+    if ($cancelArtifacts.Count -ne 0) {
+        throw "Cancelled Worker left temporary artifacts: $($cancelArtifacts.Name -join ', ')"
+    }
+
     $extractPath = Join-Path $smokeRoot 'output'
     cargo run --quiet -p zifile-cli -- extract $archivePath $extractPath
     if ($LASTEXITCODE -ne 0 -or

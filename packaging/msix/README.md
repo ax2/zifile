@@ -19,7 +19,11 @@ Implemented packaging features:
 - archive file associations and full-trust desktop capability;
 - deterministic app icon/tile assets;
 - optional Authenticode signing and SHA-256 generation;
-- complete runnable directories and standalone EXEs without ZIP output.
+- complete runnable directories and standalone EXEs without ZIP output;
+- the architecture-matched `zifile-worker.exe` beside the desktop executable and inside MSIX.
+
+The desktop executable requires its matching Worker. GitHub release staging therefore publishes
+both architecture-suffixed files; complete runnable directories retain the canonical sibling name.
 
 Before Store submission the project still needs a Partner Center identity,
 trusted signing credentials for direct distribution, upgrade/uninstall test

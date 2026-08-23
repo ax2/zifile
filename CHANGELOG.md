@@ -33,3 +33,8 @@ All notable changes to ZiFile are documented here. The format follows
   and canceling an active operation (`Escape`).
 - Bidirectional 7z interoperability against Windows bsdtar/libarchive.
 - Weekly bounded fuzz campaigns with retained crash artifacts on failure.
+- Versioned, line-delimited IPC and a dedicated archive Worker process for all desktop
+  list, test, extract and create operations.
+- Windows Job Object containment: one active process, 4 GiB process-memory ceiling,
+  kill-on-close behavior, cooperative create/extract cancellation and timed forced
+  reclamation as a fallback.

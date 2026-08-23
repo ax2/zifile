@@ -59,13 +59,13 @@ pnpm --dir docs build
 | Area | Current state |
 | --- | --- |
 | Core model | Real create/list/test/extract operations with shared safety policy |
-| Desktop | Bilingual modern browser/creator, native dialogs, search/paging, shortcuts, progress and cancellation |
+| Desktop | Bilingual modern browser/creator backed by an isolated, cancelable archive worker |
 | CLI | `formats`, `detect`, `list`, `test`, `extract`, and `create` |
 | Archive providers | ZIP/ZIP64/AES, 7z/AES, TAR + gzip/zstd/xz/bzip2, and common streams |
 | Packaging | Real x64/ARM64 runnable directory, standalone EXE and MSIX build path |
 | Distribution | Tag workflow produces checksums, SBOM, provenance and WinGet manifest candidates |
 
 RAR remains disabled pending the explicit license, security and interoperability
-review required by this repository. Signing, worker-process isolation, shell
-integration, accessibility certification and Store submission are still in
+review required by this repository. Signing, shell integration, accessibility
+certification and Store submission are still in
 progress, so no production release has been tagged yet.

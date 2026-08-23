@@ -9,6 +9,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 mod archive;
@@ -22,7 +23,7 @@ pub use archive::{
 pub use path_policy::safe_relative_path;
 
 /// Archive and compression formats in the ZiFile product roadmap.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ArchiveFormat {
     Zip,
     SevenZip,
@@ -165,7 +166,7 @@ impl FormatCapabilities {
 }
 
 /// Conservative defaults applied before any archive entry is written.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SafetyLimits {
     pub max_entries: u64,
     pub max_expanded_bytes: u64,

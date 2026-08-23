@@ -1,0 +1,13 @@
+[package]
+name = "zifile-worker-protocol"
+description = "Versioned local IPC protocol for the isolated ZiFile archive worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+zifile-core.workspace = true

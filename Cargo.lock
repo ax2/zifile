@@ -4920,6 +4920,7 @@ dependencies = [
  "criterion",
  "flate2",
  "lz4_flex",
+ "serde",
  "sevenz-rust2",
  "tar",
  "tempfile",
@@ -4936,8 +4937,28 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "iced",
  "rfd",
+ "serde_json",
  "sys-locale",
+ "windows-sys 0.61.2",
  "winresource",
+ "zifile-core",
+ "zifile-worker-protocol",
+]
+
+[[package]]
+name = "zifile-worker"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde_json",
+ "zifile-core",
+ "zifile-worker-protocol",
+]
+
+[[package]]
+name = "zifile-worker-protocol"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde",
  "zifile-core",
 ]
 

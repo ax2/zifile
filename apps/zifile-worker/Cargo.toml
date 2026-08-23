@@ -1,0 +1,14 @@
+[package]
+name = "zifile-worker"
+description = "Isolated archive operation worker for ZiFile"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+zifile-core.workspace = true
+zifile-worker-protocol.workspace = true
