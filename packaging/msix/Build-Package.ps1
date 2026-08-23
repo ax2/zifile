@@ -6,16 +6,18 @@ param(
     [string]$IdentityName = 'ZiCode.ZiFile.Dev',
     [string]$Publisher = 'CN=ZiCode',
     [string]$CertificatePath,
-    [securestring]$CertificatePassword
+    [securestring]$CertificatePassword,
+    [switch]$AccessibleUi
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $targetRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'target\package'))
-$stageRoot = [System.IO.Path]::GetFullPath((Join-Path $targetRoot "msix-$Architecture"))
+$variantSuffix = if ($AccessibleUi) { '-accessible' } else { '' }
+$stageRoot = [System.IO.Path]::GetFullPath((Join-Path $targetRoot "msix-$Architecture$variantSuffix"))
 $distRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'dist'))
-$runnableRoot = Join-Path $distRoot "ZiFile-$Version-windows-$Architecture"
-$msixPath = Join-Path $distRoot "ZiFile-$Version-windows-$Architecture.msix"
+$runnableRoot = Join-Path $distRoot "ZiFile-$Version-windows-$Architecture$variantSuffix"
+$msixPath = Join-Path $distRoot "ZiFile-$Version-windows-$Architecture$variantSuffix.msix"
 
 foreach ($path in @($stageRoot, $runnableRoot)) {
     if (-not $path.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -33,19 +35,24 @@ if (-not (Test-Path -LiteralPath $iconPath)) {
 
 $rustTarget = if ($Architecture -eq 'arm64') { 'aarch64-pc-windows-msvc' } else { 'x86_64-pc-windows-msvc' }
 rustup target add $rustTarget
-cargo build --workspace --release --locked --target $rustTarget
+if ($AccessibleUi) {
+    cargo build --workspace --release --locked --target $rustTarget --all-features
+} else {
+    cargo build --workspace --release --locked --target $rustTarget
+}
 if ($LASTEXITCODE -ne 0) { throw 'Rust release build failed.' }
 
 $binaryRoot = Join-Path $repoRoot "target\$rustTarget\release"
+$desktopBinary = if ($AccessibleUi) { 'zifile-desktop-accessible.exe' } else { 'zifile-desktop.exe' }
 New-Item -ItemType Directory -Path (Join-Path $stageRoot 'ZiFile') -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $stageRoot 'Assets') -Force | Out-Null
 New-Item -ItemType Directory -Path $runnableRoot -Force | Out-Null
 
-Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile-desktop.exe') -Destination (Join-Path $stageRoot 'ZiFile\zifile-desktop.exe')
+Copy-Item -LiteralPath (Join-Path $binaryRoot $desktopBinary) -Destination (Join-Path $stageRoot 'ZiFile\zifile-desktop.exe')
 Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile.exe') -Destination (Join-Path $stageRoot 'ZiFile\zifile.exe')
 Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile-worker.exe') -Destination (Join-Path $stageRoot 'ZiFile\zifile-worker.exe')
 Copy-Item -Path (Join-Path $PSScriptRoot 'Assets\*') -Destination (Join-Path $stageRoot 'Assets')
-Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile-desktop.exe') -Destination $runnableRoot
+Copy-Item -LiteralPath (Join-Path $binaryRoot $desktopBinary) -Destination (Join-Path $runnableRoot 'zifile-desktop.exe')
 Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile.exe') -Destination $runnableRoot
 Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile-worker.exe') -Destination $runnableRoot
 Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') -Destination $runnableRoot
@@ -89,7 +96,7 @@ if ($CertificatePath) {
 
 Get-FileHash -LiteralPath $msixPath -Algorithm SHA256 |
     ForEach-Object { "{0}  {1}" -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf) } |
-    Set-Content -LiteralPath (Join-Path $distRoot "ZiFile-$Version-windows-$Architecture.sha256")
+    Set-Content -LiteralPath (Join-Path $distRoot "ZiFile-$Version-windows-$Architecture$variantSuffix.sha256")
 
 Write-Host "Runnable directory: $runnableRoot"
 Write-Host "MSIX package: $msixPath"

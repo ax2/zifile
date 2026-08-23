@@ -43,3 +43,5 @@ All notable changes to ZiFile are documented here. The format follows
 - Opt-in Dioxus/WebView2 accessibility candidate, written in Rust RSX, with semantic
   navigation, archive tables, native form controls, live status/progress, bilingual
   themes, command-line archive opening, and Worker-backed list/test/extract/create flows.
+- Candidate-native file drop handling, Ctrl+O/Ctrl+N/Escape shortcuts, a local-only
+  WebView CSP, and opt-in x64/ARM64 MSIX validation artifacts for manual release runs.

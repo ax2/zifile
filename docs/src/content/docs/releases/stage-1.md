@@ -50,9 +50,12 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 隔离 Worker 批次的 [CI 32661216329](https://github.com/ax2/zifile/actions/runs/32661216329) 全部通过，包括格式、Clippy、30 项 Rust 测试、benchmark 编译、真实取消冒烟、第三方互操作、依赖策略、文档和 fuzz 目标编译。[双架构 Release 验证 32661235460](https://github.com/ax2/zifile/actions/runs/32661235460) 同时通过 x64/ARM64 构建、MSIX、产物证明和上传；下载复核确认两个架构均含 Worker、MSIX、Worker 校验和，并生成 Worker 与协议 crate 的 CycloneDX SBOM。该运行未创建正式 GitHub Release。
 - 任务栏状态映射新增 2 项单测；本地 x64 Release/MSIX `0.1.0.2` 构建成功，MakeAppx 接受 App Execution Alias manifest。实机打开 32 MiB 7z 验证新包 UI 正常；当前测试桌面自动隐藏任务栏且焦点自动化不稳定，因此未把任务栏视觉效果记为已验证。
 - Windows 集成批次的 [CI 32663024457](https://github.com/ax2/zifile/actions/runs/32663024457) 与 [双架构 Release 32663037787](https://github.com/ax2/zifile/actions/runs/32663037787) 全部成功，复验了依赖策略、32 项测试、真实冒烟、x64/ARM64 MSIX、SBOM、产物证明和上传。该运行未创建正式 GitHub Release。
-- 建立 opt-in Dioxus/WebView2 可访问 UI 候选，复用现有设置、任务栏和隔离 Worker。候选具备语义首页、归档表格/筛选/分页/选择、完整性校验、解压配置、创建来源/格式/等级/密码、进度/取消及命令行打开。严格全工作区 Clippy 通过；全 feature 运行通过 41 次 Rust 测试（候选二进制的 9 次包含 2 项候选专属测试与 7 项共享模块复验）及两项 benchmark smoke。
+- 建立 opt-in Dioxus/WebView2 可访问 UI 候选，复用现有设置、任务栏和隔离 Worker。候选具备语义首页、归档表格/筛选/分页/选择、完整性校验、解压配置、创建来源/格式/等级/密码、进度/取消及命令行打开。首轮全 feature 运行通过 41 次 Rust 测试；新增快捷键测试后，本地严格 Clippy 与全 feature 复验通过 42 次测试执行（候选二进制 10 项）及两项 benchmark smoke。
 - Windows UI Automation 实机识别候选的 landmark、标题、导航、表格、复选框、组合框、滑块、密码输入和 live status。用 ZiFile 创建的 2 文件 ZIP 通过命令行打开，条目列表和 3.8 KB 展开大小正确，随后 Worker 完整性校验成功。1180×760 深色中文首屏、归档页和创建页无裁切。此记录不宣称 Narrator/Accessibility Insights 认证。
 - 候选首次云端依赖策略检查只拒绝 `libfuzzer-sys` 的 `NCSA` 和 `target-lexicon` 的 `Apache-2.0 WITH LLVM-exception` 许可证表达式；两者均为 OSI 认可的宽松许可证/例外。策略仅显式增加这两项，没有放宽未知来源、通配依赖或其他许可证检查。
+- 修正后的 [CI 32665872620](https://github.com/ax2/zifile/actions/runs/32665872620) 全部通过：依赖策略、格式、Clippy、全 feature 测试、benchmark 编译、真实 Worker 冒烟、第三方互操作、文档和 fuzz 目标编译均成功。
+- 候选新增原生拖放处理及 `Ctrl+O`、`Ctrl+N`、`Escape`；实机确认两个 Ctrl 快捷键分别打开原生文件选择器和创建页。CSP 仅允许内联 Dioxus 运行时、本地样式/数据图像、本地 Dioxus 协议和 `127.0.0.1` 回环 WebSocket，非 Dioxus 自定义导航被拒绝；首次过严策略导致空白页，补入 Dioxus 必需的回环 WebSocket后，1182×791 界面与 UI Automation 语义树恢复。
+- 本地 x64 候选 `0.1.0.3` MSIX 与完整可运行目录构建成功；包内候选桌面 EXE 与 Release 构建 SHA-256 一致，可运行目录含桌面、CLI、Worker、MIT 许可证和 README，不含 ZIP。完整目录启动后 UI Automation 再次识别 `main-content` 与 live status。ARM64 候选仍等待云端工作流复验。
 
 ### 遗留问题
 
@@ -60,8 +63,8 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - Worker 仍继承当前用户权限，尚未采用 AppContainer；CPU 时间限制和 Broker 模型待后续纵深防御评估。
 - 更广泛的第三方 7-Zip/libarchive 语料、直接归档解析器 fuzz、损坏/截断/压缩炸弹扩展语料。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
-- 完整键盘遍历、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；十万条目的峰值内存与交互延迟仍需正式性能基线。
-- Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树与 Worker 功能路径，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、拖放/快捷键和双架构打包门禁约束。
+- 完整键盘遍历、`Ctrl+A`、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；十万条目的峰值内存与交互延迟仍需正式性能基线。
+- Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树、Worker 功能路径、核心快捷键与本地 x64 打包，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、真实拖放和 ARM64 候选运行门禁约束。
 - Partner Center 名称预留、代码签名、WinGet 与 Microsoft Store 提交。
 
 ### 发布结果

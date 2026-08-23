@@ -5,10 +5,11 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use dioxus::prelude::*;
+use dioxus_html::HasFileData;
 use rfd::FileDialog;
 use zifile_core::{
     ArchiveEntryInfo, ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy,
-    OperationProgress, OperationSummary, SafetyLimits,
+    OperationProgress, OperationSummary, SafetyLimits, detect_format_from_path,
 };
 use zifile_worker_protocol::WorkerRequest;
 
@@ -22,6 +23,7 @@ use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 
 const STYLES: &str = include_str!("accessible_ui.css");
+const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src dioxus: ws://127.0.0.1:* http://dioxus.index.html https://dioxus.index.html ipc:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
 const ENTRIES_PER_PAGE: usize = 500;
 const CREATE_FORMATS: [ArchiveFormat; 13] = [
     ArchiveFormat::Zip,
@@ -46,7 +48,14 @@ fn main() {
         .with_inner_size(LogicalSize::new(1180.0, 760.0))
         .with_min_inner_size(LogicalSize::new(720.0, 560.0));
     dioxus::LaunchBuilder::desktop()
-        .with_cfg(Config::new().with_window(window).with_menu(None))
+        .with_cfg(
+            Config::new()
+                .with_window(window)
+                .with_menu(None)
+                .with_disable_context_menu(true)
+                .with_custom_head(SECURITY_HEAD.to_owned())
+                .with_navigation_handler(|_| false),
+        )
         .launch(App);
 }
 
@@ -63,6 +72,13 @@ enum OperationKind {
     Test,
     Extract,
     Create,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AccessibleShortcut {
+    Open,
+    Create,
+    Cancel,
 }
 
 #[derive(Debug, Clone)]
@@ -151,7 +167,27 @@ fn App() -> Element {
 
     rsx! {
         style { {STYLES} }
-        div { class: "app-shell {theme}", lang: locale.code(),
+        div {
+            class: "app-shell {theme}",
+            lang: locale.code(),
+            tabindex: "-1",
+            autofocus: true,
+            onkeydown: move |event: KeyboardEvent| {
+                if event.is_composing() {
+                    return;
+                }
+                let control = event.modifiers().contains(Modifiers::CONTROL);
+                if let Some(shortcut) = accessible_shortcut(&event.key().to_string(), control) {
+                    event.prevent_default();
+                    apply_accessible_shortcut(state, shortcut);
+                }
+            },
+            ondragover: move |event: DragEvent| event.prevent_default(),
+            ondrop: move |event: DragEvent| {
+                event.prevent_default();
+                let paths = event.files().into_iter().map(|file| file.path()).collect();
+                handle_dropped_paths(state, paths);
+            },
             aside { class: "sidebar", "aria-label": choose(locale, "Primary", "主导航"),
                 header { h1 { "ZiFile" } p { {locale.text(Text::ArchiveStudio)} } }
                 nav {
@@ -316,6 +352,58 @@ fn open_archive_dialog(state: Signal<UiState>) {
     if let Some(path) = archive_dialog(locale).pick_file() {
         begin_load(state, path);
     }
+}
+
+fn accessible_shortcut(key: &str, control: bool) -> Option<AccessibleShortcut> {
+    if key.eq_ignore_ascii_case("escape") {
+        return Some(AccessibleShortcut::Cancel);
+    }
+    if !control {
+        return None;
+    }
+    match key.to_ascii_lowercase().as_str() {
+        "o" => Some(AccessibleShortcut::Open),
+        "n" => Some(AccessibleShortcut::Create),
+        _ => None,
+    }
+}
+
+fn apply_accessible_shortcut(mut state: Signal<UiState>, shortcut: AccessibleShortcut) {
+    match shortcut {
+        AccessibleShortcut::Open if !state.read().busy => open_archive_dialog(state),
+        AccessibleShortcut::Create if !state.read().busy => state.write().page = Page::Create,
+        AccessibleShortcut::Cancel => cancel_operation(state),
+        _ => {}
+    }
+}
+
+fn handle_dropped_paths(mut state: Signal<UiState>, paths: Vec<PathBuf>) {
+    if paths.is_empty() {
+        return;
+    }
+    if state.read().busy {
+        let locale = state.read().locale;
+        state.write().status = choose(
+            locale,
+            "Wait for the current operation before dropping more files",
+            "请等待当前操作完成后再拖入文件",
+        )
+        .to_owned();
+        return;
+    }
+    if paths.len() == 1
+        && paths[0].is_file()
+        && detect_format_from_path(&paths[0]).is_some_and(|format| format.capabilities().list)
+    {
+        begin_load(state, paths.into_iter().next().expect("one dropped path"));
+        return;
+    }
+    let existing = paths.into_iter().filter(|path| path.exists()).collect();
+    let locale = state.read().locale;
+    let mut value = state.write();
+    append_unique(&mut value.create_sources, existing);
+    value.page = Page::Create;
+    value.status = choose(locale, "Added dropped sources", "已添加拖入的来源").to_owned();
 }
 
 fn reload_archive(state: Signal<UiState>) {
@@ -757,5 +845,23 @@ mod tests {
         ] {
             assert_eq!(parse_conflict(conflict_value(policy)), policy);
         }
+    }
+
+    #[test]
+    fn accessible_shortcuts_are_deliberate_and_ime_safe() {
+        assert_eq!(
+            accessible_shortcut("o", true),
+            Some(AccessibleShortcut::Open)
+        );
+        assert_eq!(
+            accessible_shortcut("N", true),
+            Some(AccessibleShortcut::Create)
+        );
+        assert_eq!(
+            accessible_shortcut("Escape", false),
+            Some(AccessibleShortcut::Cancel)
+        );
+        assert_eq!(accessible_shortcut("a", true), None);
+        assert_eq!(accessible_shortcut("o", false), None);
     }
 }

@@ -24,6 +24,8 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 
 在打标签前可从 Actions 手动运行 Release 工作流并填写语义版本。该模式真实构建和保存双架构产物与 SBOM，但会跳过公开 Release 和 WinGet 发布候选，适合验证交叉编译与打包环境。
 
+手动验证模式还会构建 `-accessible` 后缀的 Dioxus/WebView2 候选 MSIX 与完整可运行目录，并将候选桌面程序以规范的 `zifile-desktop.exe` 名称放入包内。正式标签仍只发布当前默认 UI；候选通过 Narrator、Accessibility Insights、IME、DPI 和双架构运行验证后才允许替换默认发行物。
+
 ## 发布门禁
 
 只有当单元、互操作、安全、性能、包安装、升级和文档检查全部通过，且 Stage 工作日志已同步，才允许创建稳定版本。
