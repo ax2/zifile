@@ -6,17 +6,10 @@ description: ZiFile 的分层、crate 边界与任务执行模型。
 ## 分层
 
 ```text
-Iced UI / CLI
-      │
-应用状态与任务队列
-      │
-zifile-core
-      │
-格式 Provider
-      │
-隔离 Worker
-      │
-Windows 文件系统
+Iced UI ── versioned IPC ── isolated Worker ── zifile-core ── Provider
+CLI ────────────────────────────────────────────┘
+                                                   │
+                                           Windows 文件系统
 ```
 
 ### `zifile-core`
@@ -35,7 +28,9 @@ Windows 文件系统
 
 ### Worker
 
-归档解析最终放入独立进程。Stage 2 先用 Job Object 限制内存、CPU 和子进程，后续评估 AppContainer。
+桌面端所有列出、校验、解压和创建请求均通过版本化 JSON Lines 协议发送给 `zifile-worker.exe`。归档条目逐条返回，避免十万条目形成单个巨型 IPC 消息。
+
+Windows 客户端在发送请求前把 Worker 放入 Job Object：最多一个活动进程、4 GiB 进程内存上限、Job 关闭时强制结束。创建和解压先通过同一条标准输入通道协作取消；如果 Worker 在 2 秒内没有退出，客户端再强制回收。该边界限制解析器崩溃和内存失控的影响，但 Worker 仍继承当前用户的文件权限，并不等同于 AppContainer 沙箱。详见 ADR-0004。
 
 ## 兼容性
 

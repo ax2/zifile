@@ -5,6 +5,7 @@ use std::time::Duration;
 
 mod i18n;
 mod settings;
+mod worker_client;
 
 use iced::widget::{
     button, checkbox, column, container, pick_list, progress_bar, row, rule, scrollable, slider,
@@ -13,13 +14,14 @@ use iced::widget::{
 use iced::{Element, Fill, Length, Subscription, Task, Theme};
 use rfd::FileDialog;
 use zifile_core::{
-    ArchiveEntryInfo, ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy, CreateOptions,
-    ExtractOptions, OperationProgress, OperationSummary, create_archive, detect_format_from_path,
-    extract_archive, list_archive, test_archive,
+    ArchiveEntryInfo, ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy,
+    OperationProgress, OperationSummary, SafetyLimits, detect_format_from_path,
 };
+use zifile_worker_protocol::WorkerRequest;
 
 use i18n::{Locale, Text};
 use settings::AppSettings;
+use worker_client::{WorkerOutput, run_worker};
 
 const CREATE_FORMATS: [ArchiveFormat; 13] = [
     ArchiveFormat::Zip,
@@ -236,6 +238,8 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::ArchiveLoaded(result) => {
             state.busy = false;
+            state.cancellation = None;
+            state.progress = None;
             match result {
                 Ok(archive) => {
                     state.selected = archive
@@ -329,25 +333,38 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             let path = archive.path.clone();
             let cancellation = CancellationToken::default();
             let progress = OperationProgress::default();
-            let options = ExtractOptions {
+            let file_count = archive
+                .entries
+                .iter()
+                .filter(|entry| !entry.is_directory)
+                .count();
+            let selected_paths = if state.selected.len() == file_count {
+                None
+            } else {
+                Some(state.selected.iter().cloned().collect())
+            };
+            let request = WorkerRequest::Extract {
+                archive: path,
+                destination: destination.clone(),
                 conflict: state.conflict.into(),
+                limits: SafetyLimits::default(),
                 password: non_empty(&state.password),
-                selected_paths: Some(state.selected.clone()),
-                cancellation: cancellation.clone(),
-                progress: progress.clone(),
-                ..ExtractOptions::default()
+                selected_paths,
             };
             state.busy = true;
-            state.cancellation = Some(cancellation);
-            state.progress = Some(progress);
+            state.cancellation = Some(cancellation.clone());
+            state.progress = Some(progress.clone());
             state.status = format!(
                 "{} {}…",
                 choose(state.locale, "Extracting to", "正在解压到"),
                 destination.display()
             );
+            let worker_progress = progress.clone();
+            let worker_cancellation = cancellation.clone();
             return Task::perform(
                 async move {
-                    extract_archive(path, destination, &options).map_err(|error| error.to_string())
+                    run_worker(request, worker_progress, worker_cancellation)
+                        .and_then(expect_summary)
                 },
                 Message::ExtractFinished,
             );
@@ -380,7 +397,15 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 return Task::none();
             };
             let password = non_empty(&state.password);
+            let cancellation = CancellationToken::default();
+            let progress = OperationProgress::default();
+            let request = WorkerRequest::Test {
+                archive: path,
+                password,
+            };
             state.busy = true;
+            state.cancellation = Some(cancellation.clone());
+            state.progress = Some(progress.clone());
             state.status = choose(
                 state.locale,
                 "Testing every entry and checksum…",
@@ -388,14 +413,14 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             )
             .to_owned();
             return Task::perform(
-                async move {
-                    test_archive(path, password.as_deref()).map_err(|error| error.to_string())
-                },
+                async move { run_worker(request, progress, cancellation).and_then(expect_archive) },
                 Message::TestFinished,
             );
         }
         Message::TestFinished(result) => {
             state.busy = false;
+            state.cancellation = None;
+            state.progress = None;
             state.status = match result {
                 Ok(info) if state.locale == Locale::ZhCn => format!(
                     "压缩文件完好 · {} 个项目 · {}",
@@ -461,25 +486,25 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             };
             let sources = state.create_sources.clone();
             let format = state.create_format;
-            let options = CreateOptions {
+            let cancellation = CancellationToken::default();
+            let progress = OperationProgress::default();
+            let request = WorkerRequest::Create {
+                sources,
+                destination: destination.clone(),
+                format,
                 compression_level: state.compression_level,
                 password: non_empty(&state.create_password),
-                cancellation: CancellationToken::default(),
-                progress: OperationProgress::default(),
             };
             state.busy = true;
-            state.cancellation = Some(options.cancellation.clone());
-            state.progress = Some(options.progress.clone());
+            state.cancellation = Some(cancellation.clone());
+            state.progress = Some(progress.clone());
             state.status = format!(
                 "{} {}…",
                 choose(state.locale, "Creating", "正在创建"),
                 destination.display()
             );
             return Task::perform(
-                async move {
-                    create_archive(&sources, destination, format, &options)
-                        .map_err(|error| error.to_string())
-                },
+                async move { run_worker(request, progress, cancellation).and_then(expect_summary) },
                 Message::CreateFinished,
             );
         }
@@ -602,16 +627,42 @@ fn save_settings(state: &ZiFile) {
 
 fn begin_load(state: &mut ZiFile, path: PathBuf) -> Task<Message> {
     let password = non_empty(&state.password);
+    let cancellation = CancellationToken::default();
+    let progress = OperationProgress::default();
+    let request = WorkerRequest::List {
+        archive: path.clone(),
+        password,
+    };
     state.busy = true;
+    state.cancellation = Some(cancellation.clone());
+    state.progress = Some(progress.clone());
     state.status = format!(
         "{} {}…",
         choose(state.locale, "Opening", "正在打开"),
         path.display()
     );
     Task::perform(
-        async move { list_archive(path, password.as_deref()).map_err(|error| error.to_string()) },
+        async move { run_worker(request, progress, cancellation).and_then(expect_archive) },
         Message::ArchiveLoaded,
     )
+}
+
+fn expect_archive(output: WorkerOutput) -> Result<ArchiveInfo, String> {
+    match output {
+        WorkerOutput::Archive(archive) => Ok(archive),
+        WorkerOutput::Summary(_) => {
+            Err("worker returned an operation summary instead of an archive".to_owned())
+        }
+    }
+}
+
+fn expect_summary(output: WorkerOutput) -> Result<OperationSummary, String> {
+    match output {
+        WorkerOutput::Summary(summary) => Ok(summary),
+        WorkerOutput::Archive(_) => {
+            Err("worker returned an archive instead of an operation summary".to_owned())
+        }
+    }
 }
 
 fn view(state: &ZiFile) -> Element<'_, Message> {

@@ -11,6 +11,7 @@ use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use lz4_flex::frame::{FrameDecoder, FrameEncoder};
+use serde::{Deserialize, Serialize};
 use sevenz_rust2::{ArchiveReader as SevenZReader, ArchiveWriter as SevenZWriter, Password};
 use tempfile::NamedTempFile;
 use walkdir::WalkDir;
@@ -23,7 +24,7 @@ use zip::{AesMode, CompressionMethod, ZipWriter};
 use crate::path_policy::safe_relative_path;
 use crate::{ArchiveFormat, SafetyLimits, ZiFileError, ZiFileResult, detect_format};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArchiveEntryInfo {
     pub path: PathBuf,
     pub size: u64,
@@ -32,7 +33,7 @@ pub struct ArchiveEntryInfo {
     pub encrypted: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ArchiveInfo {
     pub path: PathBuf,
     pub format: ArchiveFormat,
@@ -41,7 +42,7 @@ pub struct ArchiveInfo {
     pub compressed_size: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ConflictPolicy {
     #[default]
     Ask,
@@ -95,7 +96,7 @@ impl Default for CreateOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperationSummary {
     pub files: u64,
     pub directories: u64,
@@ -103,7 +104,7 @@ pub struct OperationSummary {
     pub skipped: u64,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProgressSnapshot {
     pub processed_entries: u64,
     pub total_entries: u64,
@@ -143,6 +144,22 @@ impl OperationProgress {
             processed_bytes: self.0.processed_bytes.load(Ordering::Acquire),
             total_bytes: self.0.total_bytes.load(Ordering::Acquire),
         }
+    }
+
+    /// Replaces the observable snapshot for a trusted local worker client.
+    pub fn update(&self, snapshot: ProgressSnapshot) {
+        self.0
+            .processed_entries
+            .store(snapshot.processed_entries, Ordering::Release);
+        self.0
+            .total_entries
+            .store(snapshot.total_entries, Ordering::Release);
+        self.0
+            .processed_bytes
+            .store(snapshot.processed_bytes, Ordering::Release);
+        self.0
+            .total_bytes
+            .store(snapshot.total_bytes, Ordering::Release);
     }
 
     fn set_totals(&self, entries: u64, bytes: u64) {
@@ -856,10 +873,16 @@ fn create_seven_zip(
             writer.push_archive_entry(entry, None::<File>)?;
             summary.directories += 1;
         } else {
-            writer.push_archive_entry(entry, Some(File::open(&source.disk_path)?))?;
+            writer.push_archive_entry(
+                entry,
+                Some(CancellableProgressReader {
+                    inner: File::open(&source.disk_path)?,
+                    cancellation: options.cancellation.clone(),
+                    progress: options.progress.clone(),
+                }),
+            )?;
             summary.files += 1;
             summary.bytes += source.size;
-            options.progress.advance_bytes(source.size);
             options.progress.advance_entry();
         }
     }
@@ -1159,6 +1182,21 @@ fn copy_limited(
         copied += count;
     }
     Ok(copied)
+}
+
+struct CancellableProgressReader<R> {
+    inner: R,
+    cancellation: CancellationToken,
+    progress: OperationProgress,
+}
+
+impl<R: Read> Read for CancellableProgressReader<R> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.cancellation.check().map_err(io::Error::other)?;
+        let count = self.inner.read(buffer)?;
+        self.progress.advance_bytes(count as u64);
+        Ok(count)
+    }
 }
 
 fn copy_cancellable(

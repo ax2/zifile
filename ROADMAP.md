@@ -52,7 +52,7 @@ Goal: complete the Windows-focused daily workflow.
 - [x] Password flow avoids logging or persisting secrets.
 - [x] Windows archive file associations and desktop drag-and-drop.
 - [ ] Taskbar progress and shell commands.
-- [ ] Isolated worker process with Windows Job Object limits.
+- [x] Isolated worker process with versioned IPC, cancellation and Windows Job Object limits.
 - [x] x64/ARM64 MSIX and standalone executable packaging.
 - [ ] Signed install, upgrade, repair and uninstall tests.
 - [ ] Performance baselines for throughput, memory, startup, and large listings.
