@@ -34,7 +34,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 在 Windows 真实启动桌面程序，检查 1180×780 深色首页、创建页、空归档页和原生文件选择器；未发现裁切或阻塞 UI 线程的问题。
 - 8 MiB 本地基准中，ZIP 创建约 262–275 MiB/s，完整性校验约 3.04–3.15 GiB/s；该数字只作为首轮机器基线。
 - 在本机 Windows SDK 上成功生成 `ZiFile-0.1.0.0-windows-x64.msix` 和完整可运行目录；当前为开发 Identity、未签名包，不构成 Store 认证证据。
-- ARM64 Rust 目标已安装，但本机没有 Visual C++ ARM64 交叉工具链，`zstd-sys` 交叉编译因此被正确阻止；发布作业固定到包含该工具链的 Windows 2022 Runner，仍需由远程 CI 给出最终双架构证据。
+- 本机没有 Visual C++ ARM64 交叉工具链，`zstd-sys` 本地交叉编译因此被正确阻止；Windows 2022 Runner 已成功完成全部 ARM64 Rust/C 依赖和应用的优化构建。首次打包随后发现脚本误运行 ARM64 版 `MakeAppx.exe`；现按宿主架构选择 SDK 工具，同时仍把包清单标记为目标架构。
 - 首次非发布打包演练确认 `cargo-cyclonedx` 0.5.9 按 crate 输出 `*.cdx.json`；收集规则已改为匹配真实产物名，而不是旧版文档中的 `bom.json`。
 
 ### 遗留问题
