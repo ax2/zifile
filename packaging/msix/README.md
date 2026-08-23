@@ -8,10 +8,22 @@ archive. The package is unsigned unless a PFX and secure password are supplied.
 ./packaging/msix/Build-Package.ps1 -Version 0.1.0.0 -Architecture x64
 ```
 
-`AppxManifest.xml` uses a development identity. A Store build must pass the
-Partner Center identity name and publisher to the script. Direct distribution
-may additionally pass a PFX path and secure password; credentials and
-certificates must never be committed.
+`AppxManifest.xml` uses a development identity in the Windows 11 unsigned-package
+OID namespace. Microsoft documents `Add-AppxPackage -AllowUnsigned` from an
+elevated shell for this path; this identity can never collide with a signed
+package. Windows only supports this unsigned executable-package path on Windows
+11, so development packages target build 26100 or newer. The current build 26200
+test machine still rejected the OID publisher with deployment error `0x80080204`,
+so local unsigned installation is not yet a passed gate. Signed and
+Store packages retain the manifest's Windows 10 build 19041 minimum. A Store
+build must pass the Partner Center identity name and
+publisher to the script. Direct distribution may additionally pass a PFX path
+and secure password; credentials and certificates must never be committed.
+
+When `CertificatePath` is supplied, `Publisher` must be the exact certificate
+subject and must not contain the unsigned OID. An unsigned non-development Store
+submission may use the Partner Center publisher because Microsoft signs accepted
+Store packages.
 
 Implemented packaging features:
 

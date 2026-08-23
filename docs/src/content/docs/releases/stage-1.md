@@ -62,6 +62,9 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 真实 100,000 空条目 ZIP 通过隔离 Worker 在候选版打开，UI Automation 报告 100,000 项、200 页且当前表格仅 500 行；末项搜索和三页筛选导航通过。操作后 7 进程当前工作集/私有内存为 552.70/313.04 MiB，各进程峰值工作集之和 693.72 MiB；后者不是同时刻整树峰值。测试结束应用与 Worker 均退出。
 - [CI 32671611160](https://github.com/ax2/zifile/actions/runs/32671611160) 全部成功，复验依赖、格式、严格 Clippy、44 次 Rust 测试、全工作区优化 benchmark 编译、真实 Worker 取消冒烟、ZIP/tar.gz/7z 互操作、文档和 fuzz 目标编译。
 - [Release 演练 32671977951](https://github.com/ax2/zifile/actions/runs/32671977951) 全部成功。下载复核确认 x64/ARM64 每架构 6 个校验目标全部匹配，4 个 EXE 的 PE machine 分别统一为 `0x8664`/`0xAA64`，5 个 CycloneDX 1.3 JSON 可解析，发布目录无 ZIP；ARM64 实机运行仍未验证。
+- 新增确定性真实十万项浏览器基线脚本。五轮中，首内容中位数/p95 为 3373.80/3668.80 ms，50% 滚动为 195.16/246.34 ms，下一页为 805.87/1143.66 ms；25 ms 同时刻采样的整树最大工作集/私有内存为 669.18/455.71 MiB。该口径包含 UI Automation 观察开销。
+- 用 Release 演练的真实 x64/ARM64 SHA-256 重新生成 WinGet 1.12 候选，`winget validate` 成功；尚未提交 winget-pkgs。
+- MSIX 开发 Identity 改用微软未签名包固定 OID 并加入错误 Publisher 防护。当前 Windows build 26200 本机仍以 `0x80080204` 拒绝未签名 OID 包，不能记为安装通过；一次不落盘凭据的一日自签名演练已由 SignTool 成功签名，部署仅因测试根不受信任而以 `0x800B0109` 停止。测试证书、私钥和包注册均无残留。
 
 ### 遗留问题
 
@@ -69,10 +72,10 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - Worker 仍继承当前用户权限，尚未采用 AppContainer；CPU 时间限制和 Broker 模型待后续纵深防御评估。
 - 更广泛的第三方 7-Zip/libarchive 语料、直接归档解析器 fuzz、损坏/截断/压缩炸弹扩展语料。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
-- 完整键盘遍历、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索和翻页，仍需可重复的首屏/滚动延迟与同时刻整树峰值仪器化。
+- 完整键盘遍历、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索、翻页及可重复的首内容/滚动/同时刻整树峰值采样，仍需加载取消基线。
 - Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树、Worker 功能路径、核心快捷键、本地 x64 运行及云端 x64/ARM64 打包，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、真实拖放和 ARM64 候选实机运行门禁约束。
 - Partner Center 名称预留、代码签名、WinGet 与 Microsoft Store 提交。
 
 ### 发布结果
 
-进行中。已验证本地 x64 开发 MSIX、候选运行目录和远程 x64/ARM64 默认/候选非发布产物链；当前提交仍是 Alpha 开发检查点，不是可上架版本，也没有创建公开 Release。最新演练证据保存在 [GitHub Actions run 32667737142](https://github.com/ax2/zifile/actions/runs/32667737142)。
+进行中。已验证本地 x64 开发 MSIX、候选运行目录和远程 x64/ARM64 默认/候选非发布产物链；当前提交仍是 Alpha 开发检查点，不是可上架版本，也没有创建公开 Release。最新演练证据保存在 [GitHub Actions run 32671977951](https://github.com/ax2/zifile/actions/runs/32671977951)。

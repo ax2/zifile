@@ -20,7 +20,7 @@ GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID 
 
 Partner Center 需要先手动预留名称并完成首个提交；之后可以接入 Store Submission API。签名密钥只保存在 GitHub Secrets 或云签名服务中，工作流把临时证书写到 Runner 临时目录并在打包后删除。
 
-推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE，生成校验和、CycloneDX SBOM、来源证明和 WinGet 1.12 多文件清单候选，然后发布 GitHub Release。没有正式 Identity 和签名 Secret 时只能生成开发用途的未签名包，不得提交 WinGet 或 Store。
+推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE，生成校验和、CycloneDX SBOM、来源证明和 WinGet 1.12 多文件清单候选，然后发布 GitHub Release。没有正式 Identity 和签名 Secret 时只能生成开发用途的未签名包，不得提交 WinGet 或 Store。未签名 `.Dev` 包使用微软固定 OID Publisher 并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
 
 在打标签前可从 Actions 手动运行 Release 工作流并填写语义版本。该模式真实构建和保存双架构产物与 SBOM，但会跳过公开 Release 和 WinGet 发布候选，适合验证交叉编译与打包环境。
 
@@ -28,4 +28,4 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 
 ## 发布门禁
 
-只有当单元、互操作、安全、性能、包安装、升级和文档检查全部通过，且 Stage 工作日志已同步，才允许创建稳定版本。
+只有当单元、互操作、安全、性能、包安装、升级和文档检查全部通过，且 Stage 工作日志已同步，才允许创建稳定版本。WACK CLI 必须在当前用户的管理员交互式会话运行；普通权限的自动化终端不能把“工具已安装”写成“认证已通过”。

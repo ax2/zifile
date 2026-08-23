@@ -4,13 +4,21 @@ param(
     [ValidateSet('x64', 'arm64')]
     [string]$Architecture = 'x64',
     [string]$IdentityName = 'ZiCode.ZiFile.Dev',
-    [string]$Publisher = 'CN=ZiCode',
+    [string]$Publisher = 'CN=ZiCode Development, OID.2.25.311729368913984317654407730594956997722=1',
     [string]$CertificatePath,
     [securestring]$CertificatePassword,
     [switch]$AccessibleUi
 )
 
 $ErrorActionPreference = 'Stop'
+$unsignedPublisherOid = 'OID.2.25.311729368913984317654407730594956997722=1'
+$unsignedPublisherPattern = "(?i)(^|,\s*)$([Regex]::Escape($unsignedPublisherOid))($|,\s*)"
+if ($CertificatePath -and $Publisher -match $unsignedPublisherPattern) {
+    throw 'Signed packages cannot use the Windows unsigned publisher namespace. Pass the certificate subject as Publisher.'
+}
+if (-not $CertificatePath -and $IdentityName.EndsWith('.Dev') -and $Publisher -notmatch $unsignedPublisherPattern) {
+    throw "Unsigned development packages require the Microsoft unsigned namespace identifier $unsignedPublisherOid in Publisher."
+}
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $targetRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'target\package'))
 $variantSuffix = if ($AccessibleUi) { '-accessible' } else { '' }
@@ -64,6 +72,10 @@ $identity.Name = $IdentityName
 $identity.Publisher = $Publisher
 $identity.Version = $Version
 $identity.ProcessorArchitecture = $Architecture
+$unsignedDevelopmentPackage = -not $CertificatePath -and $IdentityName.EndsWith('.Dev')
+if ($unsignedDevelopmentPackage) {
+    $manifest.Package.Dependencies.TargetDeviceFamily.MinVersion = '10.0.26100.0'
+}
 $manifest.Save((Join-Path $stageRoot 'AppxManifest.xml'))
 
 $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
