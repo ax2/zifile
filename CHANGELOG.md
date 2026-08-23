@@ -26,3 +26,8 @@ All notable changes to ZiFile are documented here. The format follows
 - Tag-driven checksums, CycloneDX SBOM, provenance and WinGet 1.12 manifest generation.
 - Security-focused fuzz targets and archive throughput benchmarks.
 - Bidirectional ZIP and tar.gz interoperability tests against Windows reference tools.
+- Simplified Chinese and English desktop UI with system-locale detection and persisted
+  language/theme preferences; passwords are never included in settings.
+- Archive-path search and bounded 500-row pagination, with a 100,000-entry regression test.
+- Desktop shortcuts for opening (`Ctrl+O`), creating (`Ctrl+N`), selecting all (`Ctrl+A`)
+  and canceling an active operation (`Escape`).
