@@ -14,7 +14,9 @@ documentation system, and engineering gates.
 - [x] Add a shared format capability registry and conservative safety limits.
 - [x] Add initial unit test, benchmark, smoke, CI, and release structure.
 - [x] Create the Astro Starlight documentation system.
-- [ ] Validate Iced with 100,000 rows, IME, keyboard navigation, DPI, and high contrast.
+- [x] Bound a 100,000-entry Iced listing with search and 500-row pagination.
+- [x] Add the first keyboard workflow: Ctrl+O, Ctrl+N, Ctrl+A and Escape.
+- [ ] Verify Chinese IME, full keyboard navigation, screen readers, per-monitor DPI and high contrast.
 - [ ] Reserve `ZiFile` in Microsoft Partner Center.
 - [ ] Decide signing provider for direct GitHub and WinGet releases.
 
@@ -49,10 +51,10 @@ Goal: complete the Windows-focused daily workflow.
 - [x] Password flow avoids logging or persisting secrets.
 - [x] Windows archive file associations and desktop drag-and-drop.
 - [ ] Taskbar progress and shell commands.
-- Isolated worker process with Windows Job Object limits.
+- [ ] Isolated worker process with Windows Job Object limits.
 - [x] x64/ARM64 MSIX and standalone executable packaging.
 - [ ] Signed install, upgrade, repair and uninstall tests.
-- Performance baselines for throughput, memory, startup, and large listings.
+- [ ] Performance baselines for throughput, memory, startup, and large listings.
 
 Exit criteria: signed Beta packages install, upgrade, repair, and uninstall on
 supported Windows 10/11 environments.
@@ -61,11 +63,12 @@ supported Windows 10/11 environments.
 
 Goal: distribution, accessibility, localization, and hardening.
 
-- Simplified Chinese and English UI/docs.
-- Keyboard-only, screen-reader, high-contrast, and per-monitor DPI verification.
-- Windows Application Certification Kit run.
-- WinGet manifest submission.
-- Microsoft Store submission and certification.
+- [x] Simplified Chinese and English desktop UI with persisted language/theme preferences.
+- [ ] Complete equivalent Simplified Chinese and English product documentation.
+- [ ] Keyboard-only, screen-reader, high-contrast, and per-monitor DPI verification.
+- [ ] Windows Application Certification Kit run.
+- [ ] WinGet manifest submission.
+- [ ] Microsoft Store submission and certification.
 - [x] Tag workflow for SBOM, provenance attestation and checksums.
 - [ ] Reproducible-build documentation and comparison evidence.
 

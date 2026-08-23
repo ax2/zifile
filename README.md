@@ -9,6 +9,11 @@ ZIP, 7z, TAR compositions and common compression streams have working create,
 list, integrity-test and safe-extraction paths shared by the CLI and Iced
 desktop application.
 
+The desktop UI is available in Simplified Chinese and English, follows the
+system language on first launch, and persists only the selected language and
+theme. Archive rows are searchable and paged in bounded groups of 500 so very
+large listings do not create an unbounded widget tree.
+
 ## Project identity
 
 - Product: **ZiFile**
@@ -44,6 +49,7 @@ pnpm --dir docs build
 - [Architecture](docs/src/content/docs/architecture/overview.md)
 - [Security model](docs/src/content/docs/architecture/security.md)
 - [Testing strategy](docs/src/content/docs/development/testing.md)
+- [Desktop usage and accessibility](docs/src/content/docs/development/desktop.md)
 - [Release process](docs/src/content/docs/development/releasing.md)
 - [Stage 0 work log](docs/src/content/docs/releases/stage-0.md)
 - [Stage 1 work log](docs/src/content/docs/releases/stage-1.md)
@@ -53,7 +59,7 @@ pnpm --dir docs build
 | Area | Current state |
 | --- | --- |
 | Core model | Real create/list/test/extract operations with shared safety policy |
-| Desktop | Modern archive browser, selection, extraction, integrity test and creation workflow |
+| Desktop | Bilingual modern browser/creator, native dialogs, search/paging, shortcuts, progress and cancellation |
 | CLI | `formats`, `detect`, `list`, `test`, `extract`, and `create` |
 | Archive providers | ZIP/ZIP64/AES, 7z/AES, TAR + gzip/zstd/xz/bzip2, and common streams |
 | Packaging | Real x64/ARM64 runnable directory, standalone EXE and MSIX build path |
