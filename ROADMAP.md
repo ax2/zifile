@@ -66,8 +66,9 @@ supported Windows 10/11 environments.
 Goal: distribution, accessibility, localization, and hardening.
 
 - [x] Simplified Chinese and English desktop UI with persisted language/theme preferences.
+- [x] Build an opt-in Dioxus/WebView2 accessibility candidate with semantic archive and create workflows over the isolated Worker.
 - [ ] Complete equivalent Simplified Chinese and English product documentation.
-- [ ] Keyboard-only, screen-reader, high-contrast, and per-monitor DPI verification.
+- [ ] Complete keyboard-only, Narrator, Accessibility Insights, high-contrast, IME and per-monitor DPI verification before replacing Iced.
 - [ ] Windows Application Certification Kit run.
 - [ ] WinGet manifest submission.
 - [ ] Microsoft Store submission and certification.
