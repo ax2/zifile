@@ -49,6 +49,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - Worker 协议异常/流式条目单测和真实 IPC 冒烟通过；32 MiB 随机输入的 7z 创建取消测试证明 Worker 在时限内退出，且目标与临时文件均无残留。Windows 实机确认桌面经 Worker 打开并校验 7z。x64 Release MSIX 与完整可运行目录均包含同一次构建的 Worker EXE。
 - 隔离 Worker 批次的 [CI 32661216329](https://github.com/ax2/zifile/actions/runs/32661216329) 全部通过，包括格式、Clippy、30 项 Rust 测试、benchmark 编译、真实取消冒烟、第三方互操作、依赖策略、文档和 fuzz 目标编译。[双架构 Release 验证 32661235460](https://github.com/ax2/zifile/actions/runs/32661235460) 同时通过 x64/ARM64 构建、MSIX、产物证明和上传；下载复核确认两个架构均含 Worker、MSIX、Worker 校验和，并生成 Worker 与协议 crate 的 CycloneDX SBOM。该运行未创建正式 GitHub Release。
 - 任务栏状态映射新增 2 项单测；本地 x64 Release/MSIX `0.1.0.2` 构建成功，MakeAppx 接受 App Execution Alias manifest。实机打开 32 MiB 7z 验证新包 UI 正常；当前测试桌面自动隐藏任务栏且焦点自动化不稳定，因此未把任务栏视觉效果记为已验证。
+- Windows 集成批次的 [CI 32663024457](https://github.com/ax2/zifile/actions/runs/32663024457) 与 [双架构 Release 32663037787](https://github.com/ax2/zifile/actions/runs/32663037787) 全部成功，复验了依赖策略、32 项测试、真实冒烟、x64/ARM64 MSIX、SBOM、产物证明和上传。该运行未创建正式 GitHub Release。
 
 ### 遗留问题
 
