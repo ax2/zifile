@@ -28,9 +28,9 @@ Worker 的字节进度（无字节总量时回退到条目进度）同步到 Win
 
 ## 已验证与待验证
 
-自动测试与 Criterion 已覆盖 100,000 个模拟条目的过滤和有界分页；Windows 实机已检查 1,200 项 ZIP 的三页翻页、搜索、中英文、深浅主题及 `Ctrl+N`。Dioxus 候选另以真实 2 项 ZIP 验证归档区 `Ctrl+A`、动态选择标签与 live status。
+自动测试与 Criterion 已覆盖 100,000 个模拟条目的过滤和有界分页；Windows 实机已检查 1,200 项 ZIP 的三页翻页、搜索、中英文、深浅主题及 `Ctrl+N`。Dioxus 候选另以真实 2 项 ZIP 验证归档区 `Ctrl+A`、动态选择标签与 live status，并以真实 100,000 项 ZIP 验证 Worker 列出、500 行有界 UIA 表格、搜索和多页导航。
 
-这些检查尚不等同于完整辅助功能认证。当前 Iced 0.14 UI 不能宣称具备完整的 Windows UI Automation/Narrator 语义树。中文 IME、全流程 Tab/方向键遍历、屏幕阅读器、高对比度、每显示器 DPI、Windows Application Certification Kit，以及十万真实条目的峰值内存/响应时间仍是上架前门禁。可访问 UI 路线见 ADR-0005。
+这些检查尚不等同于完整辅助功能认证。当前 Iced 0.14 UI 不能宣称具备完整的 Windows UI Automation/Narrator 语义树。中文 IME、全流程 Tab/方向键遍历、屏幕阅读器、高对比度、每显示器 DPI、Windows Application Certification Kit，以及十万真实条目的可重复首屏/滚动延迟和同时刻峰值内存仍是上架前门禁。可访问 UI 路线见 ADR-0005。
 
 ## 可访问 UI 候选
 
