@@ -113,11 +113,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p sbom
-          find . -name 'bom.json' -not -path './target/*' -print0 | while IFS= read -r -d '' file; do
+          find . -name '*.cdx.json' -not -path './target/*' -print0 | while IFS= read -r -d '' file; do
             name="${file#./}"
-            name="${name%/bom.json}"
+            name="${name%.cdx.json}"
             name="${name//\//-}"
-            cp "$file" "sbom/${name:-workspace}.cdx.json"
+            cp "$file" "sbom/${name}.cdx.json"
           done
           test -n "$(find sbom -type f -print -quit)"
       - uses: actions/upload-artifact@v6

@@ -58,8 +58,12 @@ $identity.ProcessorArchitecture = $Architecture
 $manifest.Save((Join-Path $stageRoot 'AppxManifest.xml'))
 
 $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+$toolArchitecture = if (
+    [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq
+    [Runtime.InteropServices.Architecture]::Arm64
+) { 'arm64' } else { 'x64' }
 $makeAppx = Get-ChildItem -LiteralPath $sdkRoot -Recurse -Filter MakeAppx.exe -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -match "\\$Architecture\\MakeAppx\.exe$" } |
+    Where-Object { $_.FullName -match "\\$toolArchitecture\\MakeAppx\.exe$" } |
     Sort-Object FullName -Descending |
     Select-Object -First 1
 if (-not $makeAppx) { throw 'MakeAppx.exe was not found. Install the Windows SDK packaging tools.' }
@@ -71,7 +75,7 @@ if ($LASTEXITCODE -ne 0) { throw 'MakeAppx failed.' }
 
 if ($CertificatePath) {
     $signTool = Get-ChildItem -LiteralPath $sdkRoot -Recurse -Filter SignTool.exe -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -match "\\$Architecture\\SignTool\.exe$" } |
+        Where-Object { $_.FullName -match "\\$toolArchitecture\\SignTool\.exe$" } |
         Sort-Object FullName -Descending |
         Select-Object -First 1
     if (-not $signTool) { throw 'SignTool.exe was not found.' }
