@@ -45,3 +45,7 @@ All notable changes to ZiFile are documented here. The format follows
   themes, command-line archive opening, and Worker-backed list/test/extract/create flows.
 - Candidate-native file drop handling, Ctrl+O/Ctrl+N/Escape shortcuts, a local-only
   WebView CSP, and opt-in x64/ARM64 MSIX validation artifacts for manual release runs.
+- Candidate archive-scoped Ctrl+A with dynamic UI Automation selection labels and
+  forced-colors styling for Windows high-contrast modes.
+- Shared 100,000-entry browser benchmarks plus a repeatable Windows startup and
+  desktop-process-tree memory baseline script.

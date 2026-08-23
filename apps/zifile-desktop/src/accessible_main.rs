@@ -21,10 +21,10 @@ mod worker_client;
 use i18n::{Locale, Text};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
+use zifile_desktop::entry_view::{ENTRIES_PER_PAGE, filtered_entry_count, filtered_entry_page};
 
 const STYLES: &str = include_str!("accessible_ui.css");
 const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src dioxus: ws://127.0.0.1:* http://dioxus.index.html https://dioxus.index.html ipc:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
-const ENTRIES_PER_PAGE: usize = 500;
 const CREATE_FORMATS: [ArchiveFormat; 13] = [
     ArchiveFormat::Zip,
     ArchiveFormat::SevenZip,
@@ -250,17 +250,11 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
         return rsx! { section { class: "empty-state", h2 { {locale.text(Text::NoArchive)} } p { {locale.text(Text::NoArchiveDescription)} }
         button { class: "primary", disabled: view.busy, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} } } };
     };
-    let filter = view.entry_filter.to_lowercase();
-    let filtered = archive
-        .entries
-        .iter()
-        .filter(|entry| entry_matches_filter(entry, &filter));
-    let count = filtered.clone().count();
+    let count = filtered_entry_count(&archive, &view.entry_filter);
     let last_page = count.saturating_sub(1) / ENTRIES_PER_PAGE;
     let current_page = view.entry_page.min(last_page);
-    let rows = filtered
-        .skip(current_page * ENTRIES_PER_PAGE)
-        .take(ENTRIES_PER_PAGE)
+    let rows = filtered_entry_page(&archive, &view.entry_filter, current_page)
+        .into_iter()
         .cloned()
         .collect::<Vec<_>>();
     let all_files = archive
@@ -269,6 +263,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
         .filter(|entry| !entry.is_directory)
         .count();
     let selected_count = view.selected.len();
+    let selection_summary = format!("{selected_count} {}", locale.text(Text::Selected));
     let archive_name = archive
         .path
         .file_name()
@@ -286,14 +281,24 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
             label { span { {locale.text(Text::Search)} } input { r#type: "search", value: view.entry_filter.clone(), oninput: move |event| { let mut value = state.write(); value.entry_filter = event.value(); value.entry_page = 0; } } }
         }
         div { class: "selection-bar",
-            label { input { r#type: "checkbox", checked: selected_count == all_files && all_files > 0, onchange: move |event| select_all(state, event.checked()) } " {selected_count} {locale.text(Text::Selected)}" }
+            label { input { r#type: "checkbox", checked: selected_count == all_files && all_files > 0, disabled: view.busy, "aria-label": selection_summary.clone(), "aria-keyshortcuts": "Control+A", onchange: move |event| select_all(state, event.checked()) } " {selection_summary}" }
             div { class: "button-row",
                 select { value: conflict_value(view.conflict), disabled: view.busy, "aria-label": choose(locale, "Conflict policy", "文件冲突策略"), onchange: move |event| state.write().conflict = parse_conflict(&event.value()),
                     for policy in [ConflictPolicy::Rename, ConflictPolicy::Overwrite, ConflictPolicy::Skip, ConflictPolicy::Error] { option { value: conflict_value(policy), {conflict_label(locale, policy)} } } }
                 button { class: "primary", disabled: view.busy || selected_count == 0, onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
             }
         }
-        div { class: "table-wrap", tabindex: "0", role: "region", "aria-label": choose(locale, "Archive entries", "压缩文件项目"),
+        div { class: "table-wrap", tabindex: "0", role: "region", "aria-label": choose(locale, "Archive entries", "压缩文件项目"), "aria-keyshortcuts": "Control+A",
+            onkeydown: move |event: KeyboardEvent| {
+                let control = event.modifiers().contains(Modifiers::CONTROL);
+                if !event.is_composing()
+                    && !state.read().busy
+                    && is_select_all_shortcut(&event.key().to_string(), control)
+                {
+                    event.prevent_default();
+                    select_all(state, true);
+                }
+            },
             table { thead { tr { th { "" } th { {locale.text(Text::Name)} } th { {locale.text(Text::Original)} } th { {locale.text(Text::Packed)} } th { {locale.text(Text::Flags)} } } }
                 tbody { for entry in rows { ArchiveRow { key: "{entry.path.display()}", state, entry, locale } } } }
         }
@@ -366,6 +371,10 @@ fn accessible_shortcut(key: &str, control: bool) -> Option<AccessibleShortcut> {
         "n" => Some(AccessibleShortcut::Create),
         _ => None,
     }
+}
+
+fn is_select_all_shortcut(key: &str, control: bool) -> bool {
+    control && key.eq_ignore_ascii_case("a")
 }
 
 fn apply_accessible_shortcut(mut state: Signal<UiState>, shortcut: AccessibleShortcut) {
@@ -703,7 +712,17 @@ fn select_all(mut state: Signal<UiState>, selected: bool) {
                 .collect::<HashSet<_>>()
         })
         .unwrap_or_default();
-    state.write().selected = if selected { paths } else { HashSet::new() };
+    let count = paths.len();
+    let mut value = state.write();
+    value.selected = if selected { paths } else { HashSet::new() };
+    value.status = if selected {
+        match value.locale {
+            Locale::En => format!("Selected all {count} archive files"),
+            Locale::ZhCn => format!("已选择全部 {count} 个归档文件"),
+        }
+    } else {
+        choose(value.locale, "Selection cleared", "已清除选择").to_owned()
+    };
 }
 
 fn archive_dialog(locale: Locale) -> FileDialog {
@@ -802,15 +821,6 @@ fn append_unique(destination: &mut Vec<PathBuf>, paths: Vec<PathBuf>) {
         }
     }
 }
-fn entry_matches_filter(entry: &ArchiveEntryInfo, filter_lower: &str) -> bool {
-    filter_lower.is_empty()
-        || entry
-            .path
-            .to_string_lossy()
-            .to_lowercase()
-            .contains(filter_lower)
-}
-
 fn format_bytes(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut value = bytes as f64;
@@ -863,5 +873,9 @@ mod tests {
         );
         assert_eq!(accessible_shortcut("a", true), None);
         assert_eq!(accessible_shortcut("o", false), None);
+        assert!(is_select_all_shortcut("a", true));
+        assert!(is_select_all_shortcut("A", true));
+        assert!(!is_select_all_shortcut("a", false));
+        assert!(!is_select_all_shortcut("o", true));
     }
 }

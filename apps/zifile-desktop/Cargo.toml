@@ -17,6 +17,10 @@ name = "zifile-desktop-accessible"
 path = "src/accessible_main.rs"
 required-features = ["accessible-ui"]
 
+[[bench]]
+name = "entry_browser"
+harness = false
+
 [dependencies]
 dioxus = { workspace = true, optional = true }
 dioxus-html = { workspace = true, optional = true }
@@ -45,3 +49,6 @@ windows-sys = { version = "0.61", features = [
 
 [build-dependencies]
 winresource.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true

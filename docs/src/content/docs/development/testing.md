@@ -6,8 +6,8 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 ## Pull Request 门禁
 
 - `cargo fmt --all -- --check`
-- `cargo clippy --workspace --all-targets -- -D warnings`
-- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- `cargo test --workspace --all-targets --all-features --locked`
 - 许可证、来源和安全公告检查
 - Starlight 类型检查和静态构建
 - Criterion 基准目标可编译
@@ -37,4 +37,6 @@ Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.
 
 当前 8 MiB 可压缩语料在本地 Windows x64 的一次基线中，ZIP 创建约为 262–275 MiB/s，完整性校验约为 3.04–3.15 GiB/s。该结果只用于建立初始量级，不作为跨机器 CI 阈值。
 
-桌面列表回归测试使用 100,000 个模拟条目，断言搜索结果正确且每次只构造最多 500 个可见行。2026-08-24 的 Windows 实机检查另用 1,200 项 ZIP 验证三页翻页和单项搜索。此结果证明渲染结构有界，但不替代十万条目峰值内存、首屏延迟和滚动响应的正式基准。
+桌面列表回归测试使用 100,000 个模拟条目，断言搜索结果正确且每次只构造最多 500 个可见行。默认 Iced 与 Dioxus 候选共用 `entry_view` 实现；运行 `cargo bench -p zifile-desktop --bench entry_browser --locked` 可复测。2026-08-24 的 Windows x64 基线中，选择性计数为 16.90–17.62 ms（5.68–5.92 M 条/秒），收集有界页为 15.46–15.96 ms（6.27–6.47 M 条/秒）。Windows 实机检查另用 1,200 项 ZIP 验证三页翻页和单项搜索。
+
+`tests/performance/desktop-baseline.ps1` 对优化后的两个桌面程序各启动五次，计时到原生窗口可响应，并在 1.5 秒稳定期后汇总根进程与后代进程内存。参考机器为 Windows 11 build 26200、i9-14900HX：Iced 启动中位数 668.79 ms、工作集 225.87 MiB、私有内存 265.05 MiB；Dioxus/WebView2 候选分别为 294.25 ms、405.91 MiB、206.62 MiB。首轮冷启动包含在 p95 中（Iced 1785.51 ms、候选 644.20 ms）。工作集与私有内存口径不同，该数据是同机回归基线，不代表完整内容就绪、真实十万项归档峰值或跨机器门禁。

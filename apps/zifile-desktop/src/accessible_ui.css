@@ -109,3 +109,36 @@ footer progress { width: min(260px, 30vw); accent-color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
+
+@media (forced-colors: active) {
+  .app-shell, .app-shell.light {
+    --background: Canvas;
+    --sidebar: Canvas;
+    --surface: Canvas;
+    --text: CanvasText;
+    --muted: CanvasText;
+    --accent: Highlight;
+    --accent-text: HighlightText;
+    --border: CanvasText;
+    forced-color-adjust: auto;
+  }
+  button, input, select, .actions article, .privacy, .empty-state,
+  .table-wrap, .source-list, .form-grid {
+    border-color: CanvasText;
+  }
+  button:focus-visible, input:focus-visible, select:focus-visible,
+  [tabindex="0"]:focus-visible {
+    outline-color: Highlight;
+  }
+  .nav-item.active, .primary {
+    background: Highlight;
+    color: HighlightText;
+    border: 1px solid HighlightText;
+  }
+  button:disabled, input:disabled, select:disabled {
+    color: GrayText;
+    border-color: GrayText;
+    opacity: 1;
+  }
+  .status-dot { color: Highlight; }
+}

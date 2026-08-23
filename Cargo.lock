@@ -8463,6 +8463,7 @@ dependencies = [
 name = "zifile-desktop"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "criterion",
  "dioxus",
  "dioxus-html",
  "iced",
