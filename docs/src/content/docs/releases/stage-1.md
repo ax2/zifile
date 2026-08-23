@@ -36,6 +36,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 在本机 Windows SDK 上成功生成 `ZiFile-0.1.0.0-windows-x64.msix` 和完整可运行目录；当前为开发 Identity、未签名包，不构成 Store 认证证据。
 - 本机没有 Visual C++ ARM64 交叉工具链，`zstd-sys` 本地交叉编译因此被正确阻止；Windows 2022 Runner 已成功完成全部 ARM64 Rust/C 依赖和应用的优化构建。首次打包随后发现脚本误运行 ARM64 版 `MakeAppx.exe`；现按宿主架构选择 SDK 工具，同时仍把包清单标记为目标架构。
 - 首次非发布打包演练确认 `cargo-cyclonedx` 0.5.9 按 crate 输出 `*.cdx.json`；收集规则已改为匹配真实产物名，而不是旧版文档中的 `bom.json`。
+- GitHub Actions 非发布演练 `32655897142` 全部通过：Windows x64、Windows ARM64 和 CycloneDX SBOM 三个作业成功，公开 Release 作业按设计跳过。两个架构均完成优化构建、MSIX、独立 EXE、SHA-256、来源证明和 artifact 上传。
 
 ### 遗留问题
 
@@ -47,4 +48,4 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 
 ### 发布结果
 
-进行中。已验证本地开发 MSIX 和发布自动化结构；当前提交仍是 Alpha 开发检查点，不是可上架版本，也没有创建公开 Release。
+进行中。已验证本地 x64 开发 MSIX 和远程 x64/ARM64 非发布产物链；当前提交仍是 Alpha 开发检查点，不是可上架版本，也没有创建公开 Release。演练证据保存在 [GitHub Actions run 32655897142](https://github.com/ax2/zifile/actions/runs/32655897142)。
