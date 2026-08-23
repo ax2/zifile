@@ -56,7 +56,8 @@ Goal: complete the Windows-focused daily workflow.
 - [x] Isolated worker process with versioned IPC, cancellation and Windows Job Object limits.
 - [x] x64/ARM64 MSIX and standalone executable packaging.
 - [ ] Signed install, upgrade, repair and uninstall tests.
-- [ ] Performance baselines for throughput, memory, startup, and large listings.
+- [x] Establish throughput, 100,000-entry UI-model, idle startup and process-tree memory baselines.
+- [ ] Measure end-to-end peak memory, first-content latency and scrolling with a real 100,000-entry archive.
 
 Exit criteria: signed Beta packages install, upgrade, repair, and uninstall on
 supported Windows 10/11 environments.
@@ -68,10 +69,11 @@ Goal: distribution, accessibility, localization, and hardening.
 - [x] Simplified Chinese and English desktop UI with persisted language/theme preferences.
 - [x] Build an opt-in Dioxus/WebView2 accessibility candidate with semantic archive and create workflows over the isolated Worker.
 - [x] Add candidate CSP/offline resource policy, native drop handling, core shortcuts and local x64 MSIX validation.
+- [x] Verify candidate archive-scoped Ctrl+A and dynamic selection labels in a real UI Automation session.
 - [x] Cross-build, package, attest and checksum the candidate MSIX and executables for x64 and ARM64.
 - [ ] Run the candidate MSIX and runnable directory on physical ARM64 Windows hardware.
 - [ ] Complete equivalent Simplified Chinese and English product documentation.
-- [ ] Complete keyboard-only (including Ctrl+A), Narrator, Accessibility Insights, high-contrast, IME and per-monitor DPI verification before replacing Iced.
+- [ ] Complete full keyboard traversal, Narrator, Accessibility Insights, high-contrast, IME and per-monitor DPI verification before replacing Iced.
 - [ ] Windows Application Certification Kit run.
 - [ ] WinGet manifest submission.
 - [ ] Microsoft Store submission and certification.

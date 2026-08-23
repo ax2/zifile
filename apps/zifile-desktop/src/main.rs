@@ -15,14 +15,15 @@ use iced::widget::{
 use iced::{Element, Fill, Length, Subscription, Task, Theme};
 use rfd::FileDialog;
 use zifile_core::{
-    ArchiveEntryInfo, ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy,
-    OperationProgress, OperationSummary, SafetyLimits, detect_format_from_path,
+    ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy, OperationProgress,
+    OperationSummary, SafetyLimits, detect_format_from_path,
 };
 use zifile_worker_protocol::WorkerRequest;
 
 use i18n::{Locale, Text};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
+use zifile_desktop::entry_view::{ENTRIES_PER_PAGE, filtered_entry_count, filtered_entry_page};
 
 const CREATE_FORMATS: [ArchiveFormat; 13] = [
     ArchiveFormat::Zip,
@@ -39,7 +40,6 @@ const CREATE_FORMATS: [ArchiveFormat; 13] = [
     ArchiveFormat::Lz4,
     ArchiveFormat::Brotli,
 ];
-const ENTRIES_PER_PAGE: usize = 500;
 
 pub fn main() -> iced::Result {
     iced::application(initialize, update, view)
@@ -893,7 +893,6 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     .spacing(10);
 
     let filtered_count = filtered_entry_count(archive, &state.entry_filter);
-    let filter_lower = state.entry_filter.to_lowercase();
     let last_page = filtered_count.saturating_sub(1) / ENTRIES_PER_PAGE;
     let current_page = state.entry_page.min(last_page);
     let browser_controls = row![
@@ -929,13 +928,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         rule::horizontal(1),
     ]
     .spacing(4);
-    for entry in archive
-        .entries
-        .iter()
-        .filter(|entry| entry_matches_filter(entry, &filter_lower))
-        .skip(current_page * ENTRIES_PER_PAGE)
-        .take(ENTRIES_PER_PAGE)
-    {
+    for entry in filtered_entry_page(archive, &state.entry_filter, current_page) {
         let path = entry.path.clone();
         let selected = state.selected.contains(&path);
         entries = entries.push(
@@ -1152,24 +1145,6 @@ fn append_unique(destination: &mut Vec<PathBuf>, paths: Vec<PathBuf>) {
     }
 }
 
-fn filtered_entry_count(archive: &ArchiveInfo, filter: &str) -> usize {
-    let filter_lower = filter.to_lowercase();
-    archive
-        .entries
-        .iter()
-        .filter(|entry| entry_matches_filter(entry, &filter_lower))
-        .count()
-}
-
-fn entry_matches_filter(entry: &ArchiveEntryInfo, filter_lower: &str) -> bool {
-    filter_lower.is_empty()
-        || entry
-            .path
-            .to_string_lossy()
-            .to_lowercase()
-            .contains(filter_lower)
-}
-
 fn format_bytes(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut value = bytes as f64;
@@ -1188,6 +1163,7 @@ fn format_bytes(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use zifile_core::ArchiveEntryInfo;
 
     #[test]
     fn large_archive_filtering_keeps_rendered_page_bounded() {
@@ -1208,12 +1184,7 @@ mod tests {
             compressed_size: 100_000,
         };
         assert_eq!(filtered_entry_count(&archive, "file-09"), 10_000);
-        let rendered = archive
-            .entries
-            .iter()
-            .filter(|entry| entry_matches_filter(entry, "file-09"))
-            .take(ENTRIES_PER_PAGE)
-            .count();
+        let rendered = filtered_entry_page(&archive, "file-09", 0).len();
         assert_eq!(rendered, ENTRIES_PER_PAGE);
     }
 }

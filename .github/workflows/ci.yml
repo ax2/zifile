@@ -25,7 +25,7 @@ jobs:
       - name: Tests
         run: cargo test --workspace --all-targets --all-features --locked
       - name: Benchmark targets compile
-        run: cargo bench -p zifile-core --no-run --locked
+        run: cargo bench --workspace --no-run --locked
       - name: Foundation smoke test
         shell: pwsh
         run: ./tests/smoke/foundation.ps1 -SkipDesktopLaunch
