@@ -27,7 +27,7 @@ Windows 文件系统
 
 每个 Provider 明确声明 `list`、`extract`、`create`、`test`、`encryption` 等能力。UI 根据能力显示操作，不通过格式名猜测。
 
-计划优先使用宽松许可证的 Rust crate：`zip`、`sevenz-rust2`、`tar`、`flate2`、`zstd`、`lzma-rust2`、`lz4_flex`、`brotli` 和 `bzip2`。
+当前使用宽松许可证、可替换的后端组合：`zip`、`sevenz-rust2`、`tar`、`flate2`、`zstd`、`xz2`、`lz4_flex`、`brotli` 和 `bzip2`。具体选择和约束见 ADR-0003。
 
 ### 桌面 UI
 

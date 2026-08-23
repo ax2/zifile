@@ -14,3 +14,14 @@ All notable changes to ZiFile are documented here. The format follows
 - Iced desktop technology shell.
 - Astro Starlight documentation, roadmap, ADRs, and Stage 0 work log.
 - Unit, benchmark, smoke, CI, documentation, and release foundations.
+- Real ZIP/ZIP64/AES and 7z/AES create, list, verify, and extraction operations.
+- TAR, tar.gz, tar.zst, tar.xz and tar.bz2 archive compositions.
+- gzip, Zstandard, XZ, Bzip2, LZ4 and Brotli single-stream operations.
+- Signature-based detection and a shared safe extraction policy covering traversal,
+  links, Windows device names, case collisions, conflicts and expansion limits.
+- CLI archive commands and a modern Iced archive browser/creator with background work.
+- Desktop drag-and-drop opens known archives or adds files and folders as creation sources.
+- Determinate byte/entry progress, cooperative cancellation, and bounded list-time decoding.
+- Deterministic Windows assets, x64/ARM64 MSIX packaging and archive file associations.
+- Tag-driven checksums, CycloneDX SBOM, provenance and WinGet 1.12 manifest generation.
+- Security-focused fuzz targets and archive throughput benchmarks.

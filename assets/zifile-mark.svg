@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="ZiFile app mark">
+  <defs>
+    <linearGradient id="bg" x1="28" y1="22" x2="228" y2="234" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#36D1DC"/>
+      <stop offset="1" stop-color="#2474E8"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="74" y1="58" x2="184" y2="207" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DDEBFF"/>
+    </linearGradient>
+  </defs>
+  <rect x="12" y="12" width="232" height="232" rx="54" fill="url(#bg)"/>
+  <path d="M55 80c0-12 10-22 22-22h42l18 20h42c12 0 22 10 22 22v87c0 12-10 22-22 22H77c-12 0-22-10-22-22V80Z" fill="#102A56" opacity=".28"/>
+  <path d="M59 87c0-10 8-18 18-18h39l18 20h45c10 0 18 8 18 18v78c0 10-8 18-18 18H77c-10 0-18-8-18-18V87Z" fill="url(#paper)"/>
+  <path d="M128 70v132" stroke="#185CC7" stroke-width="14"/>
+  <path d="M128 86h16v16h-16zm-16 16h16v16h-16zm16 16h16v16h-16zm-16 16h16v16h-16zm16 16h16v16h-16z" fill="#36BBD3"/>
+  <rect x="111" y="171" width="34" height="22" rx="8" fill="#185CC7"/>
+</svg>

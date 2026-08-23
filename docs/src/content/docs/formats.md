@@ -1,17 +1,17 @@
 ---
-title: 格式计划
-description: ZiFile 计划支持的压缩与归档格式能力矩阵。
+title: 格式支持
+description: ZiFile 当前已验证和计划中的压缩与归档格式能力矩阵。
 ---
 
-以下是产品路线图，不代表当前 Stage 0 已经实现压缩和解压。
+以下能力已由仓库内的往返测试覆盖；“计划”项目不会在 UI 中宣称可用。
 
-| 格式 | 浏览 | 解压 | 创建 | 加密 | 计划阶段 |
+| 格式 | 浏览 | 解压 | 创建 | 加密 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| ZIP | 是 | 是 | 是 | 是 | Alpha |
-| 7z | 是 | 是 | 是 | 是 | Beta |
-| TAR | 是 | 是 | 是 | 否 | Alpha |
-| TAR + gzip/zstd/xz/bzip2/lz4/brotli | 是 | 是 | 是 | 否 | Alpha |
-| 单流 gzip/zstd/xz/bzip2/lz4/brotli | 不适用 | 是 | 是 | 否 | Alpha |
-| RAR | 是 | 是 | 否 | 待评估 | 1.0 以后 |
+| ZIP | 是 | 是 | 是 | AES | 已实现 |
+| 7z | 是 | 是 | 是 | AES | 已实现 |
+| TAR | 是 | 是 | 是 | 否 | 已实现 |
+| TAR + gzip/zstd/xz/bzip2 | 是 | 是 | 是 | 否 | 已实现 |
+| 单流 gzip/zstd/xz/bzip2/lz4/brotli | 单条目 | 是 | 是 | 否 | 已实现 |
+| RAR | 否 | 否 | 否 | 待评估 | 评审后决定 |
 
 RAR 创建不在计划内。RAR 只读能力必须通过许可证和安全评审，且不能改变主项目的 MIT 许可边界。

@@ -16,7 +16,7 @@ hero:
 
 ZiFile 由 ZiCode 发起，采用 MIT 协议。首个版本聚焦安全地浏览、创建和解压主流压缩格式，长期扩展为一组可信赖的文件操作能力。
 
-当前处于 **Stage 0 — Foundation**：仓库、Rust workspace、Iced UI 技术壳、测试体系和文档系统已经建立；实际压缩与解压能力从 Stage 1 开始交付。
+当前处于 **Stage 1 — Alpha 开发**：ZIP、7z、TAR 组合和主要单流格式已经打通真实创建、浏览、完整性校验与安全解压；桌面 UI 和 CLI 共用同一套 Rust 核心。任务取消、隔离 Worker、Windows 集成、安装签名与上架认证仍在推进。
 
 ## 设计原则
 
