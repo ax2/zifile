@@ -1,0 +1,19 @@
+[package]
+name = "zifile-core"
+description = "Core domain types and safety policy for ZiFile"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+[[bench]]
+name = "format_detection"
+harness = false

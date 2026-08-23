@@ -1,0 +1,11 @@
+/target/
+/.idea/
+/.vscode/
+*.pdb
+*.log
+docs/node_modules/
+docs/dist/
+docs/.astro/
+docs/.starlight/
+artifacts/
+.cargo/config.toml

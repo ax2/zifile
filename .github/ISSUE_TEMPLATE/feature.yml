@@ -1,0 +1,22 @@
+name: Feature proposal
+description: Propose a product, format, or Windows integration change.
+title: "[Proposal]: "
+labels: [proposal]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: What task is difficult today, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security, compatibility, and license considerations

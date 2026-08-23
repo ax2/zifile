@@ -1,0 +1,28 @@
+[workspace]
+members = [
+  "apps/zifile-cli",
+  "apps/zifile-desktop",
+  "crates/zifile-core",
+]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0-alpha.1"
+edition = "2024"
+rust-version = "1.88"
+authors = ["ZiCode <ax2@zicode.com>"]
+license = "MIT"
+repository = "https://github.com/ax2/zifile"
+homepage = "https://zifile.zicode.com"
+
+[workspace.dependencies]
+clap = { version = "4.6.6", features = ["derive"] }
+criterion = { version = "0.8.2", features = ["html_reports"] }
+iced = "0.14.0"
+thiserror = "2.0.20"
+zifile-core = { path = "crates/zifile-core" }
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"
