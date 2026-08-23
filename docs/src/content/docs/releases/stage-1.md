@@ -46,6 +46,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 首次手动演练暴露 `cargo-fuzz` 从安装工具环境推断为 musl 目标，ASan 无法与静态 libc 配合；工作流随后与持续集成保持一致，显式固定 `x86_64-unknown-linux-gnu`。修正后的 [演练 32658810750](https://github.com/ax2/zifile/actions/runs/32658810750) 完整通过，两个目标各运行 180 秒，总作业 7 分 50 秒，未产生崩溃产物。
 - 桌面回归测试用 100,000 个模拟条目证明单页最多构造 500 行；Windows 实机用 1,200 项 ZIP 验证 3 页翻页、路径搜索和 `Ctrl+N`，并在 1182×810 视口检查中英文与深浅主题无裁切。冷启动复测确认语言/主题从严格的两字段设置文件恢复，测试产生的本地设置随后已清理。
 - Worker 协议异常/流式条目单测和真实 IPC 冒烟通过；32 MiB 随机输入的 7z 创建取消测试证明 Worker 在时限内退出，且目标与临时文件均无残留。Windows 实机确认桌面经 Worker 打开并校验 7z。x64 Release MSIX 与完整可运行目录均包含同一次构建的 Worker EXE。
+- 隔离 Worker 批次的 [CI 32661216329](https://github.com/ax2/zifile/actions/runs/32661216329) 全部通过，包括格式、Clippy、30 项 Rust 测试、benchmark 编译、真实取消冒烟、第三方互操作、依赖策略、文档和 fuzz 目标编译。[双架构 Release 验证 32661235460](https://github.com/ax2/zifile/actions/runs/32661235460) 同时通过 x64/ARM64 构建、MSIX、产物证明和上传；下载复核确认两个架构均含 Worker、MSIX、Worker 校验和，并生成 Worker 与协议 crate 的 CycloneDX SBOM。该运行未创建正式 GitHub Release。
 
 ### 遗留问题
 
