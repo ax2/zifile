@@ -40,12 +40,14 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 首次非发布打包演练确认 `cargo-cyclonedx` 0.5.9 按 crate 输出 `*.cdx.json`；收集规则已改为匹配真实产物名，而不是旧版文档中的 `bom.json`。
 - GitHub Actions 非发布演练 `32655897142` 全部通过：Windows x64、Windows ARM64 和 CycloneDX SBOM 三个作业成功，公开 Release 作业按设计跳过。两个架构均完成优化构建、MSIX、独立 EXE、SHA-256、来源证明和 artifact 上传。
 - Windows PowerShell ZIP 与系统 bsdtar 的双向互操作通过：两类参考工具创建的 ZIP/tar.gz 可由 ZiFile 校验和解压，ZiFile 创建的包也可由参考工具解压并核对 Unicode 文件内容。
+- 7z 双向参考互操作已加入同一 Windows 门禁：系统 bsdtar/libarchive 创建的 7z 可由 ZiFile 校验和解压，ZiFile 创建的 7z 可由 bsdtar 解压并核对 Unicode 内容。
+- 新增每周定时 fuzz，对路径策略和格式识别各执行 180 秒有界 campaign；失败时保留崩溃产物 14 天。
 - 桌面回归测试用 100,000 个模拟条目证明单页最多构造 500 行；Windows 实机用 1,200 项 ZIP 验证 3 页翻页、路径搜索和 `Ctrl+N`，并在 1182×810 视口检查中英文与深浅主题无裁切。冷启动复测确认语言/主题从严格的两字段设置文件恢复，测试产生的本地设置随后已清理。
 
 ### 遗留问题
 
 - 多任务队列和独立 Worker 进程；TAR/7z 后端的单个超大文件目前只能在条目边界更新部分状态。
-- 7z 与更广泛 libarchive 互操作语料、定时 fuzz、损坏/截断/压缩炸弹扩展语料。
+- 更广泛的第三方 7-Zip/libarchive 语料、直接归档解析器 fuzz、损坏/截断/压缩炸弹扩展语料。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
 - 完整键盘遍历、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；十万条目的峰值内存与交互延迟仍需正式性能基线。
 - Partner Center 名称预留、代码签名、WinGet 与 Microsoft Store 提交。

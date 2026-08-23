@@ -1,0 +1,37 @@
+name: Scheduled fuzzing
+
+on:
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-fuzz
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    name: Run bounded fuzz campaigns
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - name: Fuzz path policy
+        run: cargo fuzz run --fuzz-dir fuzz path_policy -- -max_total_time=180 -timeout=10
+      - name: Fuzz format detection
+        run: cargo fuzz run --fuzz-dir fuzz format_detection -- -max_total_time=180 -timeout=10
+      - name: Preserve crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: fuzz-crash-artifacts
+          path: fuzz/artifacts
+          if-no-files-found: ignore
+          retention-days: 14
