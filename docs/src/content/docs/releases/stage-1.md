@@ -14,6 +14,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - Stage 0 只有格式枚举、扩展名识别和 UI 占位，不能证明任何归档格式可用。
 - `zip` 8.x、`sevenz-rust2` 0.20、`tar`、`flate2`、`zstd`、`xz2`、`bzip2`、`lz4_flex` 和 `brotli` 与当前 Rust 1.88 工具链及 MIT 项目许可边界兼容。
 - RAR 的实现和许可需要独立评审；本阶段将能力矩阵改为明确不可用，避免虚假声明。
+- `bzip2` 的上游使用 bzip2/libbzip2 1.0.6 宽松许可；依赖策略按其 SPDX 标识显式允许，并继续由 cargo-deny 审核。
 
 ### 修改
 
