@@ -31,3 +31,5 @@ All notable changes to ZiFile are documented here. The format follows
 - Archive-path search and bounded 500-row pagination, with a 100,000-entry regression test.
 - Desktop shortcuts for opening (`Ctrl+O`), creating (`Ctrl+N`), selecting all (`Ctrl+A`)
   and canceling an active operation (`Escape`).
+- Bidirectional 7z interoperability against Windows bsdtar/libarchive.
+- Weekly bounded fuzz campaigns with retained crash artifacts on failure.

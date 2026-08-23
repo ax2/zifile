@@ -27,7 +27,9 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 
 性能门禁需要多轮运行和稳定基线，不能用一次共享 CI 结果直接判定回归。
 
-Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.exe`，分别对 ZIP 与 tar.gz 执行双向互操作：参考工具创建的包由 ZiFile 校验和解压，ZiFile 创建的包由参考工具解压并逐文件核对。
+Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.exe`，分别对 ZIP、tar.gz 与 7z 执行双向互操作：参考工具创建的包由 ZiFile 校验和解压，ZiFile 创建的包由参考工具解压并逐文件核对（含 Unicode 路径）。
+
+每次 CI 会编译 libFuzzer 目标；每周定时工作流另外对路径策略和格式识别各运行 180 秒有界 fuzz。失败时保留崩溃产物 14 天。当前目标尚未直接覆盖完整 ZIP/7z 解析器，因此不能把这项门禁描述为解析器已充分模糊测试。
 
 当前 8 MiB 可压缩语料在本地 Windows x64 的一次基线中，ZIP 创建约为 262–275 MiB/s，完整性校验约为 3.04–3.15 GiB/s。该结果只用于建立初始量级，不作为跨机器 CI 阈值。
 

@@ -69,7 +69,32 @@ try {
         throw 'bsdtar could not extract the ZiFile tar.gz.'
     }
 
-    Write-Host 'ZIP and tar.gz reference-tool interoperability passed.'
+    # Windows bsdtar/libarchive 7z -> ZiFile.
+    $referenceSevenZip = Join-Path $testRoot 'reference.7z'
+    & tar.exe -a -cf $referenceSevenZip -C $fixture alpha.txt nested
+    if ($LASTEXITCODE -ne 0) { throw 'Reference 7z creation failed.' }
+    & $cli test $referenceSevenZip
+    if ($LASTEXITCODE -ne 0) { throw 'ZiFile could not verify the reference 7z.' }
+    $referenceSevenZipOutput = Join-Path $testRoot 'reference-7z-output'
+    & $cli extract $referenceSevenZip $referenceSevenZipOutput
+    if ($LASTEXITCODE -ne 0 -or
+        (Get-Content -Raw -LiteralPath (Join-Path $referenceSevenZipOutput 'nested\unicode-测试.txt')) -ne '互操作') {
+        throw 'ZiFile could not extract the reference 7z.'
+    }
+
+    # ZiFile 7z -> Windows bsdtar/libarchive.
+    $zifileSevenZip = Join-Path $testRoot 'zifile.7z'
+    & $cli create $zifileSevenZip $fixture --format seven-zip
+    if ($LASTEXITCODE -ne 0) { throw 'ZiFile 7z creation failed.' }
+    $zifileSevenZipOutput = Join-Path $testRoot 'zifile-7z-output'
+    New-Item -ItemType Directory -Path $zifileSevenZipOutput -Force | Out-Null
+    & tar.exe -xf $zifileSevenZip -C $zifileSevenZipOutput
+    if ($LASTEXITCODE -ne 0 -or
+        (Get-Content -Raw -LiteralPath (Join-Path $zifileSevenZipOutput 'input\nested\unicode-测试.txt')) -ne '互操作') {
+        throw 'bsdtar could not extract the ZiFile 7z.'
+    }
+
+    Write-Host 'ZIP, tar.gz and 7z reference-tool interoperability passed.'
 }
 finally {
     Pop-Location
