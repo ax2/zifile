@@ -52,7 +52,8 @@ Goal: complete the Windows-focused daily workflow.
 - [x] Password flow avoids logging or persisting secrets.
 - [x] Windows archive file associations and desktop drag-and-drop.
 - [x] Windows taskbar progress and packaged `zifile.exe` App Execution Alias.
-- [ ] Windows 11 File Explorer `IExplorerCommand` context menu extension.
+- [ ] Windows 11 File Explorer `IExplorerCommand` context menu extension (Rust DLL and MSIX
+  registration implemented; trusted-package Explorer activation still pending).
 - [x] Isolated worker process with versioned IPC, cancellation and Windows Job Object limits.
 - [x] x64/ARM64 MSIX and standalone executable packaging.
 - [ ] Signed install, upgrade, repair and uninstall tests.

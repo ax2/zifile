@@ -107,6 +107,7 @@ jobs:
           Copy-Item -LiteralPath "$source/zifile-desktop.exe" -Destination "$output/zifile-desktop-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile.exe" -Destination "$output/zifile-cli-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile-worker.exe" -Destination "$output/zifile-worker-windows-$arch.exe"
+          Copy-Item -LiteralPath "$source/zifile-shell.dll" -Destination "$output/zifile-shell-windows-$arch.dll"
           Copy-Item -LiteralPath "dist/ZiFile-$version-windows-$arch.msix" -Destination $output
           Copy-Item -LiteralPath "dist/ZiFile-$version-windows-$arch.audit.json" -Destination $output
           $candidate = "dist/ZiFile-$version-windows-$arch-accessible"

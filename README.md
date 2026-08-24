@@ -69,10 +69,10 @@ pnpm --dir docs build
 | Desktop | Bilingual modern browser/creator, isolated archive worker and Windows taskbar progress |
 | CLI | `formats`, `detect`, `list`, `test`, `extract`, and `create` |
 | Archive providers | ZIP/ZIP64/AES, 7z/AES, TAR + gzip/zstd/xz/bzip2, and common streams |
-| Packaging | Real x64/ARM64 runnable directory, standalone EXE, MSIX and packaged CLI alias |
+| Packaging | Real x64/ARM64 runnable directory, EXE, MSIX, CLI alias and audited Rust shell DLL |
 | Distribution | Tag workflow produces checksums, SBOM, provenance and WinGet manifest candidates |
 
 RAR remains disabled pending the explicit license, security and interoperability
-review required by this repository. Signing, shell integration, accessibility
+review required by this repository. Trusted-package shell activation, signing, accessibility
 certification and Store submission are still in
 progress, so no production release has been tagged yet.

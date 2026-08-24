@@ -43,6 +43,8 @@ Implemented packaging features:
 - a machine-readable `.audit.json` beside every MSIX, included in release checksums and provenance;
 - complete runnable directories and standalone EXEs without ZIP output;
 - the architecture-matched `zifile-worker.exe` beside the desktop executable and inside MSIX.
+- an architecture-matched Rust `IExplorerCommand` COM DLL registered for the Windows 11 modern
+  File Explorer menu, with its CLSID, item types and PE machine covered by the package audit.
 
 The desktop executable requires its matching Worker. GitHub release staging therefore publishes
 both architecture-suffixed files; complete runnable directories retain the canonical sibling name.
@@ -53,9 +55,11 @@ Tagged GitHub releases fail before packaging unless all four formal publishing s
 Manual workflow runs may continue to build unsigned development packages for validation.
 
 The MSIX also registers `zifile.exe` as an App Execution Alias. Users can disable aliases in
-Windows Settings, so automation must not assume that the alias is always enabled. File Explorer
-context menus are not registered yet: the modern Windows 11 path requires a separately
-implemented and packaged `IExplorerCommand` COM DLL.
+Windows Settings, so automation must not assume that the alias is always enabled. The packaged
+shell DLL exposes “Create archive with ZiFile” for files and directories, then launches the
+desktop create page with the selected paths. The DLL never performs archive work in Explorer.
+Real menu activation remains an install-time gate because the current development package cannot
+be registered on this machine.
 
 Before Store submission the project still needs a Partner Center identity,
 trusted signing credentials for direct distribution, upgrade/uninstall test
