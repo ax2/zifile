@@ -49,6 +49,20 @@ jobs:
       - name: Test workspace
         if: matrix.architecture == 'x64'
         run: cargo test --workspace --all-targets --all-features --locked
+      - name: Enforce publishing credentials
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          ZIFILE_PFX_BASE64: ${{ secrets.ZIFILE_PFX_BASE64 }}
+          ZIFILE_PFX_PASSWORD: ${{ secrets.ZIFILE_PFX_PASSWORD }}
+          ZIFILE_MSIX_IDENTITY: ${{ secrets.ZIFILE_MSIX_IDENTITY }}
+          ZIFILE_MSIX_PUBLISHER: ${{ secrets.ZIFILE_MSIX_PUBLISHER }}
+        run: |
+          ./packaging/msix/Test-PublishingInputs.ps1 `
+            -IdentityName $env:ZIFILE_MSIX_IDENTITY `
+            -Publisher $env:ZIFILE_MSIX_PUBLISHER `
+            -SigningCertificateAvailable:(-not [string]::IsNullOrWhiteSpace($env:ZIFILE_PFX_BASE64)) `
+            -SigningPasswordAvailable:(-not [string]::IsNullOrWhiteSpace($env:ZIFILE_PFX_PASSWORD))
       - name: Build MSIX and runnable executables
         shell: pwsh
         env:
@@ -94,10 +108,12 @@ jobs:
           Copy-Item -LiteralPath "$source/zifile.exe" -Destination "$output/zifile-cli-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile-worker.exe" -Destination "$output/zifile-worker-windows-$arch.exe"
           Copy-Item -LiteralPath "dist/ZiFile-$version-windows-$arch.msix" -Destination $output
+          Copy-Item -LiteralPath "dist/ZiFile-$version-windows-$arch.audit.json" -Destination $output
           $candidate = "dist/ZiFile-$version-windows-$arch-accessible"
           if (Test-Path -LiteralPath $candidate) {
             Copy-Item -LiteralPath "$candidate/zifile-desktop.exe" -Destination "$output/zifile-desktop-accessible-windows-$arch.exe"
             Copy-Item -LiteralPath "$candidate.msix" -Destination $output
+            Copy-Item -LiteralPath "$candidate.audit.json" -Destination $output
           }
           Get-FileHash "$output/*" -Algorithm SHA256 |
             Sort-Object Path |
