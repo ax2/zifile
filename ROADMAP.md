@@ -82,7 +82,9 @@ Goal: distribution, accessibility, localization, and hardening.
 - [ ] WinGet manifest submission.
 - [ ] Microsoft Store submission and certification.
 - [x] Tag workflow for SBOM, provenance attestation and checksums.
-- [ ] Reproducible-build documentation and comparison evidence.
+- [ ] Reproducible-build documentation and comparison evidence (toolchain pin,
+  double-build workflow and x64 evidence implemented; 4/5 PE files match, while
+  the default Iced executable remains non-reproducible).
 
 ## Stage 4 — 1.0
 

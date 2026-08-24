@@ -22,13 +22,16 @@ jobs:
     # Pin VS 2022 while the Windows 2025/VS 2026 image has known ARM64
     # toolset compatibility regressions.
     runs-on: windows-2022
+    env:
+      RUSTFLAGS: -C link-arg=/Brepro
+      CARGO_BUILD_JOBS: 1
     strategy:
       fail-fast: false
       matrix:
         architecture: [x64, arm64]
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-${{ matrix.architecture }}
@@ -135,7 +138,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-cyclonedx@0.5.9
