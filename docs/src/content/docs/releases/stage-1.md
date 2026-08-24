@@ -31,6 +31,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 新增版本化 Worker 协议与 `zifile-worker.exe`；桌面列出、校验、解压、创建均跨进程执行。Windows Job Object 限制单进程、4 GiB 内存并启用 kill-on-close；创建和解压先协作取消，2 秒后由进程回收兜底。
 - Worker 进度映射到 Windows 任务栏，并在 MSIX 注册 `zifile.exe` App Execution Alias。
 - 新增 Rust `cdylib` 实现 Windows 11 `IExplorerCommand`。MSIX 以同一 CLSID 注册 `windows.comServer` 和 `windows.fileExplorerContextMenus`；命令只收集本地选择并用共享 `--create` 启动协议打开创建页，归档工作仍由桌面与隔离 Worker 执行。
+- 新增两套桌面 UI 共用的有界 FIFO 操作队列。打开、重载、校验、解压和创建可在 Worker 运行中继续提交，完成/取消后自动启动下一项；状态区显示等待数，并可清空等待项而不取消当前项。队列只驻留内存，调试输出会遮蔽载荷，密码不会进入设置或日志。
 
 ### 验证
 
@@ -74,7 +75,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 
 ### 遗留问题
 
-- 多任务队列；列出和校验操作目前没有细粒度进度。
+- 多任务队列的共享调度器与两套 UI 接线已完成，但真实前台串行/取消/清空冒烟尚待无干扰回合；列出和校验操作目前没有细粒度进度。
 - Worker 仍继承当前用户权限，尚未采用 AppContainer；CPU 时间限制和 Broker 模型待后续纵深防御评估。
 - 更广泛的第三方 7-Zip/libarchive 语料、直接归档解析器 fuzz、损坏/截断/压缩炸弹扩展语料。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
