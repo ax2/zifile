@@ -29,7 +29,8 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 桌面端加入简体中文/英文切换、系统语言首启检测和主题/语言持久化；设置文件不包含密码。
 - 归档表格加入路径搜索和每页 500 项的有界分页，并加入 `Ctrl+O`、`Ctrl+N`、`Ctrl+A`、`Escape` 快捷键。
 - 新增版本化 Worker 协议与 `zifile-worker.exe`；桌面列出、校验、解压、创建均跨进程执行。Windows Job Object 限制单进程、4 GiB 内存并启用 kill-on-close；创建和解压先协作取消，2 秒后由进程回收兜底。
-- Worker 进度映射到 Windows 任务栏，并在 MSIX 注册 `zifile.exe` App Execution Alias；现代资源管理器右键命令仍需独立 `IExplorerCommand` COM 扩展。
+- Worker 进度映射到 Windows 任务栏，并在 MSIX 注册 `zifile.exe` App Execution Alias。
+- 新增 Rust `cdylib` 实现 Windows 11 `IExplorerCommand`。MSIX 以同一 CLSID 注册 `windows.comServer` 和 `windows.fileExplorerContextMenus`；命令只收集本地选择并用共享 `--create` 启动协议打开创建页，归档工作仍由桌面与隔离 Worker 执行。
 
 ### 验证
 
@@ -49,6 +50,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - Worker 协议异常/流式条目单测和真实 IPC 冒烟通过；32 MiB 随机输入的 7z 创建取消测试证明 Worker 在时限内退出，且目标与临时文件均无残留。Windows 实机确认桌面经 Worker 打开并校验 7z。x64 Release MSIX 与完整可运行目录均包含同一次构建的 Worker EXE。
 - 隔离 Worker 批次的 [CI 32661216329](https://github.com/ax2/zifile/actions/runs/32661216329) 全部通过，包括格式、Clippy、30 项 Rust 测试、benchmark 编译、真实取消冒烟、第三方互操作、依赖策略、文档和 fuzz 目标编译。[双架构 Release 验证 32661235460](https://github.com/ax2/zifile/actions/runs/32661235460) 同时通过 x64/ARM64 构建、MSIX、产物证明和上传；下载复核确认两个架构均含 Worker、MSIX、Worker 校验和，并生成 Worker 与协议 crate 的 CycloneDX SBOM。该运行未创建正式 GitHub Release。
 - 任务栏状态映射新增 2 项单测；本地 x64 Release/MSIX `0.1.0.2` 构建成功，MakeAppx 接受 App Execution Alias manifest。实机打开 32 MiB 7z 验证新包 UI 正常；当前测试桌面自动隐藏任务栏且焦点自动化不稳定，因此未把任务栏视觉效果记为已验证。
+- 本地 x64 `0.1.0.15` MSIX 已由 MakeAppx 接受现代菜单和 COM surrogate 声明。结构化审计确认 Rust Shell DLL、桌面、CLI、Worker 均为 `0x8664`，CLSID、STA、`*`/`Directory` item type 与 manifest 一致；当前开发包仍不能安装，因此不宣称真实 Explorer 菜单已激活。
 - Windows 集成批次的 [CI 32663024457](https://github.com/ax2/zifile/actions/runs/32663024457) 与 [双架构 Release 32663037787](https://github.com/ax2/zifile/actions/runs/32663037787) 全部成功，复验了依赖策略、32 项测试、真实冒烟、x64/ARM64 MSIX、SBOM、产物证明和上传。该运行未创建正式 GitHub Release。
 - 建立 opt-in Dioxus/WebView2 可访问 UI 候选，复用现有设置、任务栏和隔离 Worker。候选具备语义首页、归档表格/筛选/分页/选择、完整性校验、解压配置、创建来源/格式/等级/密码、进度/取消及命令行打开。首轮全 feature 运行通过 41 次 Rust 测试；新增快捷键测试后，本地严格 Clippy 与全 feature 复验通过 42 次测试执行（候选二进制 10 项）及两项 benchmark smoke。
 - Windows UI Automation 实机识别候选的 landmark、标题、导航、表格、复选框、组合框、滑块、密码输入和 live status。用 ZiFile 创建的 2 文件 ZIP 通过命令行打开，条目列表和 3.8 KB 展开大小正确，随后 Worker 完整性校验成功。1180×760 深色中文首屏、归档页和创建页无裁切。此记录不宣称 Narrator/Accessibility Insights 认证。

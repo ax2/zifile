@@ -24,6 +24,7 @@ use i18n::{Locale, Text};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::entry_view::{ENTRIES_PER_PAGE, filtered_entry_count, filtered_entry_page};
+use zifile_desktop::startup::{self, StartupRequest};
 
 const CREATE_FORMATS: [ArchiveFormat; 13] = [
     ArchiveFormat::Zip,
@@ -53,8 +54,15 @@ pub fn main() -> iced::Result {
 
 fn initialize() -> (ZiFile, Task<Message>) {
     let mut state = ZiFile::default();
-    let archive = std::env::args_os().nth(1).map(PathBuf::from);
-    let task = archive.map_or_else(Task::none, |path| begin_load(&mut state, path));
+    let task = match startup::parse(std::env::args_os().skip(1)) {
+        StartupRequest::Home => Task::none(),
+        StartupRequest::OpenArchive(path) => begin_load(&mut state, path),
+        StartupRequest::CreateFrom(sources) => {
+            state.page = Page::Create;
+            append_unique(&mut state.create_sources, sources);
+            Task::none()
+        }
+    };
     (state, task)
 }
 

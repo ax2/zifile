@@ -22,6 +22,7 @@ use i18n::{Locale, Text};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::entry_view::{ENTRIES_PER_PAGE, filtered_entry_count, filtered_entry_page};
+use zifile_desktop::startup::{self, StartupRequest};
 
 const STYLES: &str = include_str!("accessible_ui.css");
 const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src dioxus: ws://127.0.0.1:* http://dioxus.index.html https://dioxus.index.html ipc:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
@@ -132,13 +133,19 @@ impl Default for UiState {
 #[component]
 fn App() -> Element {
     let mut state = use_signal(UiState::default);
-    let startup_archive = use_hook(|| std::env::args_os().nth(1).map(PathBuf::from));
+    let startup_request = use_hook(|| startup::parse(std::env::args_os().skip(1)));
     let mut startup_processed = use_signal(|| false);
     use_effect(move || {
         if !startup_processed() {
             startup_processed.set(true);
-            if let Some(path) = startup_archive.clone() {
-                begin_load(state, path);
+            match startup_request.clone() {
+                StartupRequest::Home => {}
+                StartupRequest::OpenArchive(path) => begin_load(state, path),
+                StartupRequest::CreateFrom(sources) => {
+                    let mut value = state.write();
+                    value.page = Page::Create;
+                    append_unique(&mut value.create_sources, sources);
+                }
             }
         }
     });

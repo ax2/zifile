@@ -84,6 +84,23 @@ if ($releaseSource -notmatch [Regex]::Escape('Test-PublishingInputs.ps1')) {
 if ($releaseSource -notmatch [Regex]::Escape('.audit.json')) {
     throw 'The release workflow does not stage MSIX audit evidence.'
 }
+$manifestSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'packaging\msix\AppxManifest.xml')
+foreach ($requiredShellToken in @(
+    'windows.comServer',
+    'windows.fileExplorerContextMenus',
+    'zifile-shell.dll',
+    '2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531'
+)) {
+    if ($manifestSource -notmatch [Regex]::Escape($requiredShellToken)) {
+        throw "The MSIX manifest does not include shell extension token: $requiredShellToken"
+    }
+}
+if ($buildSource -notmatch [Regex]::Escape('zifile_shell.dll')) {
+    throw 'Build-Package.ps1 does not stage the architecture-matched shell DLL.'
+}
+if ($releaseSource -notmatch [Regex]::Escape('zifile-shell-windows-$arch.dll')) {
+    throw 'The release workflow does not stage the standalone shell DLL.'
+}
 
 [pscustomobject]@{
     schema_version = 1
@@ -94,4 +111,5 @@ if ($releaseSource -notmatch [Regex]::Escape('.audit.json')) {
     formal_inputs_accepted = $true
     package_audit_wired = $true
     release_audit_staged = $true
+    shell_extension_wired = $true
 } | ConvertTo-Json

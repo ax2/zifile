@@ -85,6 +85,9 @@ try {
     $namespace.AddNamespace('uap', 'http://schemas.microsoft.com/appx/manifest/uap/windows10')
     $namespace.AddNamespace('uap3', 'http://schemas.microsoft.com/appx/manifest/uap/windows10/3')
     $namespace.AddNamespace('desktop', 'http://schemas.microsoft.com/appx/manifest/desktop/windows10')
+    $namespace.AddNamespace('com', 'http://schemas.microsoft.com/appx/manifest/com/windows10')
+    $namespace.AddNamespace('desktop4', 'http://schemas.microsoft.com/appx/manifest/desktop/windows10/4')
+    $namespace.AddNamespace('desktop5', 'http://schemas.microsoft.com/appx/manifest/desktop/windows10/5')
 
     $identity = $manifest.SelectSingleNode('/f:Package/f:Identity', $namespace)
     if (-not $identity) { throw 'MSIX manifest has no package identity.' }
@@ -112,7 +115,8 @@ try {
     $requiredExecutables = @(
         'ZiFile\zifile-desktop.exe',
         'ZiFile\zifile.exe',
-        'ZiFile\zifile-worker.exe'
+        'ZiFile\zifile-worker.exe',
+        'ZiFile\zifile-shell.dll'
     )
     $expectedMachine = if ($Architecture -eq 'x64') { 0x8664 } else { 0xAA64 }
     $machineEvidence = [ordered]@{}
@@ -134,6 +138,26 @@ try {
         $namespace
     )
     if (-not $alias) { throw 'MSIX manifest does not register the zifile.exe app execution alias.' }
+
+    $shellClsid = '2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531'
+    $shellClass = $manifest.SelectSingleNode(
+        "//com:SurrogateServer/com:Class[@Id='$shellClsid']",
+        $namespace
+    )
+    if (-not $shellClass -or $shellClass.Path -cne 'ZiFile\zifile-shell.dll' -or $shellClass.ThreadingModel -cne 'STA') {
+        throw 'MSIX manifest does not register the ZiFile STA shell COM class and DLL path.'
+    }
+    $shellItemTypes = @(
+        $manifest.SelectNodes(
+            "//desktop4:FileExplorerContextMenus/desktop5:ItemType[desktop5:Verb[@Clsid='$shellClsid']]",
+            $namespace
+        ) | ForEach-Object { $_.Type }
+    )
+    foreach ($itemType in @('*', 'Directory')) {
+        if ($shellItemTypes -cnotcontains $itemType) {
+            throw "MSIX manifest is missing ZiFile shell command item type: $itemType"
+        }
+    }
 
     $requiredExtensions = @('.zip', '.7z', '.tar', '.gz', '.tgz', '.zst', '.xz', '.bz2', '.lz4', '.br')
     $declaredExtensions = @(
@@ -159,7 +183,7 @@ try {
     }
 
     $evidence = [pscustomobject]@{
-        schema_version = 1
+        schema_version = 2
         package = [System.IO.Path]::GetFileName($package)
         sha256 = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash
         identity = $identity.Name
@@ -170,6 +194,12 @@ try {
         pe_machines = $machineEvidence
         file_associations = $declaredExtensions
         app_execution_alias = 'zifile.exe'
+        shell_extension = [pscustomobject]@{
+            clsid = $shellClsid
+            path = $shellClass.Path
+            threading_model = $shellClass.ThreadingModel
+            item_types = $shellItemTypes
+        }
         forbidden_file_count = $forbiddenFiles.Count
         signature_required = [bool]$RequireSignature
         signature_status = $signature.Status.ToString()

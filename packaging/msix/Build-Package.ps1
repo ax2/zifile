@@ -124,10 +124,12 @@ New-Item -ItemType Directory -Path $runnableRoot -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $binaryRoot $desktopBinary) -Destination (Join-Path $stageRoot 'ZiFile\zifile-desktop.exe')
 Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile.exe') -Destination (Join-Path $stageRoot 'ZiFile\zifile.exe')
 Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile-worker.exe') -Destination (Join-Path $stageRoot 'ZiFile\zifile-worker.exe')
+Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile_shell.dll') -Destination (Join-Path $stageRoot 'ZiFile\zifile-shell.dll')
 Copy-Item -Path (Join-Path $PSScriptRoot 'Assets\*') -Destination (Join-Path $stageRoot 'Assets')
 Copy-Item -LiteralPath (Join-Path $binaryRoot $desktopBinary) -Destination (Join-Path $runnableRoot 'zifile-desktop.exe')
 Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile.exe') -Destination $runnableRoot
 Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile-worker.exe') -Destination $runnableRoot
+Copy-Item -LiteralPath (Join-Path $binaryRoot 'zifile_shell.dll') -Destination (Join-Path $runnableRoot 'zifile-shell.dll')
 Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') -Destination $runnableRoot
 Copy-Item -LiteralPath (Join-Path $repoRoot 'README.md') -Destination $runnableRoot
 

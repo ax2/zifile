@@ -2,6 +2,7 @@
 members = [
   "apps/zifile-cli",
   "apps/zifile-desktop",
+  "apps/zifile-shell",
   "apps/zifile-worker",
   "crates/zifile-core",
   "crates/zifile-worker-protocol",
@@ -42,6 +43,7 @@ walkdir = "2.5.0"
 tempfile = "3.27.0"
 winresource = "0.1.31"
 windows = "0.62.2"
+windows-core = "0.62.2"
 zifile-core = { path = "crates/zifile-core", version = "0.1.0-alpha.1" }
 zifile-worker-protocol = { path = "crates/zifile-worker-protocol", version = "0.1.0-alpha.1" }
 
