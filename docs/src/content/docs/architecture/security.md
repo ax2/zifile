@@ -19,7 +19,7 @@ description: ZiFile 处理不可信压缩包时的威胁、限制和验证要求
 
 ## 默认限制
 
-Stage 0 已在 `zifile-core::SafetyLimits` 中建立保守上限。后续实现必须在分配大内存或创建目标文件之前检查这些限制，并以临时文件加原子替换完成写入。
+Stage 0 已在 `zifile-core::SafetyLimits` 中建立保守上限。公开的 `list_archive_with_limits` 和 `test_archive_with_limits` 允许调用方在解析列表时收紧限制；`extract_archive` 会把调用方限制传入列出阶段，因此条目数、路径深度、展开量和压缩比会在创建目标目录之前检查。默认便利 API 继续使用统一保守值，写入则使用临时文件和原子替换。
 
 桌面端不在 UI 进程解析归档。版本化 IPC 请求限制为 16 MiB，单个 Worker 事件限制为 4 MiB，归档条目逐条传输。Worker 的 Windows Job Object 限制为一个活动进程和 4 GiB 进程内存，并启用 kill-on-close；创建和解压优先协作取消，2 秒超时后才强制回收。密码只经标准输入发送，不进入命令行。该机制不削减当前用户的文件系统权限，AppContainer 仍属于后续纵深防御。
 

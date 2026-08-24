@@ -18,7 +18,8 @@ mod path_policy;
 pub use archive::{
     ArchiveEntryInfo, ArchiveInfo, CancellationToken, ConflictPolicy, CreateOptions,
     ExtractOptions, OperationProgress, OperationSummary, ProgressSnapshot, create_archive,
-    extract_archive, list_archive, test_archive,
+    extract_archive, list_archive, list_archive_with_limits, test_archive,
+    test_archive_with_limits,
 };
 pub use path_policy::safe_relative_path;
 

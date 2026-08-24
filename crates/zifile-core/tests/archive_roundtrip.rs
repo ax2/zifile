@@ -7,7 +7,7 @@ use tempfile::TempDir;
 use zifile_core::{
     ArchiveFormat, CancellationToken, ConflictPolicy, CreateOptions, ExtractOptions,
     OperationProgress, SafetyLimits, ZiFileError, create_archive, detect_format, extract_archive,
-    list_archive, test_archive,
+    list_archive, list_archive_with_limits, test_archive, test_archive_with_limits,
 };
 
 fn fixture() -> (TempDir, PathBuf) {
@@ -327,4 +327,85 @@ fn cancellation_stops_before_writing_output() {
     );
     assert!(matches!(result, Err(ZiFileError::Cancelled)));
     assert!(!output.join("cancel.txt").exists());
+}
+
+#[test]
+fn caller_entry_limits_apply_during_archive_listing() {
+    for format in [
+        ArchiveFormat::Zip,
+        ArchiveFormat::SevenZip,
+        ArchiveFormat::Tar,
+    ] {
+        let (temp, source) = fixture();
+        let archive = temp
+            .path()
+            .join(format!("entry-limit.{}", format.canonical_extension()));
+        create_archive(&[source], &archive, format, &CreateOptions::default()).unwrap();
+        let result = list_archive_with_limits(
+            &archive,
+            None,
+            SafetyLimits {
+                max_entries: 1,
+                ..SafetyLimits::default()
+            },
+        );
+        assert!(
+            matches!(result, Err(ZiFileError::LimitExceeded(_))),
+            "listing limit was not enforced for {format}"
+        );
+    }
+}
+
+#[test]
+fn extraction_uses_caller_limits_before_creating_destination() {
+    let (temp, source) = fixture();
+    let archive = temp.path().join("entry-limit.zip");
+    create_archive(
+        &[source],
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    let output = temp.path().join("must-not-exist");
+    let result = extract_archive(
+        &archive,
+        &output,
+        &ExtractOptions {
+            limits: SafetyLimits {
+                max_entries: 1,
+                ..SafetyLimits::default()
+            },
+            ..ExtractOptions::default()
+        },
+    );
+    assert!(matches!(result, Err(ZiFileError::LimitExceeded(_))));
+    assert!(!output.exists());
+}
+
+#[test]
+fn malformed_primary_archive_headers_fail_without_panicking() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut tar = vec![0_u8; 512];
+    tar[257..262].copy_from_slice(b"ustar");
+    let cases = [
+        ("broken.zip", b"PK\x03\x04broken".to_vec()),
+        ("broken.7z", b"7z\xBC\xAF\x27\x1Cbroken".to_vec()),
+        ("broken.tgz", b"\x1F\x8B\x08broken".to_vec()),
+        ("broken.tar", tar),
+    ];
+    let limits = SafetyLimits {
+        max_entries: 16,
+        max_expanded_bytes: 1024 * 1024,
+        max_expansion_ratio: 32,
+        max_path_depth: 16,
+    };
+    for (name, bytes) in cases {
+        let path = temp.path().join(name);
+        fs::write(&path, bytes).unwrap();
+        assert!(
+            test_archive_with_limits(&path, None, limits).is_err(),
+            "malformed input unexpectedly passed: {name}"
+        );
+    }
 }

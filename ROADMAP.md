@@ -40,7 +40,8 @@ Goal: safely open, list, create, and extract common archives.
 - [x] Fuzz targets compile continuously in CI.
 - [x] ZIP, tar.gz and 7z bidirectional interoperability with Windows reference tools.
 - [x] Run bounded path-policy and format-detection fuzz campaigns on a weekly schedule.
-- [ ] Broader third-party 7-Zip/libarchive corpus and parser fuzz targets.
+- [x] Add a bounded parser fuzz target for every supported archive and stream format.
+- [ ] Broader third-party 7-Zip/libarchive corpus expansion.
 
 Exit criteria: ZIP and TAR-family round trips interoperate with reference tools;
 all security fixtures pass; no archive task blocks the UI thread.
