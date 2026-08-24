@@ -23,7 +23,7 @@ ZiFile 将“同一源码可以再次编译”与“产物逐字节相同”分�
 
 结果写入 `target/reproducibility-x64.json`，包含提交 SHA、工作区是否有未提交修改、编译器版本、目标三元组、精确命令和两组哈希。任何文件不同都会令脚本失败；临时构建目录无论成功或失败都会在安全路径检查后删除。
 
-ARM64 使用同一脚本和 `-Architecture arm64`。每月计划任务及手动 GitHub Actions 工作流会分别复测 x64 与 ARM64，并保留结构化 JSON 30 天。
+ARM64 使用同一脚本和 `-Architecture arm64`。每月计划任务、手动运行以及影响工具链/构建门禁的 Pull Request 会分别复测 x64 与 ARM64，并保留结构化 JSON 30 天；无关 PR 不承担这项长时构建成本。
 
 ## 当前证据
 
