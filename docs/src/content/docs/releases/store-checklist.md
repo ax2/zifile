@@ -10,7 +10,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 - SHA-256、CycloneDX JSON SBOM 和 GitHub 构建来源证明。
 - WinGet 1.12 多文件清单生成器，覆盖两个架构、文件关联和中英文元数据。
 - 真实 Release SHA-256 的候选清单已通过本机 `winget validate`；该结果不等于已提交或已获社区仓库接受。
-- 每个 MSIX 在构建后自动解包审计 Identity、Publisher、版本、最低系统版本、三枚 PE 架构、主要文件关联、CLI alias、敏感文件和签名状态，并随包生成 `.audit.json`。
+- 每个 MSIX 在构建后自动解包审计 Identity、Publisher、版本、最低系统版本、四枚 PE 架构（桌面、CLI、Worker 与 Explorer DLL）、主要文件关联、CLI alias、敏感文件和签名状态，并随包生成 `.audit.json`。
 - 标签发布缺少正式 Identity、Publisher、PFX 或密码时会在打包前失败；`.Dev` Identity 和未签名 OID Publisher 不能用于标签发布。
 
 ## 开发包与签名边界
