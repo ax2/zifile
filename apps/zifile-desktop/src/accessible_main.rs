@@ -276,7 +276,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
             div { class: "button-row", button { disabled: view.busy, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
                 button { disabled: view.busy, onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} } } }
         div { class: "toolbar",
-            label { span { {locale.text(Text::PasswordEncrypted)} } input { r#type: "password", value: view.password.clone(), disabled: view.busy, oninput: move |event| state.write().password = event.value() } }
+            label { span { {locale.text(Text::PasswordEncrypted)} } input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), disabled: view.busy, oninput: move |event| state.write().password = event.value() } }
             button { disabled: view.busy, onclick: move |_| reload_archive(state), {locale.text(Text::Reload)} }
             label { span { {locale.text(Text::Search)} } input { r#type: "search", value: view.entry_filter.clone(), oninput: move |event| { let mut value = state.write(); value.entry_filter = event.value(); value.entry_page = 0; } } }
         }
@@ -299,8 +299,17 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                     select_all(state, true);
                 }
             },
-            table { thead { tr { th { "" } th { {locale.text(Text::Name)} } th { {locale.text(Text::Original)} } th { {locale.text(Text::Packed)} } th { {locale.text(Text::Flags)} } } }
-                tbody { for entry in rows { ArchiveRow { key: "{entry.path.display()}", state, entry, locale } } } }
+            table {
+                caption { class: "sr-only", {choose(locale, "Archive entry details and selection", "压缩文件项目详情与选择")} }
+                thead { tr {
+                    th { scope: "col", span { class: "sr-only", {choose(locale, "Select", "选择")} } }
+                    th { scope: "col", {locale.text(Text::Name)} }
+                    th { scope: "col", {locale.text(Text::Original)} }
+                    th { scope: "col", {locale.text(Text::Packed)} }
+                    th { scope: "col", {locale.text(Text::Flags)} }
+                } }
+                tbody { for entry in rows { ArchiveRow { key: "{entry.path.display()}", state, entry, locale } } }
+            }
         }
         nav { class: "pagination", "aria-label": choose(locale, "Entry pages", "项目分页"),
             button { disabled: current_page == 0, onclick: move |_| state.write().entry_page = current_page.saturating_sub(1), {locale.text(Text::Previous)} }
@@ -346,7 +355,7 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
             label { span { "{locale.text(Text::CompressionLevel)} · {view.compression_level}" } input { r#type: "range", min: "0", max: "9", value: "{view.compression_level}", disabled: view.busy,
                 oninput: move |event| state.write().compression_level = event.value().parse().unwrap_or(6) } }
             label { span { if encrypted { {locale.text(Text::PasswordOptional)} } else { {locale.text(Text::PasswordUnavailable)} } }
-                input { r#type: "password", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: view.busy || !encrypted, oninput: move |event| state.write().create_password = event.value() } }
+                input { r#type: "password", autocomplete: "off", spellcheck: "false", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: view.busy || !encrypted, oninput: move |event| state.write().create_password = event.value() } }
         }
         div { class: "create-actions", button { class: "primary", disabled: view.busy || view.create_sources.is_empty(), onclick: move |_| create_archive(state), {locale.text(Text::CreateAction)} } }
     } }
