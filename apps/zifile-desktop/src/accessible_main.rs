@@ -425,12 +425,11 @@ fn handle_dropped_paths(mut state: Signal<UiState>, paths: Vec<PathBuf>) {
 }
 
 fn reload_archive(state: Signal<UiState>) {
-    if let Some(path) = state
-        .read()
-        .archive
-        .as_ref()
-        .map(|archive| archive.path.clone())
-    {
+    let path = {
+        let value = state.read();
+        value.archive.as_ref().map(|archive| archive.path.clone())
+    };
+    if let Some(path) = path {
         begin_load(state, path);
     }
 }
