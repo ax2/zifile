@@ -51,3 +51,7 @@ All notable changes to ZiFile are documented here. The format follows
   desktop-process-tree memory baseline script.
 - Real 100,000-entry ZIP UI exercise through the isolated Worker, including a
   bounded 500-row UI Automation tree, search, pagination and process-tree memory sampling.
+- Deterministic 100,000-entry archive-browser instrumentation for first content,
+  50% scrolling, pagination and simultaneous root-plus-descendant peak memory.
+- WinGet candidate validation with real x64/ARM64 artifact hashes, unsigned MSIX
+  publisher-namespace guards, and an ephemeral self-signed package-signing check.
