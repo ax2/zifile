@@ -77,7 +77,21 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 
 - 多任务队列的共享调度器与两套 UI 接线已完成，但真实前台串行/取消/清空冒烟尚待无干扰回合；列出和校验操作目前没有细粒度进度。
 - Worker 仍继承当前用户权限，尚未采用 AppContainer；CPU 时间限制和 Broker 模型待后续纵深防御评估。
-- 更广泛的第三方 7-Zip/libarchive 语料、直接归档解析器 fuzz、损坏/截断/压缩炸弹扩展语料。
+- 更广泛的第三方 7-Zip/libarchive 语料，以及损坏、截断和压缩炸弹扩展语料。
+
+## 2026-08-24 — 解析器边界加固
+
+### 发现
+
+- 解压入口原先先用全局默认限制列出归档，再在写盘阶段使用调用方的 `ExtractOptions.limits`；调用方收紧的条目数和路径深度没有约束前置解析与列表分配。
+- Windows/MSVC 的 `cargo-fuzz` 默认入口参数会破坏 `sevenz-rust2` DLL 链接，关闭该参数又会让最终 fuzz EXE 缺少入口点；该限制不影响 Linux GNU 的正式定时 campaign。
+
+### 修改与验证
+
+- 新增带显式限制的列出和校验 API，解压在创建目标目录前即使用调用方限制。
+- 新增 3 项集成测试，覆盖 ZIP/7z/TAR 严格条目上限、目标目录创建前拒绝，以及 ZIP/7z/tar/tgz 损坏头无 panic。
+- 新增覆盖全部 13 种已支持格式的 `archive_parsers` libFuzzer 目标，并为输入长度、解析时间、RSS、条目数、展开量、压缩比和路径深度设置边界。
+- 本地格式检查、严格 Clippy、59 次全工作区测试和独立 fuzz 工作区 Rust 编译检查通过。Windows 动态链接限制已如实保留，Linux 云端 campaign 结果待远端工作流补证。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
 - 归档页完整表格/解压表单键盘遍历、可见焦点、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；主导航、创建表单与核心快捷键已有中英文键盘证据。真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索、翻页、加载取消及可重复的首内容/滚动/同时刻整树峰值采样。
 - Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树、Worker 功能路径、核心快捷键、本地 x64 运行及云端 x64/ARM64 打包，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、真实拖放和 ARM64 候选实机运行门禁约束。

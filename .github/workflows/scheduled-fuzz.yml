@@ -16,7 +16,7 @@ jobs:
   fuzz:
     name: Run bounded fuzz campaigns
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
@@ -27,6 +27,8 @@ jobs:
         run: cargo +nightly fuzz run --fuzz-dir fuzz --target x86_64-unknown-linux-gnu path_policy -- -max_total_time=180 -timeout=10
       - name: Fuzz format detection
         run: cargo +nightly fuzz run --fuzz-dir fuzz --target x86_64-unknown-linux-gnu format_detection -- -max_total_time=180 -timeout=10
+      - name: Fuzz archive parsers
+        run: cargo +nightly fuzz run --fuzz-dir fuzz --target x86_64-unknown-linux-gnu archive_parsers -- -max_total_time=180 -timeout=10 -max_len=262144 -rss_limit_mb=2048
       - name: Preserve crash artifacts
         if: failure()
         uses: actions/upload-artifact@v6

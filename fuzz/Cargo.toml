@@ -9,6 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+tempfile = "3.27.0"
 zifile-core = { path = "../crates/zifile-core" }
 
 [[bin]]
@@ -21,6 +22,13 @@ bench = false
 [[bin]]
 name = "format_detection"
 path = "fuzz_targets/format_detection.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "archive_parsers"
+path = "fuzz_targets/archive_parsers.rs"
 test = false
 doc = false
 bench = false
