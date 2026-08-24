@@ -72,6 +72,7 @@ Goal: distribution, accessibility, localization, and hardening.
 - [x] Build an opt-in Dioxus/WebView2 accessibility candidate with semantic archive and create workflows over the isolated Worker.
 - [x] Add candidate CSP/offline resource policy, native drop handling, core shortcuts and local x64 MSIX validation.
 - [x] Verify candidate archive-scoped Ctrl+A and dynamic selection labels in a real UI Automation session.
+- [x] Add repeatable bilingual keyboard traversal for candidate navigation and the native create form, including disabled-control skipping and foreground-window protection.
 - [x] Cross-build, package, attest and checksum the candidate MSIX and executables for x64 and ARM64.
 - [ ] Run the candidate MSIX and runnable directory on physical ARM64 Windows hardware.
 - [ ] Complete equivalent Simplified Chinese and English product documentation.

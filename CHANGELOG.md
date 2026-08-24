@@ -57,3 +57,5 @@ All notable changes to ZiFile are documented here. The format follows
   publisher-namespace guards, and an ephemeral self-signed package-signing check.
 - Deterministic 100,000-entry desktop load-cancellation instrumentation that verifies
   final UI status, acknowledgement latency, Worker exit and temporary-fixture cleanup.
+- Foreground-safe Windows keyboard regression coverage for bilingual candidate navigation,
+  create-form selects/ranges/passwords, reverse traversal and disabled-control skipping.

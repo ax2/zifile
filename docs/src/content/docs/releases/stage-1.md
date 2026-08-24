@@ -68,6 +68,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - [Release 演练 32685678567](https://github.com/ax2/zifile/actions/runs/32685678567) 复验新 MSIX 规则并全部通过。下载后 12/12 校验和匹配，8 个 EXE 的 PE machine 与 x64/ARM64 一致，4 个默认/候选 MSIX 均为 `ZiCode.ZiFile.Dev`、固定未签名 OID、版本 `0.1.0.1` 和最低 build 26100；5 个 CycloneDX 1.3 SBOM 可解析，目录无 ZIP。
 - 独立键盘回合从干净启动点用 `Tab`/`Enter` 进入归档页和创建页，并用 `Shift+Tab` 返回；主题、语言、`Ctrl+N`、`Ctrl+O` 和文件选择器 `Escape` 均通过。自动化层始终把 WebView 外层报告为焦点，截图绑定也受到测试环境其他窗口干扰，创建表单最终方向键值变更观察被人工终止，因此该证据只计入部分键盘遍历，不宣称可见焦点或完整认证。
 - 新增确定性十万条目加载取消基线。最终五轮均由已启用的 UI 取消按钮触发，live status 进入“打开失败: Cancelled”，未出现成功打开状态，确认时对应 Worker 数均为 0；取消完成中位数/p95 为 930.78/1088.73 ms，脚本关闭测试实例并删除临时 ZIP。
+- 新增前台句柄保护的创建表单键盘脚本。中文核心流程连续通过两轮；用语言前置切换后的英文整轮也通过。实际焦点顺序为 Home/首页→Archive/压缩文件→Create/创建→主题→语言，反向导航和页面激活通过；Clear/清空、空来源 Create archive/创建压缩文件和空闲 Cancel/取消保持 disabled 且不进入 Tab 顺序；格式用键盘选择 7z，滑块 `6→7→6`，密码可键入并用 Ctrl+A/Backspace 清空且不写入结果。用户切换到飞书时，脚本两次因前台句柄不匹配安全停止并清理实例。
 
 ### 遗留问题
 
@@ -75,7 +76,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - Worker 仍继承当前用户权限，尚未采用 AppContainer；CPU 时间限制和 Broker 模型待后续纵深防御评估。
 - 更广泛的第三方 7-Zip/libarchive 语料、直接归档解析器 fuzz、损坏/截断/压缩炸弹扩展语料。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
-- 完整键盘遍历、可见焦点、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索、翻页、加载取消及可重复的首内容/滚动/同时刻整树峰值采样。
+- 归档页完整表格/解压表单键盘遍历、可见焦点、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；主导航、创建表单与核心快捷键已有中英文键盘证据。真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索、翻页、加载取消及可重复的首内容/滚动/同时刻整树峰值采样。
 - Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树、Worker 功能路径、核心快捷键、本地 x64 运行及云端 x64/ARM64 打包，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、真实拖放和 ARM64 候选实机运行门禁约束。
 - Partner Center 名称预留、代码签名、WinGet 与 Microsoft Store 提交。
 
