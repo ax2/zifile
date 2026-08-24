@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use dioxus::prelude::*;
@@ -22,6 +23,7 @@ use i18n::{Locale, Text};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::entry_view::{ENTRIES_PER_PAGE, filtered_entry_count, filtered_entry_page};
+use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 
 const STYLES: &str = include_str!("accessible_ui.css");
@@ -75,6 +77,12 @@ enum OperationKind {
     Create,
 }
 
+struct QueuedOperation {
+    kind: OperationKind,
+    request: WorkerRequest,
+    status: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AccessibleShortcut {
     Open,
@@ -99,6 +107,7 @@ struct UiState {
     busy: bool,
     cancellation: Option<CancellationToken>,
     progress: Option<OperationProgress>,
+    operations: Arc<Mutex<OperationQueue<QueuedOperation>>>,
     dark: bool,
     locale: Locale,
     revision: u64,
@@ -123,6 +132,7 @@ impl Default for UiState {
             busy: false,
             cancellation: None,
             progress: None,
+            operations: Arc::new(Mutex::new(OperationQueue::default())),
             dark: settings.dark,
             locale: settings.locale,
             revision: 0,
@@ -164,6 +174,11 @@ fn App() -> Element {
     let page = view.page;
     let theme = if view.dark { "dark" } else { "light" };
     let progress = view.progress.as_ref().map(OperationProgress::snapshot);
+    let queued_count = view
+        .operations
+        .lock()
+        .expect("operation queue lock must not be poisoned")
+        .pending_count();
     taskbar::sync(
         view.busy,
         view.cancellation
@@ -218,9 +233,11 @@ fn App() -> Element {
                 }
                 footer { role: "status", "aria-live": "polite",
                     div { class: "status-copy", span { class: "status-dot", "aria-hidden": "true", "•" } span { {view.status.clone()} } }
+                    span { class: "queue-count", {match locale { Locale::En => format!("{queued_count} queued"), Locale::ZhCn => format!("{queued_count} 个排队") }} }
                     if let Some(snapshot) = progress {
                         progress { max: "100", value: "{(snapshot.fraction() * 100.0).round() as u8}", "aria-label": choose(locale, "Operation progress", "操作进度") }
                     }
+                    button { class: "queue-clear", disabled: queued_count == 0, onclick: move |_| clear_queued(state), {choose(locale, "Clear queue", "清空队列")} }
                     button { disabled: !view.busy, onclick: move |_| cancel_operation(state), {locale.text(Text::Cancel)} }
                 }
             }
@@ -241,9 +258,9 @@ fn Home(mut state: Signal<UiState>) -> Element {
         h2 { id: "home-title", {locale.text(Text::Hero)} } p { class: "lead", {locale.text(Text::HeroSub)} }
         div { class: "actions",
             article { h3 { {locale.text(Text::OpenArchive)} } p { {locale.text(Text::OpenDescription)} }
-                button { class: "primary", disabled: view.busy, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} } }
+                button { class: "primary", onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} } }
             article { h3 { {locale.text(Text::CreateArchive)} } p { {locale.text(Text::CreateDescription)} }
-                button { class: "primary", disabled: view.busy, onclick: move |_| state.write().page = Page::Create, {locale.text(Text::StartCreating)} } }
+                button { class: "primary", onclick: move |_| state.write().page = Page::Create, {locale.text(Text::StartCreating)} } }
         }
         section { class: "privacy", "aria-labelledby": "privacy-title", h3 { id: "privacy-title", {locale.text(Text::Privacy)} } p { {locale.text(Text::PrivacyDescription)} } }
     } }
@@ -255,7 +272,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
     let locale = view.locale;
     let Some(archive) = view.archive.clone() else {
         return rsx! { section { class: "empty-state", h2 { {locale.text(Text::NoArchive)} } p { {locale.text(Text::NoArchiveDescription)} }
-        button { class: "primary", disabled: view.busy, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} } } };
+        button { class: "primary", onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} } } };
     };
     let count = filtered_entry_count(&archive, &view.entry_filter);
     let last_page = count.saturating_sub(1) / ENTRIES_PER_PAGE;
@@ -280,26 +297,25 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
 
     rsx! { section { class: "archive-page", "aria-labelledby": "archive-title",
         div { class: "page-heading", div { h2 { id: "archive-title", {archive_name} } p { "{archive.format} · {archive.entries.len()} · {format_bytes(archive.total_size)}" } }
-            div { class: "button-row", button { disabled: view.busy, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
-                button { disabled: view.busy, onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} } } }
+            div { class: "button-row", button { onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
+                button { onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} } } }
         div { class: "toolbar",
-            label { span { {locale.text(Text::PasswordEncrypted)} } input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), disabled: view.busy, oninput: move |event| state.write().password = event.value() } }
-            button { disabled: view.busy, onclick: move |_| reload_archive(state), {locale.text(Text::Reload)} }
+            label { span { {locale.text(Text::PasswordEncrypted)} } input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() } }
+            button { onclick: move |_| reload_archive(state), {locale.text(Text::Reload)} }
             label { span { {locale.text(Text::Search)} } input { r#type: "search", value: view.entry_filter.clone(), oninput: move |event| { let mut value = state.write(); value.entry_filter = event.value(); value.entry_page = 0; } } }
         }
         div { class: "selection-bar",
-            label { input { r#type: "checkbox", checked: selected_count == all_files && all_files > 0, disabled: view.busy, "aria-label": selection_summary.clone(), "aria-keyshortcuts": "Control+A", onchange: move |event| select_all(state, event.checked()) } " {selection_summary}" }
+            label { input { r#type: "checkbox", checked: selected_count == all_files && all_files > 0, "aria-label": selection_summary.clone(), "aria-keyshortcuts": "Control+A", onchange: move |event| select_all(state, event.checked()) } " {selection_summary}" }
             div { class: "button-row",
-                select { value: conflict_value(view.conflict), disabled: view.busy, "aria-label": choose(locale, "Conflict policy", "文件冲突策略"), onchange: move |event| state.write().conflict = parse_conflict(&event.value()),
+                select { value: conflict_value(view.conflict), "aria-label": choose(locale, "Conflict policy", "文件冲突策略"), onchange: move |event| state.write().conflict = parse_conflict(&event.value()),
                     for policy in [ConflictPolicy::Rename, ConflictPolicy::Overwrite, ConflictPolicy::Skip, ConflictPolicy::Error] { option { value: conflict_value(policy), {conflict_label(locale, policy)} } } }
-                button { class: "primary", disabled: view.busy || selected_count == 0, onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
+                button { class: "primary", disabled: selected_count == 0, onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
             }
         }
         div { class: "table-wrap", tabindex: "0", role: "region", "aria-label": choose(locale, "Archive entries", "压缩文件项目"), "aria-keyshortcuts": "Control+A",
             onkeydown: move |event: KeyboardEvent| {
                 let control = event.modifiers().contains(Modifiers::CONTROL);
                 if !event.is_composing()
-                    && !state.read().busy
                     && is_select_all_shortcut(&event.key().to_string(), control)
                 {
                     event.prevent_default();
@@ -347,24 +363,24 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
     let encrypted = view.create_format.capabilities().encryption;
     rsx! { section { class: "create-page", "aria-labelledby": "create-title",
         div { class: "page-heading", div { h2 { id: "create-title", {locale.text(Text::CreateHeading)} } p { {locale.text(Text::CreateHelp)} } }
-            div { class: "button-row", button { disabled: view.busy, onclick: move |_| add_files(state), {locale.text(Text::AddFiles)} }
-                button { disabled: view.busy, onclick: move |_| add_folder(state), {locale.text(Text::AddFolder)} }
-                button { disabled: view.busy || view.create_sources.is_empty(), onclick: move |_| state.write().create_sources.clear(), {locale.text(Text::Clear)} } } }
+            div { class: "button-row", button { onclick: move |_| add_files(state), {locale.text(Text::AddFiles)} }
+                button { onclick: move |_| add_folder(state), {locale.text(Text::AddFolder)} }
+                button { disabled: view.create_sources.is_empty(), onclick: move |_| state.write().create_sources.clear(), {locale.text(Text::Clear)} } } }
         section { class: "source-list", "aria-label": choose(locale, "Archive sources", "压缩来源"),
             if view.create_sources.is_empty() { p { class: "muted", {locale.text(Text::NoSources)} } }
             ul { for (index, source) in view.create_sources.iter().enumerate() { li { key: "{source.display()}", span { {source.to_string_lossy().to_string()} }
-                button { disabled: view.busy, onclick: move |_| { if index < state.read().create_sources.len() { state.write().create_sources.remove(index); } }, {locale.text(Text::Remove)} } } } }
+                button { onclick: move |_| { if index < state.read().create_sources.len() { state.write().create_sources.remove(index); } }, {locale.text(Text::Remove)} } } } }
         }
         div { class: "form-grid",
-            label { span { {locale.text(Text::Format)} } select { value: format_value(view.create_format), disabled: view.busy,
+            label { span { {locale.text(Text::Format)} } select { value: format_value(view.create_format),
                 onchange: move |event| { let mut value = state.write(); value.create_format = parse_format(&event.value()); if !value.create_format.capabilities().encryption { value.create_password.clear(); } },
                 for format in CREATE_FORMATS { option { value: format_value(format), "{format}" } } } }
-            label { span { "{locale.text(Text::CompressionLevel)} · {view.compression_level}" } input { r#type: "range", min: "0", max: "9", value: "{view.compression_level}", disabled: view.busy,
+            label { span { "{locale.text(Text::CompressionLevel)} · {view.compression_level}" } input { r#type: "range", min: "0", max: "9", value: "{view.compression_level}",
                 oninput: move |event| state.write().compression_level = event.value().parse().unwrap_or(6) } }
             label { span { if encrypted { {locale.text(Text::PasswordOptional)} } else { {locale.text(Text::PasswordUnavailable)} } }
-                input { r#type: "password", autocomplete: "off", spellcheck: "false", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: view.busy || !encrypted, oninput: move |event| state.write().create_password = event.value() } }
+                input { r#type: "password", autocomplete: "off", spellcheck: "false", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: !encrypted, oninput: move |event| state.write().create_password = event.value() } }
         }
-        div { class: "create-actions", button { class: "primary", disabled: view.busy || view.create_sources.is_empty(), onclick: move |_| create_archive(state), {locale.text(Text::CreateAction)} } }
+        div { class: "create-actions", button { class: "primary", disabled: view.create_sources.is_empty(), onclick: move |_| create_archive(state), {locale.text(Text::CreateAction)} } }
     } }
 }
 
@@ -395,25 +411,14 @@ fn is_select_all_shortcut(key: &str, control: bool) -> bool {
 
 fn apply_accessible_shortcut(mut state: Signal<UiState>, shortcut: AccessibleShortcut) {
     match shortcut {
-        AccessibleShortcut::Open if !state.read().busy => open_archive_dialog(state),
-        AccessibleShortcut::Create if !state.read().busy => state.write().page = Page::Create,
+        AccessibleShortcut::Open => open_archive_dialog(state),
+        AccessibleShortcut::Create => state.write().page = Page::Create,
         AccessibleShortcut::Cancel => cancel_operation(state),
-        _ => {}
     }
 }
 
 fn handle_dropped_paths(mut state: Signal<UiState>, paths: Vec<PathBuf>) {
     if paths.is_empty() {
-        return;
-    }
-    if state.read().busy {
-        let locale = state.read().locale;
-        state.write().status = choose(
-            locale,
-            "Wait for the current operation before dropping more files",
-            "请等待当前操作完成后再拖入文件",
-        )
-        .to_owned();
         return;
     }
     if paths.len() == 1
@@ -597,9 +602,44 @@ fn launch_worker(
     kind: OperationKind,
     status: String,
 ) {
-    if state.read().busy {
-        return;
+    let operation = QueuedOperation {
+        kind,
+        request,
+        status,
+    };
+    let operations = state.read().operations.clone();
+    let submission = operations
+        .lock()
+        .expect("operation queue lock must not be poisoned")
+        .submit(operation);
+    match submission {
+        Ok(Submission::Start(job)) => start_worker(state, job),
+        Ok(Submission::Queued { position, .. }) => {
+            let locale = state.read().locale;
+            state.write().status = match locale {
+                Locale::En => format!(
+                    "Queued operation at position {position}; the current operation continues"
+                ),
+                Locale::ZhCn => format!("操作已排队，位置 {position}；当前操作继续运行"),
+            };
+        }
+        Err(error) => {
+            let locale = state.read().locale;
+            state.write().status = match locale {
+                Locale::En => format!("Operation queue is full (maximum {})", error.capacity),
+                Locale::ZhCn => format!("操作队列已满（最多 {} 个）", error.capacity),
+            };
+        }
     }
+}
+
+fn start_worker(mut state: Signal<UiState>, job: Job<QueuedOperation>) {
+    let Job { id, payload } = job;
+    let QueuedOperation {
+        kind,
+        request,
+        status,
+    } = payload;
     let progress = OperationProgress::default();
     let cancellation = CancellationToken::default();
     {
@@ -615,12 +655,13 @@ fn launch_worker(
                 .await
                 .map_err(|error| format!("worker task failed: {error}"))
                 .and_then(|result| result);
-        finish_worker(state, kind, result);
+        finish_worker(state, id, kind, result);
     });
 }
 
 fn finish_worker(
     mut state: Signal<UiState>,
+    id: u64,
     kind: OperationKind,
     result: Result<WorkerOutput, String>,
 ) {
@@ -691,11 +732,37 @@ fn finish_worker(
             }
         ),
     };
-    let mut value = state.write();
-    value.busy = false;
-    value.cancellation = None;
-    value.progress = None;
-    value.status = status;
+    let operations = state.read().operations.clone();
+    {
+        let mut value = state.write();
+        value.busy = false;
+        value.cancellation = None;
+        value.progress = None;
+        value.status = status;
+    }
+    let next = operations
+        .lock()
+        .expect("operation queue lock must not be poisoned")
+        .complete(id);
+    match next {
+        Ok(Some(job)) => start_worker(state, job),
+        Ok(None) => {}
+        Err(error) => state.write().status = format!("Internal operation queue error: {error}"),
+    }
+}
+
+fn clear_queued(mut state: Signal<UiState>) {
+    let operations = state.read().operations.clone();
+    let cleared = operations
+        .lock()
+        .expect("operation queue lock must not be poisoned")
+        .clear_pending()
+        .len();
+    let locale = state.read().locale;
+    state.write().status = match locale {
+        Locale::En => format!("Cleared {cleared} queued operations"),
+        Locale::ZhCn => format!("已清除 {cleared} 个排队操作"),
+    };
 }
 
 fn cancel_operation(mut state: Signal<UiState>) {

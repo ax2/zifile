@@ -34,7 +34,8 @@ Goal: safely open, list, create, and extract common archives.
 - [x] Archive browser, selected extraction, destination and conflict policies.
 - [x] Background execution with cooperative cancellation.
 - [x] Determinate byte/entry progress for extraction and creation.
-- [ ] Queued multi-operation scheduling.
+- [ ] Queued multi-operation scheduling (bounded FIFO scheduler and both UI
+  integrations implemented; real foreground multi-operation smoke pending).
 - [x] Path traversal, link escape, reserved-name, collision, and expansion-limit defenses.
 - [x] Fuzz targets compile continuously in CI.
 - [x] ZIP, tar.gz and 7z bidirectional interoperability with Windows reference tools.

@@ -24,6 +24,7 @@ use i18n::{Locale, Text};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::entry_view::{ENTRIES_PER_PAGE, filtered_entry_count, filtered_entry_page};
+use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 
 const CREATE_FORMATS: [ArchiveFormat; 13] = [
@@ -90,6 +91,7 @@ struct ZiFile {
     busy: bool,
     cancellation: Option<CancellationToken>,
     progress: Option<OperationProgress>,
+    operations: OperationQueue<QueuedOperation>,
     dark: bool,
     locale: Locale,
 }
@@ -113,6 +115,7 @@ impl Default for ZiFile {
             busy: false,
             cancellation: None,
             progress: None,
+            operations: OperationQueue::default(),
             dark: settings.dark,
             locale: settings.locale,
         }
@@ -125,7 +128,7 @@ enum Message {
     ToggleTheme,
     ToggleLocale,
     OpenArchiveDialog,
-    ArchiveLoaded(Result<ArchiveInfo, String>),
+    ArchiveLoaded(u64, Result<ArchiveInfo, String>),
     PasswordChanged(String),
     ReloadArchive,
     ToggleEntry(PathBuf, bool),
@@ -135,9 +138,9 @@ enum Message {
     NextEntryPage,
     ConflictChanged(ConflictChoice),
     Extract,
-    ExtractFinished(Result<OperationSummary, String>),
+    ExtractFinished(u64, Result<OperationSummary, String>),
     TestArchive,
-    TestFinished(Result<ArchiveInfo, String>),
+    TestFinished(u64, Result<ArchiveInfo, String>),
     AddFiles,
     AddFolder,
     RemoveSource(usize),
@@ -146,7 +149,8 @@ enum Message {
     CreatePasswordChanged(String),
     CompressionLevelChanged(u8),
     Create,
-    CreateFinished(Result<OperationSummary, String>),
+    CreateFinished(u64, Result<OperationSummary, String>),
+    ClearQueued,
     Cancel,
     ProgressTick,
     FileDropped(PathBuf),
@@ -159,6 +163,20 @@ enum Shortcut {
     Create,
     SelectAll,
     Cancel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OperationKind {
+    List,
+    Test,
+    Extract,
+    Create,
+}
+
+struct QueuedOperation {
+    kind: OperationKind,
+    request: WorkerRequest,
+    status: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -245,7 +263,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 return begin_load(state, path);
             }
         }
-        Message::ArchiveLoaded(result) => {
+        Message::ArchiveLoaded(id, result) => {
             state.busy = false;
             state.cancellation = None;
             state.progress = None;
@@ -282,6 +300,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     )
                 }
             }
+            return continue_queue(state, id);
         }
         Message::PasswordChanged(password) => state.password = password,
         Message::ReloadArchive => {
@@ -340,8 +359,6 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 return Task::none();
             };
             let path = archive.path.clone();
-            let cancellation = CancellationToken::default();
-            let progress = OperationProgress::default();
             let file_count = archive
                 .entries
                 .iter()
@@ -360,25 +377,21 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 password: non_empty(&state.password),
                 selected_paths,
             };
-            state.busy = true;
-            state.cancellation = Some(cancellation.clone());
-            state.progress = Some(progress.clone());
-            state.status = format!(
+            let status = format!(
                 "{} {}…",
                 choose(state.locale, "Extracting to", "正在解压到"),
                 destination.display()
             );
-            let worker_progress = progress.clone();
-            let worker_cancellation = cancellation.clone();
-            return Task::perform(
-                async move {
-                    run_worker(request, worker_progress, worker_cancellation)
-                        .and_then(expect_summary)
+            return submit_operation(
+                state,
+                QueuedOperation {
+                    kind: OperationKind::Extract,
+                    request,
+                    status,
                 },
-                Message::ExtractFinished,
             );
         }
-        Message::ExtractFinished(result) => {
+        Message::ExtractFinished(id, result) => {
             state.busy = false;
             state.cancellation = None;
             state.progress = None;
@@ -400,33 +413,33 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     choose(state.locale, "Extraction failed", "解压失败")
                 ),
             };
+            return continue_queue(state, id);
         }
         Message::TestArchive => {
             let Some(path) = state.archive.as_ref().map(|archive| archive.path.clone()) else {
                 return Task::none();
             };
             let password = non_empty(&state.password);
-            let cancellation = CancellationToken::default();
-            let progress = OperationProgress::default();
             let request = WorkerRequest::Test {
                 archive: path,
                 password,
             };
-            state.busy = true;
-            state.cancellation = Some(cancellation.clone());
-            state.progress = Some(progress.clone());
-            state.status = choose(
+            let status = choose(
                 state.locale,
                 "Testing every entry and checksum…",
                 "正在校验所有项目与校验和…",
             )
             .to_owned();
-            return Task::perform(
-                async move { run_worker(request, progress, cancellation).and_then(expect_archive) },
-                Message::TestFinished,
+            return submit_operation(
+                state,
+                QueuedOperation {
+                    kind: OperationKind::Test,
+                    request,
+                    status,
+                },
             );
         }
-        Message::TestFinished(result) => {
+        Message::TestFinished(id, result) => {
             state.busy = false;
             state.cancellation = None;
             state.progress = None;
@@ -446,6 +459,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     choose(state.locale, "Integrity test failed", "完整性校验失败")
                 ),
             };
+            return continue_queue(state, id);
         }
         Message::AddFiles => {
             if let Some(paths) = FileDialog::new()
@@ -495,8 +509,6 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             };
             let sources = state.create_sources.clone();
             let format = state.create_format;
-            let cancellation = CancellationToken::default();
-            let progress = OperationProgress::default();
             let request = WorkerRequest::Create {
                 sources,
                 destination: destination.clone(),
@@ -504,20 +516,21 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 compression_level: state.compression_level,
                 password: non_empty(&state.create_password),
             };
-            state.busy = true;
-            state.cancellation = Some(cancellation.clone());
-            state.progress = Some(progress.clone());
-            state.status = format!(
+            let status = format!(
                 "{} {}…",
                 choose(state.locale, "Creating", "正在创建"),
                 destination.display()
             );
-            return Task::perform(
-                async move { run_worker(request, progress, cancellation).and_then(expect_summary) },
-                Message::CreateFinished,
+            return submit_operation(
+                state,
+                QueuedOperation {
+                    kind: OperationKind::Create,
+                    request,
+                    status,
+                },
             );
         }
-        Message::CreateFinished(result) => {
+        Message::CreateFinished(id, result) => {
             state.busy = false;
             state.cancellation = None;
             state.progress = None;
@@ -537,6 +550,14 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     choose(state.locale, "Creation failed", "创建失败")
                 ),
             };
+            return continue_queue(state, id);
+        }
+        Message::ClearQueued => {
+            let cleared = state.operations.clear_pending().len();
+            state.status = match state.locale {
+                Locale::En => format!("Cleared {cleared} queued operations"),
+                Locale::ZhCn => format!("已清除 {cleared} 个排队操作"),
+            };
         }
         Message::Cancel => {
             if let Some(cancellation) = &state.cancellation {
@@ -551,14 +572,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::ProgressTick => {}
         Message::FileDropped(path) => {
-            if state.busy {
-                state.status = choose(
-                    state.locale,
-                    "Wait for the current operation before dropping more files",
-                    "请等待当前操作完成后再拖入文件",
-                )
-                .to_owned();
-            } else if path.is_file()
+            if path.is_file()
                 && detect_format_from_path(&path).is_some_and(|format| format.capabilities().list)
             {
                 return begin_load(state, path);
@@ -570,9 +584,9 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
         }
         Message::KeyboardShortcut(shortcut) => match shortcut {
-            Shortcut::Open if !state.busy => return update(state, Message::OpenArchiveDialog),
-            Shortcut::Create if !state.busy => state.page = Page::Create,
-            Shortcut::SelectAll if state.page == Page::Archive && !state.busy => {
+            Shortcut::Open => return update(state, Message::OpenArchiveDialog),
+            Shortcut::Create => state.page = Page::Create,
+            Shortcut::SelectAll if state.page == Page::Archive => {
                 return update(state, Message::SelectAll(true));
             }
             Shortcut::Cancel if state.cancellation.is_some() => {
@@ -644,24 +658,92 @@ fn save_settings(state: &ZiFile) {
 
 fn begin_load(state: &mut ZiFile, path: PathBuf) -> Task<Message> {
     let password = non_empty(&state.password);
-    let cancellation = CancellationToken::default();
-    let progress = OperationProgress::default();
     let request = WorkerRequest::List {
         archive: path.clone(),
         password,
     };
-    state.busy = true;
-    state.cancellation = Some(cancellation.clone());
-    state.progress = Some(progress.clone());
-    state.status = format!(
+    let status = format!(
         "{} {}…",
         choose(state.locale, "Opening", "正在打开"),
         path.display()
     );
-    Task::perform(
-        async move { run_worker(request, progress, cancellation).and_then(expect_archive) },
-        Message::ArchiveLoaded,
+    submit_operation(
+        state,
+        QueuedOperation {
+            kind: OperationKind::List,
+            request,
+            status,
+        },
     )
+}
+
+fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Message> {
+    match state.operations.submit(operation) {
+        Ok(Submission::Start(job)) => start_operation(state, job),
+        Ok(Submission::Queued { position, .. }) => {
+            state.status = match state.locale {
+                Locale::En => format!(
+                    "Queued operation at position {position}; the current operation continues"
+                ),
+                Locale::ZhCn => format!("操作已排队，位置 {position}；当前操作继续运行"),
+            };
+            Task::none()
+        }
+        Err(error) => {
+            state.status = match state.locale {
+                Locale::En => format!("Operation queue is full (maximum {})", error.capacity),
+                Locale::ZhCn => format!("操作队列已满（最多 {} 个）", error.capacity),
+            };
+            Task::none()
+        }
+    }
+}
+
+fn start_operation(state: &mut ZiFile, job: Job<QueuedOperation>) -> Task<Message> {
+    let Job { id, payload } = job;
+    let QueuedOperation {
+        kind,
+        request,
+        status,
+    } = payload;
+    let cancellation = CancellationToken::default();
+    let progress = OperationProgress::default();
+    state.busy = true;
+    state.cancellation = Some(cancellation.clone());
+    state.progress = Some(progress.clone());
+    state.status = status;
+    match kind {
+        OperationKind::List => Task::perform(
+            async move { run_worker(request, progress, cancellation).and_then(expect_archive) },
+            move |result| Message::ArchiveLoaded(id, result),
+        ),
+        OperationKind::Test => Task::perform(
+            async move { run_worker(request, progress, cancellation).and_then(expect_archive) },
+            move |result| Message::TestFinished(id, result),
+        ),
+        OperationKind::Extract => Task::perform(
+            async move { run_worker(request, progress, cancellation).and_then(expect_summary) },
+            move |result| Message::ExtractFinished(id, result),
+        ),
+        OperationKind::Create => Task::perform(
+            async move { run_worker(request, progress, cancellation).and_then(expect_summary) },
+            move |result| Message::CreateFinished(id, result),
+        ),
+    }
+}
+
+fn continue_queue(state: &mut ZiFile, completed_id: u64) -> Task<Message> {
+    state.busy = false;
+    state.cancellation = None;
+    state.progress = None;
+    match state.operations.complete(completed_id) {
+        Ok(Some(next)) => start_operation(state, next),
+        Ok(None) => Task::none(),
+        Err(error) => {
+            state.status = format!("Internal operation queue error: {error}");
+            Task::none()
+        }
+    }
 }
 
 fn expect_archive(output: WorkerOutput) -> Result<ArchiveInfo, String> {
@@ -749,6 +831,19 @@ fn view(state: &ZiFile) -> Element<'_, Message> {
         column![
             row![
                 text(status_line).size(13).width(Fill),
+                text(match state.locale {
+                    Locale::En => format!("{} queued", state.operations.pending_count()),
+                    Locale::ZhCn => format!("{} 个排队", state.operations.pending_count()),
+                })
+                .size(12),
+                button(match state.locale {
+                    Locale::En => "Clear queue",
+                    Locale::ZhCn => "清空队列",
+                })
+                .style(button::secondary)
+                .on_press_maybe(
+                    (state.operations.pending_count() > 0).then_some(Message::ClearQueued)
+                ),
                 button(state.locale.text(Text::Cancel))
                     .style(button::danger)
                     .on_press_maybe(state.cancellation.as_ref().map(|_| Message::Cancel)),
@@ -773,14 +868,14 @@ fn home_view(state: &ZiFile) -> Element<'_, Message> {
         state.locale.text(Text::OpenDescription),
         state.locale.text(Text::OpenAction),
         Message::OpenArchiveDialog,
-        state.busy,
+        false,
     );
     let create = action_card(
         state.locale.text(Text::CreateArchive),
         state.locale.text(Text::CreateDescription),
         state.locale.text(Text::StartCreating),
         Message::Navigate(Page::Create),
-        state.busy,
+        false,
     );
     column![
         text(state.locale.text(Text::Hero)).size(38),
@@ -857,10 +952,10 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         .width(Fill),
         button(state.locale.text(Text::OpenAnother))
             .style(button::secondary)
-            .on_press_maybe((!state.busy).then_some(Message::OpenArchiveDialog)),
+            .on_press(Message::OpenArchiveDialog),
         button(state.locale.text(Text::TestArchive))
             .style(button::secondary)
-            .on_press_maybe((!state.busy).then_some(Message::TestArchive)),
+            .on_press(Message::TestArchive),
     ]
     .align_y(iced::Alignment::Center)
     .spacing(10);
@@ -878,8 +973,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             .secure(true)
             .on_input(Message::PasswordChanged)
             .width(220),
-        button(state.locale.text(Text::Reload))
-            .on_press_maybe((!state.busy).then_some(Message::ReloadArchive)),
+        button(state.locale.text(Text::Reload)).on_press(Message::ReloadArchive),
         pick_list(
             ConflictChoice::ALL.map(|choice| LocalizedConflict {
                 choice,
@@ -893,9 +987,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         ),
         button(state.locale.text(Text::ExtractSelected))
             .style(button::primary)
-            .on_press_maybe(
-                (!state.busy && !state.selected.is_empty()).then_some(Message::Extract)
-            ),
+            .on_press_maybe((!state.selected.is_empty()).then_some(Message::Extract)),
     ]
     .align_y(iced::Alignment::Center)
     .spacing(10);
@@ -1007,10 +1099,8 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
         text(state.locale.text(Text::CreateHeading)).size(32),
         text(state.locale.text(Text::CreateHelp)),
         row![
-            button(state.locale.text(Text::AddFiles))
-                .on_press_maybe((!state.busy).then_some(Message::AddFiles)),
-            button(state.locale.text(Text::AddFolder))
-                .on_press_maybe((!state.busy).then_some(Message::AddFolder)),
+            button(state.locale.text(Text::AddFiles)).on_press(Message::AddFiles),
+            button(state.locale.text(Text::AddFolder)).on_press(Message::AddFolder),
             button(state.locale.text(Text::Clear))
                 .style(button::secondary)
                 .on_press_maybe(
@@ -1077,9 +1167,7 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
             space().width(Fill),
             button(state.locale.text(Text::CreateAction))
                 .style(button::primary)
-                .on_press_maybe(
-                    (!state.busy && !state.create_sources.is_empty()).then_some(Message::Create)
-                ),
+                .on_press_maybe((!state.create_sources.is_empty()).then_some(Message::Create)),
         ],
     ]
     .spacing(14)
