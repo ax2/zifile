@@ -27,7 +27,7 @@ ARM64 使用同一脚本和 `-Architecture arm64`。每月计划任务、手动�
 
 ## 当前证据
 
-2026-08-24 的本地 Windows x64 完整双构建中，可访问候选、CLI、Worker 与 Explorer DLL 的两组 SHA-256 完全相同；默认 `zifile-desktop.exe` 不同，因此总体结果为 `reproducible=false`，路线图保持未完成。此前的小范围调查确认 `/Brepro` 能消除 PE 时间戳/调试标识差异，单作业能让 CLI 稳定复现；Iced/WGPU 默认桌面路径仍有额外非确定性，需要继续定位。ARM64 双构建尚无云端通过证据。
+2026-08-24 的本地 Windows x64 完整双构建中，可访问候选、CLI、Worker 与 Explorer DLL 的两组 SHA-256 完全相同；默认 `zifile-desktop.exe` 不同。云端运行 `32707399686` 随后在干净 PR 合并提交上复现了相同结论：x64 与 ARM64 都是 4/5 匹配，只有默认 Iced EXE 不同，因此两项总体结果均为 `reproducible=false`，路线图保持未完成。此前的小范围调查确认 `/Brepro` 能消除 PE 时间戳/调试标识差异，单作业能让 CLI 稳定复现；Iced/WGPU 默认桌面路径仍有额外非确定性，需要继续定位。
 
 ## 已知边界
 

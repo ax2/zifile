@@ -32,7 +32,7 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 
 性能门禁需要多轮运行和稳定基线，不能用一次共享 CI 结果直接判定回归。
 
-`tests/reproducibility/windows-build.ps1` 在两个全新目标目录使用固定 Rust 1.88.0、锁文件、单作业构建与 MSVC `/Brepro`，比较默认桌面、可访问候选、CLI、Worker 和 Explorer DLL。2026-08-24 本地 x64 证据为 4/5 匹配；默认 Iced EXE 仍不同，所以门禁按预期失败、路线图未完成。定时/手动双架构工作流用于持续暴露该差异，不得把部分匹配写成整体通过。
+`tests/reproducibility/windows-build.ps1` 在两个全新目标目录使用固定 Rust 1.88.0、锁文件、单作业构建与 MSVC `/Brepro`，比较默认桌面、可访问候选、CLI、Worker 和 Explorer DLL。2026-08-24 本地 x64 及干净云端 x64/ARM64 证据均为 4/5 匹配；默认 Iced EXE 仍不同，所以门禁按预期失败、路线图未完成。定时/手动双架构工作流用于持续暴露该差异，不得把部分匹配写成整体通过。
 
 Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.exe`，分别对 ZIP、tar.gz 与 7z 执行双向互操作：参考工具创建的包由 ZiFile 校验和解压，ZiFile 创建的包由参考工具解压并逐文件核对（含 Unicode 路径）。
 
