@@ -65,6 +65,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 新增确定性真实十万项浏览器基线脚本。五轮中，首内容中位数/p95 为 3373.80/3668.80 ms，50% 滚动为 195.16/246.34 ms，下一页为 805.87/1143.66 ms；25 ms 同时刻采样的整树最大工作集/私有内存为 669.18/455.71 MiB。该口径包含 UI Automation 观察开销。
 - 用 Release 演练的真实 x64/ARM64 SHA-256 重新生成 WinGet 1.12 候选，`winget validate` 成功；尚未提交 winget-pkgs。
 - MSIX 开发 Identity 改用微软未签名包固定 OID 并加入错误 Publisher 防护。当前 Windows build 26200 本机仍以 `0x80080204` 拒绝未签名 OID 包，不能记为安装通过；一次不落盘凭据的一日自签名演练已由 SignTool 成功签名，部署仅因测试根不受信任而以 `0x800B0109` 停止。测试证书、私钥和包注册均无残留。
+- [Release 演练 32685678567](https://github.com/ax2/zifile/actions/runs/32685678567) 复验新 MSIX 规则并全部通过。下载后 12/12 校验和匹配，8 个 EXE 的 PE machine 与 x64/ARM64 一致，4 个默认/候选 MSIX 均为 `ZiCode.ZiFile.Dev`、固定未签名 OID、版本 `0.1.0.1` 和最低 build 26100；5 个 CycloneDX 1.3 SBOM 可解析，目录无 ZIP。
 
 ### 遗留问题
 
@@ -78,4 +79,4 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 
 ### 发布结果
 
-进行中。已验证本地 x64 开发 MSIX、候选运行目录和远程 x64/ARM64 默认/候选非发布产物链；当前提交仍是 Alpha 开发检查点，不是可上架版本，也没有创建公开 Release。最新演练证据保存在 [GitHub Actions run 32671977951](https://github.com/ax2/zifile/actions/runs/32671977951)。
+进行中。已验证本地 x64 开发 MSIX、候选运行目录和远程 x64/ARM64 默认/候选非发布产物链；当前提交仍是 Alpha 开发检查点，不是可上架版本，也没有创建公开 Release。最新演练证据保存在 [GitHub Actions run 32685678567](https://github.com/ax2/zifile/actions/runs/32685678567)。
