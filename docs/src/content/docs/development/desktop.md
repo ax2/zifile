@@ -28,9 +28,11 @@ Worker 的字节进度（无字节总量时回退到条目进度）同步到 Win
 
 ## 已验证与待验证
 
-自动测试与 Criterion 已覆盖 100,000 个模拟条目的过滤和有界分页；Windows 实机已检查 1,200 项 ZIP 的三页翻页、搜索、中英文、深浅主题及 `Ctrl+N`。Dioxus 候选另以真实 2 项 ZIP 验证归档区 `Ctrl+A`、动态选择标签与 live status，并以真实 100,000 项 ZIP 验证 Worker 列出、500 行有界 UIA 表格、搜索和多页导航。
+自动测试与 Criterion 已覆盖 100,000 个模拟条目的过滤和有界分页；Windows 实机已检查 1,200 项 ZIP 的三页翻页、搜索、中英文、深浅主题及 `Ctrl+N`。Dioxus 候选另以真实 2 项 ZIP 验证归档区 `Ctrl+A`、动态选择标签与 live status，并以真实 100,000 项 ZIP 验证 Worker 列出、500 行有界 UIA 表格、搜索、多页导航和加载取消。五轮加载取消均进入最终取消状态，且对应 Worker 已退出。
 
-这些检查尚不等同于完整辅助功能认证。当前 Iced 0.14 UI 不能宣称具备完整的 Windows UI Automation/Narrator 语义树。中文 IME、全流程 Tab/方向键遍历、屏幕阅读器、高对比度、每显示器 DPI、Windows Application Certification Kit，以及十万真实条目的可重复首屏/滚动延迟和同时刻峰值内存仍是上架前门禁。可访问 UI 路线见 ADR-0005。
+独立键盘回合已从干净启动点用 `Tab`/`Shift+Tab`/`Enter` 正反向切换首页、归档页与创建页，并用键盘切换主题和语言；`Ctrl+N`、`Ctrl+O` 与文件选择器 `Escape` 取消也通过。自动化层只能把 WebView 外层报告为当前焦点，且创建表单最后的方向键值变更观察被人工终止，因此这仍不是“完整键盘遍历”结论。
+
+这些检查尚不等同于完整辅助功能认证。当前 Iced 0.14 UI 不能宣称具备完整的 Windows UI Automation/Narrator 语义树。中文 IME、创建/归档全表单方向键遍历、可见焦点、屏幕阅读器、高对比度、每显示器 DPI 和 Windows Application Certification Kit 仍是上架前门禁。可访问 UI 路线见 ADR-0005。
 
 ## 可访问 UI 候选
 
@@ -41,4 +43,4 @@ cargo build -p zifile-desktop --features accessible-ui --bin zifile-desktop-acce
 target\debug\zifile-desktop-accessible.exe sample.zip
 ```
 
-候选使用 Rust RSX + Dioxus Desktop/WebView2，并复用 `zifile-worker.exe`。当前可执行打开、列出、校验、选择性解压和创建流程；命令行参数可直接打开归档。发布包仍需完成双架构接线、离线/CSP/导航限制、拖放与快捷键对等以及完整辅助功能验证。
+候选使用 Rust RSX + Dioxus Desktop/WebView2，并复用 `zifile-worker.exe`。当前可执行打开、列出、校验、选择性解压和创建流程；命令行参数可直接打开归档。x64/ARM64 候选构建、打包、校验和、SBOM、来源证明、离线 CSP、原生拖放和核心快捷键链路已接通；替换默认 UI 前仍需完整辅助功能验证、真实拖放复验和 ARM64 实机运行。

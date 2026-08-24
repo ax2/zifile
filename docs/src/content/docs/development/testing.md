@@ -41,4 +41,6 @@ Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.
 
 `tests/performance/archive-browser-baseline.ps1` 会确定性生成并在结束后删除 100,000 条目 ZIP，启动匹配的优化版候选和 Worker，使用 UI Automation 等待条目数与页码、滚动到 50%、翻到下一页，并以 25 ms 间隔采样根进程及后代在同一采样时刻的内存。五轮正式基线的窗口启动中位数/p95 为 258.07/308.54 ms，首个归档内容为 3373.80/3668.80 ms，50% 滚动为 195.16/246.34 ms，下一页为 805.87/1143.66 ms；同时刻整树工作集/私有内存最大值为 669.18/455.71 MiB，最多 9 个进程。首内容、滚动和翻页数据包含 UI Automation 观察开销，只用于同机回归，不作为用户可感知延迟的纯应用内测量。
 
+`tests/performance/archive-load-cancellation.ps1` 使用相同的确定性 100,000 条目 ZIP，在候选界面暴露已启用的取消按钮后立即调用，要求最终 live status 为取消错误、不得出现成功打开状态、对应 Worker 必须退出，并在结束时关闭测试实例和删除临时 ZIP。最终五轮基线的取消完成中位数/p95 为 930.78/1088.73 ms；五轮确认时 Worker 数均为 0。该计时从 UI Automation 调用取消开始，到界面收到 Worker 的最终取消结果为止。
+
 `tests/performance/desktop-baseline.ps1` 对优化后的两个桌面程序各启动五次，计时到原生窗口可响应，并在 1.5 秒稳定期后汇总根进程与后代进程内存。参考机器为 Windows 11 build 26200、i9-14900HX：Iced 启动中位数 668.79 ms、工作集 225.87 MiB、私有内存 265.05 MiB；Dioxus/WebView2 候选分别为 294.25 ms、405.91 MiB、206.62 MiB。首轮冷启动包含在 p95 中（Iced 1785.51 ms、候选 644.20 ms）。工作集与私有内存口径不同，该数据是同机回归基线，不代表完整内容就绪、真实十万项归档的精确首屏/滚动延迟或跨机器门禁。
