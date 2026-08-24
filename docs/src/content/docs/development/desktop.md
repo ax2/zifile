@@ -30,9 +30,9 @@ Worker 的字节进度（无字节总量时回退到条目进度）同步到 Win
 
 自动测试与 Criterion 已覆盖 100,000 个模拟条目的过滤和有界分页；Windows 实机已检查 1,200 项 ZIP 的三页翻页、搜索、中英文、深浅主题及 `Ctrl+N`。Dioxus 候选另以真实 2 项 ZIP 验证归档区 `Ctrl+A`、动态选择标签与 live status，并以真实 100,000 项 ZIP 验证 Worker 列出、500 行有界 UIA 表格、搜索、多页导航和加载取消。五轮加载取消均进入最终取消状态，且对应 Worker 已退出。
 
-独立键盘回合已从干净启动点用 `Tab`/`Shift+Tab`/`Enter` 正反向切换首页、归档页与创建页，并用键盘切换主题和语言；`Ctrl+N`、`Ctrl+O` 与文件选择器 `Escape` 取消也通过。自动化层只能把 WebView 外层报告为当前焦点，且创建表单最后的方向键值变更观察被人工终止，因此这仍不是“完整键盘遍历”结论。
+独立键盘回合已从干净启动点用 `Tab`/`Shift+Tab`/`Enter` 正反向切换首页、归档页与创建页，并用键盘切换主题和语言；`Ctrl+N`、`Ctrl+O` 与文件选择器 `Escape` 取消也通过。随后新增的前台保护脚本直接读取 WebView2 内部 `FocusedElement`，在中英文流程中复验导航顺序、disabled 按钮跳过、7z 格式选择、压缩等级 `6→7→6`、密码键入/清空和来源按钮可达。测试不会输出密码，用户切换到其他窗口时拒绝继续发送按键。
 
-这些检查尚不等同于完整辅助功能认证。当前 Iced 0.14 UI 不能宣称具备完整的 Windows UI Automation/Narrator 语义树。中文 IME、创建/归档全表单方向键遍历、可见焦点、屏幕阅读器、高对比度、每显示器 DPI 和 Windows Application Certification Kit 仍是上架前门禁。可访问 UI 路线见 ADR-0005。
+这些检查尚不等同于完整辅助功能认证。当前 Iced 0.14 UI 不能宣称具备完整的 Windows UI Automation/Narrator 语义树。中文 IME、归档页完整表格/解压表单遍历、可见焦点、屏幕阅读器、高对比度、每显示器 DPI 和 Windows Application Certification Kit 仍是上架前门禁。可访问 UI 路线见 ADR-0005。
 
 ## 可访问 UI 候选
 
