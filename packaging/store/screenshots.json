@@ -3,6 +3,7 @@
   "status": "draft",
   "source_commit": null,
   "requirements_source": "https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/screenshots-and-images",
+  "capture": null,
   "locales": [
     { "locale": "zh-CN", "screenshots": [] },
     { "locale": "en-US", "screenshots": [] }

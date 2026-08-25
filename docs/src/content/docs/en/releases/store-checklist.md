@@ -14,6 +14,7 @@ description: External distribution gates, required material, and repeatable chec
 - Structured English and Simplified Chinese listing copy, privacy statements, and certification notes are present; CI validates Partner Center limits for descriptions, features, keywords, licensing, and HTTPS URLs, and rejects drift between JSON description paragraphs/features and the readable pages.
 - The bilingual Desktop screenshot manifest has explicit `draft/complete` state. Its gate validates PNG/IHDR, the 1366×768 minimum (or portrait equivalent), the 50 MB limit, SHA-256, path containment, order, scenarios, and 200-character captions. Tagged publishing requires at least four screenshots per language and fails before packaging otherwise.
 - The Store smoke test dynamically creates four real PNGs for each locale, proves that a complete manifest passes, and proves that undersized and duplicate images are rejected. The repository manifest remains an explicit zero-image `draft`; test images are never presented as formal assets.
+- `Import-Screenshots.ps1` atomically imports a fixed four-scenario capture set for both locales, computes hashes and captions, and requires app version, Windows build, theme, scale, UTC time, source commit, and signed-candidate kind. It accepts only a draft destination and refuses to overwrite existing `assets`; invalid images or metadata cannot produce a complete manifest.
 
 A candidate manifest using real Release hashes passed local `winget validate`; this does not mean it has been submitted or accepted.
 
