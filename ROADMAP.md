@@ -16,12 +16,13 @@ documentation system, and engineering gates.
 - [x] Create the Astro Starlight documentation system.
 - [x] Bound a 100,000-entry Iced listing with search and 500-row pagination.
 - [x] Add the first keyboard workflow: Ctrl+O, Ctrl+N, Ctrl+A and Escape.
-- [ ] Verify Chinese IME, full keyboard navigation, screen readers, per-monitor DPI and high contrast.
-- [ ] Reserve `ZiFile` in Microsoft Partner Center.
-- [ ] Decide signing provider for direct GitHub and WinGet releases.
+- [ ] Verify Chinese IME, full keyboard navigation, screen readers, per-monitor DPI and high contrast ([#14](https://github.com/ax2/zifile/issues/14)).
+- [ ] Reserve `ZiFile` in Microsoft Partner Center ([#8](https://github.com/ax2/zifile/issues/8)).
+- [ ] Decide signing provider for direct GitHub and WinGet releases ([#9](https://github.com/ax2/zifile/issues/9)).
 
 Exit criteria: the workspace and docs build from a clean checkout; the UI spike
-passes its acceptance checklist; open architecture risks have ADRs.
+records an evidence-backed keep/replace decision and migration path; open
+architecture risks have ADRs.
 
 ## Stage 1 — Alpha
 
@@ -36,7 +37,8 @@ Goal: safely open, list, create, and extract common archives.
 - [x] Background execution with cooperative cancellation.
 - [x] Determinate byte/entry progress for extraction and creation.
 - [ ] Queued multi-operation scheduling (bounded FIFO scheduler and both UI
-  integrations implemented; real foreground multi-operation smoke pending).
+  integrations implemented; real foreground multi-operation smoke pending in
+  [#11](https://github.com/ax2/zifile/issues/11)).
 - [x] Path traversal, link escape, reserved-name, collision, and expansion-limit defenses.
 - [x] Fuzz targets compile continuously in CI.
 - [x] ZIP, tar.gz and 7z bidirectional interoperability with Windows reference tools.
@@ -56,10 +58,11 @@ Goal: complete the Windows-focused daily workflow.
 - [x] Windows archive file associations and desktop drag-and-drop.
 - [x] Windows taskbar progress and packaged `zifile.exe` App Execution Alias.
 - [ ] Windows 11 File Explorer `IExplorerCommand` context menu extension (Rust DLL and MSIX
-  registration implemented; trusted-package Explorer activation still pending).
+  registration implemented; trusted-package Explorer activation tracked by
+  [#12](https://github.com/ax2/zifile/issues/12)).
 - [x] Isolated worker process with versioned IPC, cancellation and Windows Job Object limits.
 - [x] x64/ARM64 MSIX and standalone executable packaging.
-- [ ] Signed install, upgrade, repair and uninstall tests (trusted-package lifecycle harness
+- [ ] Signed install, upgrade, repair and uninstall tests ([#12](https://github.com/ax2/zifile/issues/12); trusted-package lifecycle harness
   covers install, CLI launch, upgrade, guaranteed uninstall, Reset, and a Windows App SDK Repair
   probe with LocalState preservation evidence when supported; real signed execution remains pending,
   and current Windows 25H2 reports the distinct Repair API unsupported).
@@ -81,12 +84,13 @@ Goal: distribution, accessibility, localization, and hardening.
 - [x] Verify candidate archive-scoped Ctrl+A and dynamic selection labels in a real UI Automation session.
 - [x] Add repeatable bilingual keyboard traversal for candidate navigation and the native create form, including disabled-control skipping and foreground-window protection.
 - [x] Cross-build, package, attest and checksum the candidate MSIX and executables for x64 and ARM64.
-- [ ] Run the candidate MSIX and runnable directory on physical ARM64 Windows hardware.
+- [ ] Run the candidate MSIX and runnable directory on physical ARM64 Windows hardware ([#13](https://github.com/ax2/zifile/issues/13)).
 - [x] Complete equivalent Simplified Chinese and English product documentation.
-- [ ] Complete full keyboard traversal, Narrator, Accessibility Insights, high-contrast, IME and per-monitor DPI verification before replacing Iced.
-- [ ] Windows Application Certification Kit run.
-- [ ] WinGet manifest submission.
-- [ ] Microsoft Store submission and certification.
+- [ ] Complete full keyboard traversal, Narrator, Accessibility Insights, high-contrast, IME and per-monitor DPI verification before replacing Iced ([#14](https://github.com/ax2/zifile/issues/14)).
+- [ ] Capture and validate the formal bilingual Store screenshot set from one signed candidate ([#15](https://github.com/ax2/zifile/issues/15)).
+- [ ] Windows Application Certification Kit run ([#16](https://github.com/ax2/zifile/issues/16)).
+- [ ] WinGet manifest submission ([#18](https://github.com/ax2/zifile/issues/18)).
+- [ ] Microsoft Store submission and certification ([#17](https://github.com/ax2/zifile/issues/17)).
 - [x] Tag workflow for SBOM, provenance attestation and checksums.
 - [x] Reproducible-build documentation and comparison evidence (toolchain pin,
   deterministic linking, target-path remapping, schema v2 diagnostics, and
@@ -96,10 +100,10 @@ Goal: distribution, accessibility, localization, and hardening.
 
 Goal: stable public release.
 
-- Freeze public CLI and provider contracts.
-- Resolve release-blocking compatibility and accessibility issues.
-- Complete user, security, contributor, and release documentation.
-- Publish GitHub, WinGet, and Microsoft Store releases from one version source.
+- [ ] Freeze public CLI and provider contracts ([#19](https://github.com/ax2/zifile/issues/19)).
+- [ ] Resolve release-blocking compatibility and accessibility issues ([#19](https://github.com/ax2/zifile/issues/19)).
+- [ ] Complete user, security, contributor, and release documentation ([#19](https://github.com/ax2/zifile/issues/19)).
+- [ ] Publish GitHub, WinGet, and Microsoft Store releases from one version source ([#19](https://github.com/ax2/zifile/issues/19)).
 
 ## Post-1.0
 
