@@ -21,4 +21,6 @@ Archive contents, names, metadata, links, compression parameters, and password p
 
 The UI does not parse archives. IPC limits requests to 16 MiB and events to 4 MiB; entries stream one at a time. The Windows Worker Job allows one process, caps memory at 4 GiB, and kills on close. Passwords travel only over standard input. This is process isolation, not AppContainer permission isolation.
 
+The CLI does not accept a plaintext `--password` argument. Password-bearing commands must explicitly use `--password-stdin` to read one line, keeping secrets out of process arguments. Callers should still pipe from a secure prompt or secret provider instead of writing real passwords as command literals.
+
 The 7z Provider also converts unwindable backend panics from malformed metadata into ordinary errors. OOM, process termination, and sanitizer findings remain Worker-isolation and fuzzing concerns. `cargo-deny` rejects unknown registries, unknown Git sources, wildcard dependencies, and unapproved licenses. RAR requires a separate review.

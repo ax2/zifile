@@ -5,6 +5,15 @@ description: ZiFile 桌面端的语言、主题、快捷键、大列表行为与
 
 ZiFile 桌面端以 Rust 和 Iced 实现。压缩、校验与解压在后台任务中执行，界面显示条目/字节进度，并允许取消；文件名、文件内容和密码不会上传。
 
+## CLI 密码输入
+
+CLI 不接受会进入进程参数和命令历史的 `--password <值>`。加密的 `list`、`test`、`extract` 和 `create` 使用 `--password-stdin`，从标准输入读取一行非空密码；只删除行尾，密码前后空格会保留。
+
+```powershell
+$password | zifile test archive.7z --password-stdin
+$password | zifile extract archive.7z output --password-stdin
+```
+
 ## 语言与设置
 
 首次启动根据系统区域选择简体中文或英文。左下角可随时切换语言和深浅主题。ZiFile 只在 `%LOCALAPPDATA%\ZiFile\settings.conf` 保存语言和主题，不保存压缩密码、路径或最近打开记录。

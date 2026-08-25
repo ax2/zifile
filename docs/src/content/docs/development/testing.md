@@ -28,13 +28,15 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 
 基础冒烟还会向真实 `zifile-worker.exe` 发送版本化 list 请求，并要求收到 metadata、Unicode entry 和唯一结束事件；随后对 32 MiB 随机输入启动 7z 创建并发送取消控制消息，验证 Worker 在时限内退出、目标不存在且没有临时文件残留。桌面协议单测覆盖缺少终结事件和逐条条目重建；Windows 实机检查验证桌面可通过 Job Object Worker 打开并校验 7z。
 
+CLI 密码单测覆盖显式 opt-in、CRLF/LF 删除、前后空格保留和缺失/空输入拒绝。基础冒烟还要求 CLI 帮助仅暴露 `--password-stdin`，并通过标准输入真实创建、校验和解压 AES 7z；固定测试密码不输出到结果。
+
 任务栏状态映射使用纯单元测试覆盖隐藏、不确定、正常和取消状态；x64 Release/MSIX 构建验证 COM 绑定和 App Execution Alias manifest。任务栏视觉检查与 Narrator/UI Automation 检查仍需在适合的交互式测试环境补证。
 
 共享操作队列单元测试覆盖首项立即启动、后续严格 FIFO、32 项容量边界、满队列不丢失返回载荷、陈旧完成 ID 不推进、清空只影响等待项、等待载荷立即释放，以及 `Debug` 输出不包含载荷。Iced 与 Dioxus 均编译接入同一调度器；在真实前台回合完成“运行中提交至少两项、取消当前项、后续继续、清空等待项”前，不把路线图条目标为完成。
 
 性能门禁需要多轮运行和稳定基线，不能用一次共享 CI 结果直接判定回归。
 
-`tests/reproducibility/windows-build.ps1` 在两个全新目标目录使用固定 Rust 1.93.0、锁文件、单作业构建与 MSVC `/Brepro`，比较默认桌面、可访问候选、CLI、Worker 和 Explorer DLL。云端 32813453959 在新工具链上得到双架构各 4/5；schema v2 运行 32822543635 进一步确认默认 Iced EXE 的 `.rdata` 首差异是 `glutin_wgl_sys` 生成绑定内嵌的 `build-a`/`build-b` target 路径。脚本现用 `CARGO_ENCODED_RUSTFLAGS` 与 `--remap-path-prefix` 把两个根映射到同一虚拟路径；新云端运行通过前，路线图仍未完成，不得把部分匹配写成整体通过。
+`tests/reproducibility/windows-build.ps1` 在两个全新目标目录使用固定 Rust 1.93.0、锁文件、单作业构建与 MSVC `/Brepro`，比较默认桌面、可访问候选、CLI、Worker 和 Explorer DLL。云端 32813453959 在新工具链上得到双架构各 4/5；schema v2 运行 32822543635 进一步确认默认 Iced EXE 的 `.rdata` 首差异是 `glutin_wgl_sys` 生成绑定内嵌的 `build-a`/`build-b` target 路径。脚本现用 `CARGO_ENCODED_RUSTFLAGS` 与 `--remap-path-prefix` 把两个根映射到同一虚拟路径；修复后 32826187552 的 x64/ARM64 都达到 5/5 且 `reproducible=true`。
 
 Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.exe`，分别对 ZIP、tar.gz 与 7z 执行双向互操作：参考工具创建的包由 ZiFile 校验和解压，ZiFile 创建的包由参考工具解压并逐文件核对（含 Unicode 路径）。
 

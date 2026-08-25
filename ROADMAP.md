@@ -84,10 +84,9 @@ Goal: distribution, accessibility, localization, and hardening.
 - [ ] WinGet manifest submission.
 - [ ] Microsoft Store submission and certification.
 - [x] Tag workflow for SBOM, provenance attestation and checksums.
-- [ ] Reproducible-build documentation and comparison evidence (toolchain pin
-  and double-build workflow implemented; schema v2 traced the clean x64/ARM64
-  4/5 result to generated `glutin_wgl_sys` target paths, and path remapping is
-  implemented pending fresh 5/5 evidence).
+- [x] Reproducible-build documentation and comparison evidence (toolchain pin,
+  deterministic linking, target-path remapping, schema v2 diagnostics, and
+  clean x64/ARM64 5/5 evidence completed in run 32826187552).
 
 ## Stage 4 — 1.0
 
