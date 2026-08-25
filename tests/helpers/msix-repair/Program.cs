@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Windows.Management.Deployment;
 
 const int schemaVersion = 1;
+const int probeTimeoutSeconds = 15;
 
 static void WriteResult(object value)
 {
@@ -13,12 +14,32 @@ static void WriteResult(object value)
 
 if (args.Length == 1 && args[0] == "--probe")
 {
-    var supported = PackageDeploymentManager.IsPackageDeploymentFeatureSupported(
-        PackageDeploymentFeature.RepairPackage);
+    var probe = Task.Run(() => PackageDeploymentManager.IsPackageDeploymentFeatureSupported(
+        PackageDeploymentFeature.RepairPackage));
+    bool supported;
+    try
+    {
+        supported = await probe.WaitAsync(TimeSpan.FromSeconds(probeTimeoutSeconds));
+    }
+    catch (TimeoutException)
+    {
+        WriteResult(new
+        {
+            schema_version = schemaVersion,
+            operation = "probe",
+            probe_completed = false,
+            probe_timed_out = true,
+            repair_supported = false,
+            repair_semantics = "preserve_application_data",
+        });
+        return 0;
+    }
     WriteResult(new
     {
         schema_version = schemaVersion,
         operation = "probe",
+        probe_completed = true,
+        probe_timed_out = false,
         repair_supported = supported,
         repair_semantics = "preserve_application_data",
     });

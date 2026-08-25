@@ -88,6 +88,7 @@ jobs:
       - run: dotnet restore tests/helpers/msix-repair/MsixRepair.csproj --locked-mode
       - run: dotnet build tests/helpers/msix-repair/MsixRepair.csproj --configuration Release --no-restore
       - name: Probe Repair capability without changing package state
+        timeout-minutes: 2
         shell: pwsh
         run: ./tests/helpers/msix-repair/bin/Release/net8.0-windows10.0.19041.0/win-x64/MsixRepair.exe --probe
 
