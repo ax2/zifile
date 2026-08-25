@@ -109,6 +109,8 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 新增官方 7-Zip 双向语料门禁，计划覆盖 7 种参考创建的编码/过滤器/加密组合与 2 种 ZiFile 创建归档，并上传逐文件哈希证据；本机没有 `7z.exe`，因此此项仍等待 GitHub Windows Runner 的首次真实结果，不提前记为通过。
 - 首次云端运行 32835391711 在 Deflate 场景发现 `sevenz-rust2` 的对应解码 feature 未启用；既有默认 feature 不包含 Deflate。项目已显式启用后端 `deflate` feature，等待完整语料重跑，失败结果不记为通过。
 - 修复后的 [CI 32836336921](https://github.com/ax2/zifile/actions/runs/32836336921) 四个作业全绿；7-Zip 26.02 的 7 种参考创建场景和 2 种 ZiFile 创建场景全部通过完整文件集与 SHA-256 核对，JSON 证据哈希为 `06278BB8B96AB683A3C117BA5E30F1B4AB1CF89F1BBF01E72BAC0CC26B49DB14`。
+- 新增可信签名 MSIX 生命周期脚本：显式确认后审计基线/升级包，拒绝覆盖既有安装，验证安装、包内 CLI、升级和 Reset，并在 `finally` 中卸载及输出 JSON。当前没有正式签名包，未执行破坏性生命周期；Reset 与保留数据的 Repair 继续分开记录。
+- 用现有结构完整的 x64 开发 MSIX 实测可信签名前置路径：包审计以 `NotSigned` 拒绝，`ZiCode.ZiFile.Dev` 安装数量前后均为 0，未调用安装或改变包注册。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
 - 归档页完整表格/解压表单键盘遍历、可见焦点、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；主导航、创建表单与核心快捷键已有中英文键盘证据。真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索、翻页、加载取消及可重复的首内容/滚动/同时刻整树峰值采样。
 - Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树、Worker 功能路径、核心快捷键、本地 x64 运行及云端 x64/ARM64 打包，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、真实拖放和 ARM64 候选实机运行门禁约束。
