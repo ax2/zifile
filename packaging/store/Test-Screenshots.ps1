@@ -43,6 +43,9 @@ if ($RequireComplete -and $manifest.status -cne 'complete') { throw 'Store scree
 if ($manifest.status -ceq 'complete' -and $manifest.source_commit -notmatch '^[0-9a-f]{40}$') {
     throw 'Complete Store screenshots require a 40-character source_commit.'
 }
+if ($manifest.requirements_source -cne 'https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/screenshots-and-images') {
+    throw 'Screenshot manifest requirements_source must reference the pinned Microsoft Store guidance page.'
+}
 
 $expectedLocales = @('zh-CN', 'en-US')
 $seenHashes = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -54,6 +57,13 @@ foreach ($locale in $expectedLocales) {
     if ($screenshots.Count -gt 10) { throw "$locale exceeds the 10 Desktop screenshot maximum." }
     if (($RequireComplete -or $manifest.status -ceq 'complete') -and $screenshots.Count -lt 4) {
         throw "$locale requires at least four completed Desktop screenshots."
+    }
+    if ($RequireComplete -or $manifest.status -ceq 'complete') {
+        $requiredScenarios = @('browse', 'create', 'extract', 'home')
+        $actualScenarios = @($screenshots | ForEach-Object scenario | Sort-Object -Unique)
+        if (($actualScenarios -join ',') -cne ($requiredScenarios -join ',')) {
+            throw "$locale must cover home, create, browse, and extract screenshot scenarios."
+        }
     }
     $orders = @($screenshots | ForEach-Object order | Sort-Object)
     if (($orders -join ',') -cne ((1..$screenshots.Count) -join ',')) {
