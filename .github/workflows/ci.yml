@@ -91,6 +91,14 @@ jobs:
         timeout-minutes: 2
         shell: pwsh
         run: ./tests/helpers/msix-repair/bin/Release/net8.0-windows10.0.19041.0/win-x64/MsixRepair.exe --probe
+      - name: Prove Repair probe hard timeout
+        timeout-minutes: 1
+        shell: pwsh
+        run: |
+          $result = ./tests/helpers/msix-repair/bin/Release/net8.0-windows10.0.19041.0/win-x64/MsixRepair.exe --probe-timeout-fixture | ConvertFrom-Json
+          if ($result.probe_completed -or -not $result.probe_timed_out -or $result.repair_supported) {
+            throw 'The isolated Repair probe did not produce the required timeout evidence.'
+          }
 
   docs:
     name: Documentation build

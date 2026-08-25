@@ -148,6 +148,8 @@ foreach ($requiredRepairToken in @(
     'RepairPackageAsync',
     'probeTimeoutSeconds',
     'probe_completed',
+    '--probe-timeout-fixture',
+    'entireProcessTree: true',
     '--package-full-name',
     'preserve_application_data'
 )) {
@@ -158,7 +160,8 @@ foreach ($requiredRepairToken in @(
 $ciSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\ci.yml')
 foreach ($requiredRepairWorkflowToken in @(
     'MSIX Repair helper',
-    'timeout-minutes: 2'
+    'timeout-minutes: 2',
+    'Prove Repair probe hard timeout'
 )) {
     if ($ciSource -notmatch [Regex]::Escape($requiredRepairWorkflowToken)) {
         throw "The CI Repair probe omits required timeout token: $requiredRepairWorkflowToken"
