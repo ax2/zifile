@@ -10,7 +10,7 @@ use dioxus_html::HasFileData;
 use rfd::FileDialog;
 use zifile_core::{
     ArchiveEntryInfo, ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy,
-    OperationProgress, OperationSummary, SafetyLimits, detect_format_from_path,
+    OperationProgress, OperationSummary, ProgressSnapshot, SafetyLimits, detect_format_from_path,
 };
 use zifile_worker_protocol::WorkerRequest;
 
@@ -27,6 +27,7 @@ use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 
 const STYLES: &str = include_str!("accessible_ui.css");
+const OPERATION_PROGRESS_LIVE: &str = "off";
 const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src dioxus: ws://127.0.0.1:* http://dioxus.index.html https://dioxus.index.html ipc:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
 const CREATE_FORMATS: [ArchiveFormat; 13] = [
     ArchiveFormat::Zip,
@@ -200,6 +201,13 @@ fn App() -> Element {
         .lock()
         .expect("operation queue lock must not be poisoned")
         .pending_count();
+    let queue_summary = operation_queue_summary(locale, queued_count);
+    let progress_view = progress.map(|snapshot| {
+        (
+            (snapshot.fraction() * 100.0).round() as u8,
+            operation_progress_text(locale, snapshot),
+        )
+    });
     taskbar::sync(
         view.busy,
         view.cancellation
@@ -252,14 +260,16 @@ fn App() -> Element {
                     Page::Archive => rsx! { ArchivePage { state } },
                     Page::Create => rsx! { CreatePage { state } },
                 }
-                footer { class: if view.status_kind == StatusKind::Error { "status-error" } else { "" }, role: status_role, "aria-live": status_live, "aria-atomic": "true",
-                    div { class: "status-copy", span { class: "status-dot", "aria-hidden": "true", "•" } span { {view.status.clone()} } }
-                    span { class: "queue-count", {match locale { Locale::En => format!("{queued_count} queued"), Locale::ZhCn => format!("{queued_count} 个排队") }} }
-                    if let Some(snapshot) = progress {
-                        progress { max: "100", value: "{(snapshot.fraction() * 100.0).round() as u8}", "aria-label": choose(locale, "Operation progress", "操作进度") }
+                footer { class: if view.status_kind == StatusKind::Error { "status-error" } else { "" },
+                    div { id: "operation-status", class: "status-copy", role: status_role, "aria-live": status_live, "aria-atomic": "true",
+                        span { class: "status-dot", "aria-hidden": "true", "•" } span { {view.status.clone()} }
                     }
-                    button { class: "queue-clear", disabled: queued_count == 0, onclick: move |_| clear_queued(state), {choose(locale, "Clear queue", "清空队列")} }
-                    button { disabled: !view.busy, onclick: move |_| cancel_operation(state), {locale.text(Text::Cancel)} }
+                    output { id: "operation-queue-summary", class: "queue-count", role: "status", "aria-live": "polite", "aria-atomic": "true", {queue_summary} }
+                    if let Some((percent, progress_text)) = progress_view {
+                        progress { max: "100", value: "{percent}", "aria-label": choose(locale, "Operation progress", "操作进度"), "aria-valuetext": progress_text, "aria-describedby": "operation-status", "aria-live": OPERATION_PROGRESS_LIVE }
+                    }
+                    button { class: "queue-clear", disabled: queued_count == 0, "aria-describedby": "operation-queue-summary", onclick: move |_| clear_queued(state), {choose(locale, "Clear queue", "清空队列")} }
+                    button { disabled: !view.busy, "aria-describedby": "operation-status", "aria-keyshortcuts": "Escape", onclick: move |_| cancel_operation(state), {locale.text(Text::Cancel)} }
                 }
             }
         }
@@ -1065,6 +1075,67 @@ const fn status_semantics(kind: StatusKind) -> (&'static str, &'static str) {
         StatusKind::Error => ("alert", "assertive"),
     }
 }
+fn operation_queue_summary(locale: Locale, count: usize) -> String {
+    match locale {
+        Locale::En => match count {
+            0 => "No operations queued".to_owned(),
+            1 => "1 operation queued".to_owned(),
+            _ => format!("{count} operations queued"),
+        },
+        Locale::ZhCn => format!("{count} 个操作排队"),
+    }
+}
+fn operation_progress_text(locale: Locale, snapshot: ProgressSnapshot) -> String {
+    let percent = (snapshot.fraction() * 100.0).round() as u8;
+    let processed_entries = snapshot.processed_entries.min(snapshot.total_entries);
+    let processed_bytes = snapshot.processed_bytes.min(snapshot.total_bytes);
+    match (locale, snapshot.total_bytes > 0, snapshot.total_entries > 0) {
+        (Locale::En, true, true) => format!(
+            "{percent}% · {} of {} · {processed_entries} of {} {}",
+            format_bytes(processed_bytes),
+            format_bytes(snapshot.total_bytes),
+            snapshot.total_entries,
+            if snapshot.total_entries == 1 {
+                "entry"
+            } else {
+                "entries"
+            }
+        ),
+        (Locale::En, true, false) => format!(
+            "{percent}% · {} of {}",
+            format_bytes(processed_bytes),
+            format_bytes(snapshot.total_bytes)
+        ),
+        (Locale::En, false, true) => format!(
+            "{percent}% · {processed_entries} of {} {}",
+            snapshot.total_entries,
+            if snapshot.total_entries == 1 {
+                "entry"
+            } else {
+                "entries"
+            }
+        ),
+        (Locale::En, false, false) => "Operation starting".to_owned(),
+        (Locale::ZhCn, true, true) => format!(
+            "{percent}% · {} / {} · {processed_entries} / {} 项",
+            format_bytes(processed_bytes),
+            format_bytes(snapshot.total_bytes),
+            snapshot.total_entries
+        ),
+        (Locale::ZhCn, true, false) => format!(
+            "{percent}% · {} / {}",
+            format_bytes(processed_bytes),
+            format_bytes(snapshot.total_bytes)
+        ),
+        (Locale::ZhCn, false, true) => {
+            format!(
+                "{percent}% · {processed_entries} / {} 项",
+                snapshot.total_entries
+            )
+        }
+        (Locale::ZhCn, false, false) => "操作正在启动".to_owned(),
+    }
+}
 const fn choose<'a>(locale: Locale, english: &'a str, chinese: &'a str) -> &'a str {
     match locale {
         Locale::En => english,
@@ -1155,6 +1226,36 @@ mod tests {
             ("status", "polite")
         );
         assert_eq!(status_semantics(StatusKind::Error), ("alert", "assertive"));
+    }
+
+    #[test]
+    fn operation_footer_copy_is_precise_and_bilingual() {
+        assert_eq!(OPERATION_PROGRESS_LIVE, "off");
+        assert_eq!(
+            operation_queue_summary(Locale::En, 0),
+            "No operations queued"
+        );
+        assert_eq!(operation_queue_summary(Locale::En, 1), "1 operation queued");
+        assert_eq!(operation_queue_summary(Locale::ZhCn, 3), "3 个操作排队");
+
+        let byte_progress = ProgressSnapshot {
+            processed_entries: 2,
+            total_entries: 4,
+            processed_bytes: 512,
+            total_bytes: 1024,
+        };
+        assert_eq!(
+            operation_progress_text(Locale::En, byte_progress),
+            "50% · 512 B of 1.0 KB · 2 of 4 entries"
+        );
+        assert_eq!(
+            operation_progress_text(Locale::ZhCn, byte_progress),
+            "50% · 512 B / 1.0 KB · 2 / 4 项"
+        );
+        assert_eq!(
+            operation_progress_text(Locale::En, ProgressSnapshot::default()),
+            "Operation starting"
+        );
     }
 
     #[test]
