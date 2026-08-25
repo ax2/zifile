@@ -35,3 +35,5 @@ The trusted lifecycle workflow also builds a self-contained test helper pinned t
 7. Submit validated MSIX packages; after a public Release, generate and submit the WinGet PR.
 
 Until these external gates pass, no Alpha artifact may be called Store-ready or signed.
+
+Before WACK, run `Test-WackReadiness.ps1 -RequireReady` against the target MSIX and adjacent `.audit.json`. Passing readiness only proves the tool, session, architecture, identity, hash, minimum OS, and signature preconditions; the generated WACK report remains authoritative.

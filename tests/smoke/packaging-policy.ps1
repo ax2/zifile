@@ -8,8 +8,9 @@ $repairHelper = Join-Path $repoRoot 'tests\helpers\msix-repair\Program.cs'
 $repairProject = Join-Path $repoRoot 'tests\helpers\msix-repair\MsixRepair.csproj'
 $repairProbe = Join-Path $repoRoot 'tests\helpers\msix-repair\Invoke-Probe.ps1'
 $rarCorpus = Join-Path $repoRoot 'tests\interoperability\rar-corpus.ps1'
+$wackReadiness = Join-Path $repoRoot 'packaging\msix\Test-WackReadiness.ps1'
 
-foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus)) {
+foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness)) {
     $tokens = $null
     $errors = $null
     [System.Management.Automation.Language.Parser]::ParseFile(
@@ -214,6 +215,14 @@ foreach ($requiredCiToken in @(
         throw "CI does not publish the RAR corpus gate or evidence: $requiredCiToken"
     }
 }
+foreach ($requiredWackToken in @(
+    'WACK readiness policy',
+    './tests/smoke/wack-readiness.ps1'
+)) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredWackToken)) {
+        throw "CI does not exercise WACK readiness policy: $requiredWackToken"
+    }
+}
 
 [pscustomobject]@{
     schema_version = 1
@@ -230,4 +239,5 @@ foreach ($requiredCiToken in @(
     repair_helper_wired = $true
     rar_association_wired = $true
     rar_corpus_wired = $true
+    wack_readiness_wired = $true
 } | ConvertTo-Json

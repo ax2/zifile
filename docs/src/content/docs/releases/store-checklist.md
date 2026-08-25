@@ -37,4 +37,6 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 
 未完成这些外部门禁时，任何 Alpha 构建都不得标记为“Microsoft Store 已就绪”或“已签名”。
 
+运行 WACK 前先对目标 MSIX 与同目录 `.audit.json` 执行 `Test-WackReadiness.ps1 -RequireReady`。预检通过只表示工具、会话、架构、身份、哈希、最低系统版本和签名满足启动条件；最终仍以 WACK 生成的正式报告为准。
+
 微软参考资料：[WinGet 1.12 多文件清单规范](https://github.com/microsoft/winget-pkgs/tree/master/doc/manifest/schema/1.12.0)、[Microsoft Store 提交流程](https://learn.microsoft.com/windows/apps/publish/faq/submit-your-app)、[MSIX 包要求](https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/app-package-requirements)。

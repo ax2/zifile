@@ -87,6 +87,22 @@ artifacts into a clean Windows Runner, derives package metadata from their audit
 same lifecycle gate, and retains evidence for 30 days. ARM64 package installation still requires a
 physical ARM64 Windows test environment.
 
+Before launching WACK, evaluate the exact package/audit pair without installing or executing it:
+
+```powershell
+./packaging/msix/Test-WackReadiness.ps1 `
+  -PackagePath ./ZiFile-1.0.0.0-windows-x64.msix `
+  -AuditPath ./ZiFile-1.0.0.0-windows-x64.audit.json `
+  -EvidencePath ./wack-readiness-x64.json `
+  -RequireReady
+```
+
+The readiness gate requires an interactive administrator session, an installed Windows App
+Certification Kit, matching host/package architecture, a matching schema-v2 audit and package
+SHA-256, formal identity/publisher, Windows 10 build 19041 minimum support, zero forbidden files,
+and a trusted `Valid` signature in both the package and its audit. It does not run WACK, install the
+package, or replace the certification report.
+
 Before Store submission the project still needs a Partner Center identity,
 trusted signing credentials for direct distribution, upgrade/uninstall test
 evidence, Store listing screenshots, and Windows Application Certification Kit

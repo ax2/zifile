@@ -39,6 +39,9 @@ jobs:
       - name: Packaging policy smoke test
         shell: pwsh
         run: ./tests/smoke/packaging-policy.ps1
+      - name: WACK readiness policy
+        shell: pwsh
+        run: ./tests/smoke/wack-readiness.ps1
       - name: Store listing policy
         shell: pwsh
         run: ./tests/smoke/store-listing.ps1
