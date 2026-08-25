@@ -12,6 +12,7 @@ description: External distribution gates, required material, and repeatable chec
 - Package audits for identity, publisher, version, minimum OS, four PE architectures, associations, CLI alias, sensitive-file/ZIP absence, and signature state.
 - Tag policy rejects missing official credentials, `.Dev` identities, and unsigned OID publishers.
 - Structured English and Simplified Chinese listing copy, privacy statements, and certification notes are present; CI validates Partner Center limits for descriptions, features, keywords, licensing, and HTTPS URLs.
+- The bilingual Desktop screenshot manifest has explicit `draft/complete` state. Its gate validates PNG/IHDR, the 1366×768 minimum (or portrait equivalent), the 50 MB limit, SHA-256, path containment, order, scenarios, and 200-character captions. Tagged publishing requires at least four screenshots per language and fails before packaging otherwise.
 
 A candidate manifest using real Release hashes passed local `winget validate`; this does not mean it has been submitted or accepted.
 

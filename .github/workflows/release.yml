@@ -66,6 +66,7 @@ jobs:
             -Publisher $env:ZIFILE_MSIX_PUBLISHER `
             -SigningCertificateAvailable:(-not [string]::IsNullOrWhiteSpace($env:ZIFILE_PFX_BASE64)) `
             -SigningPasswordAvailable:(-not [string]::IsNullOrWhiteSpace($env:ZIFILE_PFX_PASSWORD))
+          ./packaging/store/Test-Screenshots.ps1 -RequireComplete
       - name: Build MSIX and runnable executables
         shell: pwsh
         env:

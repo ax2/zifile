@@ -87,6 +87,9 @@ $lifecycleWorkflowSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.
 if ($releaseSource -notmatch [Regex]::Escape('Test-PublishingInputs.ps1')) {
     throw 'The release workflow does not invoke the publishing input policy.'
 }
+if ($releaseSource -notmatch [Regex]::Escape('Test-Screenshots.ps1 -RequireComplete')) {
+    throw 'The tagged release workflow does not require completed Store screenshots.'
+}
 if ($releaseSource -notmatch [Regex]::Escape('.audit.json')) {
     throw 'The release workflow does not stage MSIX audit evidence.'
 }
