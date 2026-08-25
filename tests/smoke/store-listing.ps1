@@ -51,6 +51,26 @@ function Write-TestListing {
     $listing | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path -Encoding utf8
 }
 
+function Write-TestScreenshot {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][int]$Marker,
+        [int]$Width = 1366,
+        [int]$Height = 768
+    )
+    $directory = Split-Path -Parent $Path
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    $bitmap = [Drawing.Bitmap]::new($Width, $Height)
+    try {
+        $graphics = [Drawing.Graphics]::FromImage($bitmap)
+        try { $graphics.Clear([Drawing.Color]::FromArgb(255, 28 + $Marker, 38, 52)) }
+        finally { $graphics.Dispose() }
+        $bitmap.SetPixel($Marker, $Marker, [Drawing.Color]::FromArgb(255, 80, 180, 255))
+        $bitmap.Save($Path, [Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally { $bitmap.Dispose() }
+}
+
 try {
     New-Item -ItemType Directory -Path $testDirectory -ErrorAction Stop | Out-Null
     Copy-Item -LiteralPath (Join-Path $sourceDirectory 'listing.zh-CN.json') -Destination $testDirectory
@@ -65,6 +85,61 @@ try {
         throw 'Draft Store screenshot manifest did not pass its explicit incomplete-state validation.'
     }
     Get-ExpectedFailure -Pattern 'not marked complete' -Action { & $screenshotValidator -RequireComplete }
+
+    Add-Type -AssemblyName System.Drawing
+    $scenarios = @('home', 'create', 'browse', 'extract')
+    $localeSets = @()
+    $marker = 0
+    foreach ($locale in @('zh-CN', 'en-US')) {
+        $shots = @()
+        for ($index = 0; $index -lt $scenarios.Count; $index++) {
+            $marker++
+            $relative = "assets/$locale/desktop/$($index + 1)-$($scenarios[$index]).png"
+            $absolute = Join-Path $testDirectory ($relative -replace '/', [IO.Path]::DirectorySeparatorChar)
+            Write-TestScreenshot -Path $absolute -Marker $marker
+            $shots += [ordered]@{
+                order = $index + 1
+                scenario = $scenarios[$index]
+                path = $relative
+                caption = "$locale $($scenarios[$index])"
+                sha256 = (Get-FileHash -LiteralPath $absolute -Algorithm SHA256).Hash
+            }
+        }
+        $localeSets += [ordered]@{ locale = $locale; screenshots = $shots }
+    }
+    $screenshotManifestPath = Join-Path $testDirectory 'screenshots.json'
+    $screenshotManifest = [ordered]@{
+        schema_version = 1
+        status = 'complete'
+        source_commit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        requirements_source = 'https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/screenshots-and-images'
+        locales = $localeSets
+    }
+    $screenshotManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $screenshotManifestPath -Encoding utf8
+    $completeScreenshots = & $screenshotValidator -ManifestPath $screenshotManifestPath -RequireComplete | ConvertFrom-Json
+    if (-not $completeScreenshots.complete -or $completeScreenshots.screenshots -ne 8) {
+        throw 'A complete bilingual eight-screenshot manifest did not pass validation.'
+    }
+
+    $first = $screenshotManifest.locales[0].screenshots[0]
+    $firstPath = Join-Path $testDirectory ($first.path -replace '/', [IO.Path]::DirectorySeparatorChar)
+    Write-TestScreenshot -Path $firstPath -Marker 20 -Width 800 -Height 600
+    $first.sha256 = (Get-FileHash -LiteralPath $firstPath -Algorithm SHA256).Hash
+    $screenshotManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $screenshotManifestPath -Encoding utf8
+    Get-ExpectedFailure -Pattern 'smaller than 1366x768' -Action {
+        & $screenshotValidator -ManifestPath $screenshotManifestPath -RequireComplete
+    }
+
+    Write-TestScreenshot -Path $firstPath -Marker 21
+    $first.sha256 = (Get-FileHash -LiteralPath $firstPath -Algorithm SHA256).Hash
+    $second = $screenshotManifest.locales[0].screenshots[1]
+    $secondPath = Join-Path $testDirectory ($second.path -replace '/', [IO.Path]::DirectorySeparatorChar)
+    Copy-Item -LiteralPath $firstPath -Destination $secondPath -Force
+    $second.sha256 = $first.sha256
+    $screenshotManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $screenshotManifestPath -Encoding utf8
+    Get-ExpectedFailure -Pattern 'Duplicate screenshot content' -Action {
+        & $screenshotValidator -ManifestPath $screenshotManifestPath -RequireComplete
+    }
 
     Write-TestListing -Locale 'en-US' -Mutation { param($listing) $listing.features[0] = 'x' * 201 }
     Get-ExpectedFailure -Pattern 'maximum is 200' -Action {
@@ -94,6 +169,9 @@ try {
         description_url_rejected = $true
         screenshot_draft_validated = $true
         incomplete_screenshots_rejected_for_release = $true
+        complete_bilingual_screenshots_accepted = $true
+        undersized_screenshot_rejected = $true
+        duplicate_screenshot_rejected = $true
     } | ConvertTo-Json
 }
 finally {
