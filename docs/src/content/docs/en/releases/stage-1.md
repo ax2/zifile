@@ -50,3 +50,5 @@ Double-build run `32813453959` remained 4/5 identical on both x64 and ARM64. Sch
 The CLI removed plaintext `--password <value>` process arguments in favor of explicit `--password-stdin`. Three unit tests and the foundation smoke cover non-empty single-line input, space preservation, the help-surface policy, and real AES 7z create/test/extract operations.
 
 An official 7-Zip bidirectional corpus gate now defines seven reference-created codec/filter/encryption cases and two ZiFile-created cases, with complete file-set and SHA-256 comparison plus uploaded JSON evidence. The local machine has no `7z.exe`, so this item remains pending its first real GitHub Windows Runner result and is not yet recorded as passed.
+
+The first cloud run, `32835391711`, reached the Deflate case and exposed that the optional `sevenz-rust2` Deflate decoder feature was not enabled by its defaults. ZiFile now enables that feature explicitly; the corpus remains pending a complete rerun.
