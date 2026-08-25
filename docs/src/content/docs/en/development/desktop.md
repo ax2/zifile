@@ -41,6 +41,8 @@ The archive selection control now exposes an actionable “Select all archive fi
 
 The global announcer distinguishes information from failure. Progress, queue, cancellation, and selection updates remain `status`/polite; Worker failures, a full queue, unexpected Worker output, and internal queue errors use atomic `alert`/assertive semantics plus visible normal- and forced-color emphasis. A unit test locks the “interrupt only for errors” contract so frequent progress does not repeatedly interrupt assistive technology.
 
+The create-source list now has an atomic live count. Every Remove button includes its full source path in its accessible name instead of exposing a set of indistinguishable controls. File/folder add, drop, remove, and clear actions announce the change and resulting count; removal matches the path rather than a potentially stale list index. Rust tests cover bilingual path/count copy and English singular/plural behavior.
+
 These checks are not full certification. Complete real keyboard/Narrator archive and extract traversal, visible focus, Narrator, Accessibility Insights, physical high contrast, Chinese IME, per-monitor DPI, real cross-window drop, physical ARM64 execution, and WACK remain release gates. Build the candidate with:
 
 ```powershell

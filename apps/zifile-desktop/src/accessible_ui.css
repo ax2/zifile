@@ -92,6 +92,7 @@ th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
 .path-cell { width: 100%; max-width: 520px; overflow: hidden; text-overflow: ellipsis; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 14px; }
 .source-list { min-height: 170px; max-height: 310px; overflow: auto; background: var(--surface); border: 1px solid var(--border); padding: 18px; }
+.source-summary { display: block; margin-bottom: 10px; color: var(--muted); font-size: .88rem; }
 .source-list ul { list-style: none; margin: 0; padding: 0; }
 .source-list li { display: flex; align-items: center; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .source-list li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
