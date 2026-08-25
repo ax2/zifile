@@ -30,3 +30,9 @@ CLI 不接受明文 `--password` 参数；需要密码的命令只能显式使�
 ## 依赖与许可证
 
 默认发行物只允许经过批准的宽松许可证。`cargo-deny` 阻止未知 registry、未知 Git 来源和通配依赖。RAR Provider 使用 MIT OR Apache-2.0 的 `rars`，不会改变 ZiFile 的 MIT 分发边界；升级仍必须重新执行依赖、语料、fuzz 与互操作评审。
+
+## 漏洞报告与支持范围
+
+当前仓库尚未启用 GitHub 私密漏洞报告。启用前，请将报告私下发送到 `ax2@zicode.com`，主题使用 `ZiFile security report`；不要在公开 Issue 中附带未修复漏洞、可用利用代码、恶意压缩包、密码、凭据或客户数据。报告应尽量包含受影响版本或提交、影响、复现步骤以及不含敏感信息的最小样例。
+
+首次稳定版之前，只有默认分支接收安全修复，项目暂不承诺固定响应时限。解析与路径逃逸、链接或 reparse point、资源耗尽、密码泄露、权限边界、安装包完整性以及 Shell 集成属于报告范围。完整披露规则和未来支持版本表以仓库根目录的 [`SECURITY.md`](https://github.com/ax2/zifile/blob/main/SECURITY.md) 为准。

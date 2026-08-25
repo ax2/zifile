@@ -55,6 +55,7 @@ pnpm --dir docs build
 - [Roadmap](ROADMAP.md)
 - [Architecture](docs/src/content/docs/architecture/overview.md)
 - [Security model](docs/src/content/docs/architecture/security.md)
+- [Security policy and private reporting](SECURITY.md)
 - [Testing strategy](docs/src/content/docs/development/testing.md)
 - [Contributing](CONTRIBUTING.md)
 - [Desktop usage and accessibility](docs/src/content/docs/development/desktop.md)

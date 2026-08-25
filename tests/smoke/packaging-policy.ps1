@@ -12,8 +12,9 @@ $wackReadiness = Join-Path $repoRoot 'packaging\msix\Test-WackReadiness.ps1'
 $versionConsistency = Join-Path $repoRoot 'scripts\Test-VersionConsistency.ps1'
 $releaseNotes = Join-Path $repoRoot 'scripts\Test-ReleaseNotes.ps1'
 $contributorDocs = Join-Path $repoRoot 'scripts\Test-ContributorDocs.ps1'
+$securityDocs = Join-Path $repoRoot 'scripts\Test-SecurityDocs.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -96,6 +97,10 @@ if (-not $unreleasedNotes.unreleased_section -or $unreleasedNotes.ready_for_tag)
 $contributorResult = & $contributorDocs | ConvertFrom-Json
 if (-not $contributorResult.synchronized -or $contributorResult.locale_guides -ne 2) {
     throw 'Contributor documentation is not synchronized with repository policy.'
+}
+$securityResult = & $securityDocs | ConvertFrom-Json
+if (-not $securityResult.synchronized -or $securityResult.locale_pages -ne 2) {
+    throw 'Security documentation is not synchronized with repository policy.'
 }
 $null = Get-ExpectedFailure -Pattern 'does not contain release heading' -Action {
     & $releaseNotes -ExpectedVersion $versionResult.tag
@@ -308,6 +313,9 @@ if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ReleaseNotes.ps1')) {
 if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ContributorDocs.ps1')) {
     throw 'CI does not enforce contributor documentation consistency.'
 }
+if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-SecurityDocs.ps1')) {
+    throw 'CI does not enforce security documentation consistency.'
+}
 foreach ($requiredRepairWorkflowToken in @(
     'MSIX Repair helper',
     'timeout-minutes: 2',
@@ -380,4 +388,5 @@ foreach ($requiredWackToken in @(
     version_consistency_wired = $true
     release_notes_wired = $true
     contributor_docs_wired = $true
+    security_docs_wired = $true
 } | ConvertTo-Json

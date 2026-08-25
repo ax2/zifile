@@ -24,3 +24,9 @@ The UI does not parse archives. IPC limits requests to 16 MiB and events to 4 Mi
 The CLI does not accept a plaintext `--password` argument. Password-bearing commands must explicitly use `--password-stdin` to read one line, keeping secrets out of process arguments. Callers should still pipe from a secure prompt or secret provider instead of writing real passwords as command literals.
 
 The 7z and RAR Providers convert unwindable backend panics from malformed metadata into ordinary errors. RAR additionally rejects Unix links, Windows reparse entries and RAR 5+ redirections before decoding; decoded bytes are counted independently of declared sizes and files remain temporary until the complete operation succeeds. OOM, process termination, and sanitizer findings remain Worker-isolation and fuzzing concerns. `cargo-deny` rejects unknown registries, unknown Git sources, wildcard dependencies, and unapproved licenses.
+
+## Reporting and support scope
+
+GitHub private vulnerability reporting is not currently enabled. Until it is enabled, send reports privately to `ax2@zicode.com` with the subject `ZiFile security report`. Do not attach an unpatched vulnerability, working exploit, malicious archive, password, credential, or customer data to a public issue. Include the affected version or commit, impact, reproduction steps, and a minimal non-sensitive test case when practical.
+
+Before the first stable release, only the default branch receives security fixes, and the project does not promise a fixed response SLA. Parser and path escape defects, links or reparse points, resource exhaustion, password exposure, privilege boundaries, package integrity, and shell integration are in scope. The root [`SECURITY.md`](https://github.com/ax2/zifile/blob/main/SECURITY.md) is authoritative for disclosure and future supported-version information.
