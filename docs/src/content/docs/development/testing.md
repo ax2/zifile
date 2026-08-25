@@ -40,6 +40,8 @@ Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.
 
 每次 CI 会编译 libFuzzer 目标；每周定时工作流对路径策略、格式识别和归档解析器各运行 180 秒有界 fuzz，失败时保留崩溃产物 14 天。归档目标用带格式签名的变异输入覆盖 ZIP、7z、四种 TAR 组合和六种单流格式，限制输入为 256 KiB、RSS 为 2 GiB、单输入为 10 秒；目标内部还使用 256 条目、4 MiB 展开量、64 倍压缩比和 32 层路径的严格限制。Windows/MSVC 本地 `cargo-fuzz` 因 `sevenz-rust2` DLL 与 libFuzzer 入口点参数冲突无法链接，Rust 编译检查可通过；动态 campaign 以 Linux GNU 定时工作流为验收环境。更广泛的第三方 7-Zip/libarchive 语料仍未完成。
 
+首轮归档解析器 campaign 32733658052 在约 569,000 次执行后发现 292 字节输入可令 `sevenz-rust2` 的文件数量分配触发 `capacity overflow`。崩溃输入已转为永久集成测试；ZiFile 的 7z Provider 边界现在把这种可 unwind 的后端 panic 转成错误。修复后的 campaign 必须独立通过后才可关闭该回归。
+
 当前 8 MiB 可压缩语料在本地 Windows x64 的一次基线中，ZIP 创建约为 262–275 MiB/s，完整性校验约为 3.04–3.15 GiB/s。该结果只用于建立初始量级，不作为跨机器 CI 阈值。
 
 桌面列表回归测试使用 100,000 个模拟条目，断言搜索结果正确且每次只构造最多 500 个可见行。默认 Iced 与 Dioxus 候选共用 `entry_view` 实现；运行 `cargo bench -p zifile-desktop --bench entry_browser --locked` 可复测。2026-08-24 的 Windows x64 基线中，选择性计数为 16.90–17.62 ms（5.68–5.92 M 条/秒），收集有界页为 15.46–15.96 ms（6.27–6.47 M 条/秒）。Windows 实机还以 100,000 个空条目的真实 ZIP 通过隔离 Worker 打开：UI Automation 报告 100,000 项和 200 页，但表格仅暴露当前 500 行；搜索 `99999` 精确定位末项，搜索 `000` 形成 3 页并可导航到第 3 页。

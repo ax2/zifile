@@ -409,3 +409,37 @@ fn malformed_primary_archive_headers_fail_without_panicking() {
         );
     }
 }
+
+#[test]
+fn fuzz_discovered_seven_zip_capacity_overflow_is_reported_as_an_error() {
+    const CRASH_HEX: &str = concat!(
+        "0100000000000000000000000000000000000000000000000000000000000000000000000000",
+        "DF0001054000000000000000580200000000D70032DF5480BBFFFFFF00072609FFFFFF0105FFFFFF",
+        "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFBFFFFFFFFFFFFFF3E00FFFFFFFF21FF",
+        "FFFFFFFFFFFFFFFFFFFFFF7FFFFFFFFFFF0000FF00002B0012657A585AFFFFFFFFFFFFFFFFFFFFFF",
+        "FFFFFFFFFFFFFFFFFFFFFFFF04000027000000C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2E2",
+        "C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2",
+        "C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2",
+        "C2C2C2C2C2C2C2C2C2C2C2C2C2C2425A68C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2",
+        "C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C200"
+    );
+    let fuzz_input = CRASH_HEX
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let digits = std::str::from_utf8(pair).unwrap();
+            u8::from_str_radix(digits, 16).unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(fuzz_input[0], 1, "fixture must select the 7z fuzz case");
+    let mut bytes = b"7z\xBC\xAF\x27\x1C".to_vec();
+    bytes.extend_from_slice(&fuzz_input[1..]);
+    let temp = tempfile::tempdir().unwrap();
+    let archive = temp.path().join("fuzz-capacity-overflow.7z");
+    fs::write(&archive, bytes).unwrap();
+
+    let result = list_archive_with_limits(&archive, None, SafetyLimits::default());
+
+    assert!(matches!(result, Err(ZiFileError::Backend(message)) if
+        message == "7z backend rejected malformed metadata while listing the archive"));
+}
