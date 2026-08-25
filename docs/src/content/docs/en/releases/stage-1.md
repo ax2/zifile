@@ -29,7 +29,7 @@ WinGet 1.12 candidate manifests generated from real Release hashes passed local 
 
 ### Remaining work
 
-- Real foreground queued-operation smoke, broader third-party 7-Zip/libarchive corpora, and trusted Explorer activation.
+- Real foreground queued-operation smoke, continued malformed/bomb/libarchive corpus expansion, and trusted Explorer activation.
 - Signed install/upgrade/repair/uninstall and WACK in suitable interactive environments.
 - Complete archive/extract keyboard traversal, Narrator, Accessibility Insights, visible focus, high contrast, Chinese IME, per-monitor DPI, real drop, and physical ARM64 execution.
 - Partner Center identity/name, production signing, Store submission, and WinGet PR.
@@ -52,3 +52,5 @@ The CLI removed plaintext `--password <value>` process arguments in favor of exp
 An official 7-Zip bidirectional corpus gate now defines seven reference-created codec/filter/encryption cases and two ZiFile-created cases, with complete file-set and SHA-256 comparison plus uploaded JSON evidence. The local machine has no `7z.exe`, so this item remains pending its first real GitHub Windows Runner result and is not yet recorded as passed.
 
 The first cloud run, `32835391711`, reached the Deflate case and exposed that the optional `sevenz-rust2` Deflate decoder feature was not enabled by its defaults. ZiFile now enables that feature explicitly; the corpus remains pending a complete rerun.
+
+The corrected [CI run 32836336921](https://github.com/ax2/zifile/actions/runs/32836336921) passed all four jobs. Seven reference-created and two ZiFile-created cases passed complete file-set and SHA-256 comparison with 7-Zip 26.02. The evidence JSON SHA-256 is `06278BB8B96AB683A3C117BA5E30F1B4AB1CF89F1BBF01E72BAC0CC26B49DB14`.

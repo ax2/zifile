@@ -77,7 +77,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 
 - 多任务队列的共享调度器与两套 UI 接线已完成，但真实前台串行/取消/清空冒烟尚待无干扰回合；列出和校验操作目前没有细粒度进度。
 - Worker 仍继承当前用户权限，尚未采用 AppContainer；CPU 时间限制和 Broker 模型待后续纵深防御评估。
-- 更广泛的第三方 7-Zip/libarchive 语料，以及损坏、截断和压缩炸弹扩展语料。
+- 损坏、截断、压缩炸弹和更多 libarchive 变体的持续扩展语料。
 
 ## 2026-08-24 — 解析器边界加固
 
@@ -108,6 +108,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - CLI 删除会把密码暴露到进程参数的 `--password <值>`，改为显式 `--password-stdin`；3 项单测与基础冒烟覆盖非空单行读取、空格保留、帮助面策略及 AES 7z 创建/校验/解压。
 - 新增官方 7-Zip 双向语料门禁，计划覆盖 7 种参考创建的编码/过滤器/加密组合与 2 种 ZiFile 创建归档，并上传逐文件哈希证据；本机没有 `7z.exe`，因此此项仍等待 GitHub Windows Runner 的首次真实结果，不提前记为通过。
 - 首次云端运行 32835391711 在 Deflate 场景发现 `sevenz-rust2` 的对应解码 feature 未启用；既有默认 feature 不包含 Deflate。项目已显式启用后端 `deflate` feature，等待完整语料重跑，失败结果不记为通过。
+- 修复后的 [CI 32836336921](https://github.com/ax2/zifile/actions/runs/32836336921) 四个作业全绿；7-Zip 26.02 的 7 种参考创建场景和 2 种 ZiFile 创建场景全部通过完整文件集与 SHA-256 核对，JSON 证据哈希为 `06278BB8B96AB683A3C117BA5E30F1B4AB1CF89F1BBF01E72BAC0CC26B49DB14`。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
 - 归档页完整表格/解压表单键盘遍历、可见焦点、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；主导航、创建表单与核心快捷键已有中英文键盘证据。真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索、翻页、加载取消及可重复的首内容/滚动/同时刻整树峰值采样。
 - Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树、Worker 功能路径、核心快捷键、本地 x64 运行及云端 x64/ARM64 打包，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、真实拖放和 ARM64 候选实机运行门禁约束。

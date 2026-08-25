@@ -40,7 +40,7 @@ CLI 密码单测覆盖显式 opt-in、CRLF/LF 删除、前后空格保留和缺�
 
 Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.exe`，分别对 ZIP、tar.gz 与 7z 执行双向互操作：参考工具创建的包由 ZiFile 校验和解压，ZiFile 创建的包由参考工具解压并逐文件核对（含 Unicode 路径）。
 
-新增的官方 7-Zip 语料门禁使用 GitHub Windows Runner 上的 `7z.exe`，覆盖 Copy、LZMA、LZMA2+BCJ、Deflate、BZip2、PPMd，以及带文件名加密的 LZMA2+AES；反向还要求官方 7-Zip 校验并解压 ZiFile 创建的普通与 AES 归档。所有场景逐文件比较 SHA-256，并上传不含密码的 JSON 证据。该门禁只有云端真实运行通过后才计入完成状态。
+新增的官方 7-Zip 语料门禁使用 GitHub Windows Runner 上的 `7z.exe`，覆盖 Copy、LZMA、LZMA2+BCJ、Deflate、BZip2、PPMd，以及带文件名加密的 LZMA2+AES；反向还要求官方 7-Zip 校验并解压 ZiFile 创建的普通与 AES 归档。所有场景逐文件比较 SHA-256，并上传不含密码的 JSON 证据。CI 32836336921 使用 7-Zip 26.02 完成 9/9 场景，证据 JSON SHA-256 为 `06278BB8B96AB683A3C117BA5E30F1B4AB1CF89F1BBF01E72BAC0CC26B49DB14`。
 
 每次 CI 会编译 libFuzzer 目标；每周定时工作流对路径策略、格式识别和归档解析器各运行 180 秒有界 fuzz，失败时保留崩溃产物 14 天。归档目标用带格式签名的变异输入覆盖 ZIP、7z、四种 TAR 组合和六种单流格式，限制输入为 256 KiB、RSS 为 2 GiB、单输入为 10 秒；目标内部还使用 256 条目、4 MiB 展开量、64 倍压缩比和 32 层路径的严格限制。Windows/MSVC 本地 `cargo-fuzz` 因 `sevenz-rust2` DLL 与 libFuzzer 入口点参数冲突无法链接，Rust 编译检查可通过；动态 campaign 以 Linux GNU 定时工作流为验收环境。损坏、截断、炸弹及更多 libarchive 变体仍需继续扩展。
 

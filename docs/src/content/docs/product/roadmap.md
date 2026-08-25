@@ -8,7 +8,7 @@ description: ZiFile 从基础验证到 1.0 的阶段计划。
 | 阶段 | 目标 | 关键交付 |
 | --- | --- | --- |
 | Stage 0 | 验证基础 | Rust workspace、Iced、CI、Starlight、ADR、十万条目有界列表验证 |
-| Stage 1（进行中） | Alpha | 已打通 ZIP/7z/TAR 家族、安全解压、中英文 UI、搜索分页、真实进度、取消和全格式解析器 fuzz 入口；继续扩展第三方边界语料 |
+| Stage 1（进行中） | Alpha | 已打通 ZIP/7z/TAR 家族、安全解压、中英文 UI、搜索分页、真实进度、取消、全格式 parser fuzz 和官方 7-Zip 九场景语料；继续扩展畸形与炸弹边界语料 |
 | Stage 2 | Beta | 文件关联、任务栏、App Execution Alias、隔离 Worker、双架构包和十万项浏览/取消基线已完成；继续签名安装升级与右键命令 |
 | Stage 3 | RC | Dioxus/WebView2 语义候选已打通主要 Worker 流程、CSP、核心快捷键、中英文导航/创建表单键盘回归、双架构候选包和 18 对等价双语文档；继续归档表单、可见焦点/Narrator/Accessibility Insights、ARM64 实机、WinGet、Store 和供应链验证 |
 | Stage 4 | 1.0 | API 冻结、文档完成、三渠道正式发布 |
