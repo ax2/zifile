@@ -90,6 +90,12 @@ enum AccessibleShortcut {
     Cancel,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StatusKind {
+    Informational,
+    Error,
+}
+
 #[derive(Debug, Clone)]
 struct UiState {
     page: Page,
@@ -104,6 +110,7 @@ struct UiState {
     create_password: String,
     compression_level: u8,
     status: String,
+    status_kind: StatusKind,
     busy: bool,
     cancellation: Option<CancellationToken>,
     progress: Option<OperationProgress>,
@@ -129,6 +136,7 @@ impl Default for UiState {
             create_password: String::new(),
             compression_level: 6,
             status: settings.locale.text(Text::Ready).to_owned(),
+            status_kind: StatusKind::Informational,
             busy: false,
             cancellation: None,
             progress: None,
@@ -137,6 +145,18 @@ impl Default for UiState {
             locale: settings.locale,
             revision: 0,
         }
+    }
+}
+
+impl UiState {
+    fn set_status(&mut self, status: String) {
+        self.status = status;
+        self.status_kind = StatusKind::Informational;
+    }
+
+    fn set_error(&mut self, status: String) {
+        self.status = status;
+        self.status_kind = StatusKind::Error;
     }
 }
 
@@ -174,6 +194,7 @@ fn App() -> Element {
     let page = view.page;
     let theme = if view.dark { "dark" } else { "light" };
     let progress = view.progress.as_ref().map(OperationProgress::snapshot);
+    let (status_role, status_live) = status_semantics(view.status_kind);
     let queued_count = view
         .operations
         .lock()
@@ -221,7 +242,7 @@ fn App() -> Element {
                     button { onclick: move |_| { let mut value = state.write(); value.dark = !value.dark; save_settings(&value); },
                         {if view.dark { locale.text(Text::Light) } else { locale.text(Text::Dark) }} }
                     button { lang: if locale == Locale::ZhCn { "en-US" } else { "zh-CN" },
-                        onclick: move |_| { let mut value = state.write(); value.locale = value.locale.toggle(); value.status = value.locale.text(Text::Ready).to_owned(); save_settings(&value); },
+                        onclick: move |_| { let mut value = state.write(); value.locale = value.locale.toggle(); let status = value.locale.text(Text::Ready).to_owned(); value.set_status(status); save_settings(&value); },
                         {locale.text(Text::SwitchLanguage)} }
                 }
             }
@@ -231,7 +252,7 @@ fn App() -> Element {
                     Page::Archive => rsx! { ArchivePage { state } },
                     Page::Create => rsx! { CreatePage { state } },
                 }
-                footer { role: "status", "aria-live": "polite",
+                footer { class: if view.status_kind == StatusKind::Error { "status-error" } else { "" }, role: status_role, "aria-live": status_live, "aria-atomic": "true",
                     div { class: "status-copy", span { class: "status-dot", "aria-hidden": "true", "•" } span { {view.status.clone()} } }
                     span { class: "queue-count", {match locale { Locale::En => format!("{queued_count} queued"), Locale::ZhCn => format!("{queued_count} 个排队") }} }
                     if let Some(snapshot) = progress {
@@ -437,7 +458,7 @@ fn handle_dropped_paths(mut state: Signal<UiState>, paths: Vec<PathBuf>) {
     let mut value = state.write();
     append_unique(&mut value.create_sources, existing);
     value.page = Page::Create;
-    value.status = choose(locale, "Added dropped sources", "已添加拖入的来源").to_owned();
+    value.set_status(choose(locale, "Added dropped sources", "已添加拖入的来源").to_owned());
 }
 
 fn reload_archive(state: Signal<UiState>) {
@@ -620,19 +641,21 @@ fn launch_worker(
         Ok(Submission::Start(job)) => start_worker(state, job),
         Ok(Submission::Queued { position, .. }) => {
             let locale = state.read().locale;
-            state.write().status = match locale {
+            let status = match locale {
                 Locale::En => format!(
                     "Queued operation at position {position}; the current operation continues"
                 ),
                 Locale::ZhCn => format!("操作已排队，位置 {position}；当前操作继续运行"),
             };
+            state.write().set_status(status);
         }
         Err(error) => {
             let locale = state.read().locale;
-            state.write().status = match locale {
+            let status = match locale {
                 Locale::En => format!("Operation queue is full (maximum {})", error.capacity),
                 Locale::ZhCn => format!("操作队列已满（最多 {} 个）", error.capacity),
             };
+            state.write().set_error(status);
         }
     }
 }
@@ -649,7 +672,7 @@ fn start_worker(mut state: Signal<UiState>, job: Job<QueuedOperation>) {
     {
         let mut value = state.write();
         value.busy = true;
-        value.status = status;
+        value.set_status(status);
         value.progress = Some(progress.clone());
         value.cancellation = Some(cancellation.clone());
     }
@@ -670,7 +693,7 @@ fn finish_worker(
     result: Result<WorkerOutput, String>,
 ) {
     let locale = state.read().locale;
-    let status = match (kind, result) {
+    let (status, status_kind) = match (kind, result) {
         (OperationKind::List, Ok(WorkerOutput::Archive(archive))) => {
             let status = if locale == Locale::ZhCn {
                 format!(
@@ -697,10 +720,10 @@ fn finish_worker(
             value.entry_filter.clear();
             value.entry_page = 0;
             value.page = Page::Archive;
-            status
+            (status, StatusKind::Informational)
         }
         (OperationKind::Test, Ok(WorkerOutput::Archive(info))) => {
-            if locale == Locale::ZhCn {
+            let status = if locale == Locale::ZhCn {
                 format!(
                     "压缩文件完好 · {} 个项目 · {}",
                     info.entries.len(),
@@ -712,28 +735,39 @@ fn finish_worker(
                     info.entries.len(),
                     format_bytes(info.total_size)
                 )
-            }
+            };
+            (status, StatusKind::Informational)
         }
-        (OperationKind::Extract, Ok(WorkerOutput::Summary(summary))) => {
-            summary_status(locale, summary, true)
-        }
-        (OperationKind::Create, Ok(WorkerOutput::Summary(summary))) => {
-            summary_status(locale, summary, false)
-        }
-        (_, Ok(_)) => choose(
-            locale,
-            "Worker returned an unexpected result",
-            "Worker 返回了意外结果",
-        )
-        .to_owned(),
-        (kind, Err(error)) => format!(
-            "{}: {error}",
-            match kind {
-                OperationKind::List => choose(locale, "Open failed", "打开失败"),
-                OperationKind::Test => choose(locale, "Integrity test failed", "完整性校验失败"),
-                OperationKind::Extract => choose(locale, "Extraction failed", "解压失败"),
-                OperationKind::Create => choose(locale, "Creation failed", "创建失败"),
-            }
+        (OperationKind::Extract, Ok(WorkerOutput::Summary(summary))) => (
+            summary_status(locale, summary, true),
+            StatusKind::Informational,
+        ),
+        (OperationKind::Create, Ok(WorkerOutput::Summary(summary))) => (
+            summary_status(locale, summary, false),
+            StatusKind::Informational,
+        ),
+        (_, Ok(_)) => (
+            choose(
+                locale,
+                "Worker returned an unexpected result",
+                "Worker 返回了意外结果",
+            )
+            .to_owned(),
+            StatusKind::Error,
+        ),
+        (kind, Err(error)) => (
+            format!(
+                "{}: {error}",
+                match kind {
+                    OperationKind::List => choose(locale, "Open failed", "打开失败"),
+                    OperationKind::Test => {
+                        choose(locale, "Integrity test failed", "完整性校验失败")
+                    }
+                    OperationKind::Extract => choose(locale, "Extraction failed", "解压失败"),
+                    OperationKind::Create => choose(locale, "Creation failed", "创建失败"),
+                }
+            ),
+            StatusKind::Error,
         ),
     };
     let operations = state.read().operations.clone();
@@ -743,6 +777,7 @@ fn finish_worker(
         value.cancellation = None;
         value.progress = None;
         value.status = status;
+        value.status_kind = status_kind;
     }
     let next = operations
         .lock()
@@ -751,7 +786,9 @@ fn finish_worker(
     match next {
         Ok(Some(job)) => start_worker(state, job),
         Ok(None) => {}
-        Err(error) => state.write().status = format!("Internal operation queue error: {error}"),
+        Err(error) => state
+            .write()
+            .set_error(format!("Internal operation queue error: {error}")),
     }
 }
 
@@ -763,10 +800,11 @@ fn clear_queued(mut state: Signal<UiState>) {
         .clear_pending()
         .len();
     let locale = state.read().locale;
-    state.write().status = match locale {
+    let status = match locale {
         Locale::En => format!("Cleared {cleared} queued operations"),
         Locale::ZhCn => format!("已清除 {cleared} 个排队操作"),
     };
+    state.write().set_status(status);
 }
 
 fn cancel_operation(mut state: Signal<UiState>) {
@@ -776,12 +814,14 @@ fn cancel_operation(mut state: Signal<UiState>) {
     }
     let locale = value.locale;
     drop(value);
-    state.write().status = choose(
-        locale,
-        "Cancelling safely after the current block…",
-        "正在当前数据块结束后安全取消…",
-    )
-    .to_owned();
+    state.write().set_status(
+        choose(
+            locale,
+            "Cancelling safely after the current block…",
+            "正在当前数据块结束后安全取消…",
+        )
+        .to_owned(),
+    );
 }
 
 fn select_all(mut state: Signal<UiState>, selected: bool) {
@@ -801,7 +841,7 @@ fn select_all(mut state: Signal<UiState>, selected: bool) {
     let count = paths.len();
     let mut value = state.write();
     value.selected = if selected { paths } else { HashSet::new() };
-    value.status = if selected {
+    let status = if selected {
         match value.locale {
             Locale::En => format!("Selected all {count} archive files"),
             Locale::ZhCn => format!("已选择全部 {count} 个归档文件"),
@@ -809,6 +849,7 @@ fn select_all(mut state: Signal<UiState>, selected: bool) {
     } else {
         choose(value.locale, "Selection cleared", "已清除选择").to_owned()
     };
+    value.set_status(status);
 }
 
 fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected: bool) {
@@ -819,12 +860,13 @@ fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected:
         value.selected.remove(&path);
     }
     let selected_count = value.selected.len();
-    value.status = archive_selection_change_status(
+    let status = archive_selection_change_status(
         value.locale,
         &path.to_string_lossy(),
         selected,
         selected_count,
     );
+    value.set_status(status);
 }
 
 fn archive_selection_summary(locale: Locale, selected: usize, total: usize) -> String {
@@ -948,6 +990,12 @@ fn parse_format(value: &str) -> ArchiveFormat {
 fn non_empty(value: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_owned())
 }
+const fn status_semantics(kind: StatusKind) -> (&'static str, &'static str) {
+    match kind {
+        StatusKind::Informational => ("status", "polite"),
+        StatusKind::Error => ("alert", "assertive"),
+    }
+}
 const fn choose<'a>(locale: Locale, english: &'a str, chinese: &'a str) -> &'a str {
     match locale {
         Locale::En => english,
@@ -1027,6 +1075,15 @@ mod tests {
             archive_selection_change_status(Locale::ZhCn, "文档/说明.txt", false, 3),
             "已取消选择 文档/说明.txt；共选择 3 个文件"
         );
+    }
+
+    #[test]
+    fn status_semantics_interrupt_only_for_errors() {
+        assert_eq!(
+            status_semantics(StatusKind::Informational),
+            ("status", "polite")
+        );
+        assert_eq!(status_semantics(StatusKind::Error), ("alert", "assertive"));
     }
 
     #[test]

@@ -105,6 +105,8 @@ footer .queue-clear { margin-left: 0; }
 .status-copy span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 footer progress { width: min(260px, 30vw); accent-color: var(--accent); }
 .status-dot { color: var(--accent); }
+.status-error .status-dot { color: #ff6b6b; }
+.status-error .status-copy { font-weight: 650; }
 
 @media (max-width: 860px) {
   body { min-width: 0; }
@@ -154,4 +156,5 @@ footer progress { width: min(260px, 30vw); accent-color: var(--accent); }
     opacity: 1;
   }
   .status-dot { color: Highlight; }
+  .status-error .status-dot { color: Mark; }
 }
