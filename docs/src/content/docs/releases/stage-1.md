@@ -95,6 +95,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - [CI 32733631226](https://github.com/ax2/zifile/actions/runs/32733631226) 全部通过，包括依赖、文档、Linux fuzz 目标编译、固定工具链 Rust 门禁、基准、真实冒烟与互操作。
 - 首轮 [动态 fuzz 32733658052](https://github.com/ax2/zifile/actions/runs/32733658052) 的路径策略和格式识别通过；归档目标约执行 569,000 次后发现 292 字节 7z 输入触发 `sevenz-rust2` 文件数量分配 `capacity overflow`。产物已下载并核对 SHA-256 `F193BEF68F1293569F4B5CC256FF829D222E7A2C1CE9DBF85FB7BCC6ABB2CC12`。
 - 该输入已转为永久回归测试；7z 列出、校验和解压 Provider 现在把可 unwind 的后端 panic 转成普通错误，OOM 与 sanitizer 失败不截获。修复后全工作区 60 次测试、严格 Clippy 和 nightly fuzz 编译检查通过，云端重跑待补证。
+- 归档 fuzz 初始化恢复可 unwind panic hook，使 Provider 边界能在 libFuzzer 进程中按发行语义运行；逃出边界的 panic 仍由外层判失败。首轮 292 字节输入作为文本十六进制固定夹具，每次 campaign 启动都强制重放。
 - 同批 [双架构复现 32733631204](https://github.com/ax2/zifile/actions/runs/32733631204) 仍为 x64/ARM64 各 4/5，仅默认 Iced EXE 不同；失败 JSON 已保留，没有将预期失败写成通过。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
 - 归档页完整表格/解压表单键盘遍历、可见焦点、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；主导航、创建表单与核心快捷键已有中英文键盘证据。真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索、翻页、加载取消及可重复的首内容/滚动/同时刻整树峰值采样。

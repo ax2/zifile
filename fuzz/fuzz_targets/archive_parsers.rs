@@ -103,7 +103,19 @@ fn parser_input(case: &FormatCase, payload: &[u8]) -> Vec<u8> {
     bytes
 }
 
-fuzz_target!(|input: &[u8]| {
+fn decode_hex(value: &str) -> Vec<u8> {
+    value
+        .trim()
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let digits = std::str::from_utf8(pair).expect("regression hex must be ASCII");
+            u8::from_str_radix(digits, 16).expect("regression hex must contain byte pairs")
+        })
+        .collect()
+}
+
+fn run_input(input: &[u8]) {
     let Some((&selector, payload)) = input.split_first() else {
         return;
     };
@@ -119,4 +131,19 @@ fuzz_target!(|input: &[u8]| {
     if list_archive_with_limits(archive.path(), password, FUZZ_LIMITS).is_ok() {
         let _ = test_archive_with_limits(archive.path(), password, FUZZ_LIMITS);
     }
+}
+
+fuzz_target!(init: {
+    // libfuzzer-sys normally aborts from its panic hook before provider-level
+    // catch_unwind boundaries can run. The outer fuzz wrapper still aborts on
+    // any panic that escapes ZiFile, while this no-op hook lets caught backend
+    // panics exercise the same error path used by release builds.
+    let _ = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let regression = decode_hex(include_str!(
+        "../../tests/fixtures/sevenz-capacity-overflow.hex"
+    ));
+    run_input(&regression);
+}, |input: &[u8]| {
+    run_input(input);
 });
