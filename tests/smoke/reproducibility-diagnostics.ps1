@@ -42,6 +42,18 @@ if (
 ) {
     throw 'Different PE files did not preserve bounded first-difference context.'
 }
+$differentComponentWithContext = @(
+    $differentComponents |
+        Where-Object {
+            $null -ne $_.first_difference_offset -and
+            $null -ne $_.first_difference_context -and
+            -not [string]::IsNullOrWhiteSpace($_.first_difference_context.build_a_hex) -and
+            -not [string]::IsNullOrWhiteSpace($_.first_difference_context.build_b_hex)
+        }
+)
+if ($differentComponentWithContext.Count -eq 0) {
+    throw 'Different PE files did not preserve component-level difference context.'
+}
 
 [ordered]@{
     schema_version = 1
@@ -49,5 +61,6 @@ if (
     identical_all_match = $true
     different_first_offset_found = $true
     different_context_preserved = $true
+    different_component_context_preserved = $true
     different_components = $differentComponents.Count
 } | ConvertTo-Json

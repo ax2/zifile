@@ -190,6 +190,38 @@ function Find-FirstDifferenceInRange {
     return $null
 }
 
+function Get-DifferenceContext {
+    param(
+        [Parameter(Mandatory)]
+        [byte[]]$First,
+        [Parameter(Mandatory)]
+        [byte[]]$Second,
+        [Parameter(Mandatory)]
+        [int64]$DifferenceOffset
+    )
+
+    $contextStart = [Math]::Max([int64]0, $DifferenceOffset - 16)
+    $sharedLength = [Math]::Min($First.Length, $Second.Length)
+    $contextCount = [Math]::Min([int64]64, $sharedLength - $contextStart)
+    if ($contextCount -le 0) {
+        return $null
+    }
+    return [ordered]@{
+        start_offset = $contextStart
+        byte_count = $contextCount
+        build_a_hex = [Convert]::ToHexString(
+            $First,
+            [int]$contextStart,
+            [int]$contextCount
+        ).ToLowerInvariant()
+        build_b_hex = [Convert]::ToHexString(
+            $Second,
+            [int]$contextStart,
+            [int]$contextCount
+        ).ToLowerInvariant()
+    }
+}
+
 function Compare-PeArtifacts {
     param(
         [Parameter(Mandatory)]
@@ -213,6 +245,21 @@ function Compare-PeArtifacts {
             $firstComponent.raw_offset -eq $secondComponent.raw_offset -and
             $firstComponent.raw_size -eq $secondComponent.raw_size
         $matches = $sameLayout -and $firstComponent.sha256 -eq $secondComponent.sha256
+        $componentDifference = $null
+        $componentContext = $null
+        if ($sameLayout -and -not $matches) {
+            $componentDifference = Find-FirstDifferenceInRange `
+                -First $first.bytes `
+                -Second $second.bytes `
+                -Offset ([int]$firstComponent.raw_offset) `
+                -Count ([int]$firstComponent.raw_size)
+            if ($null -ne $componentDifference) {
+                $componentContext = Get-DifferenceContext `
+                    -First $first.bytes `
+                    -Second $second.bytes `
+                    -DifferenceOffset $componentDifference
+            }
+        }
         $components += [ordered]@{
             name_a = if ($null -eq $firstComponent) { $null } else { $firstComponent.name }
             name_b = if ($null -eq $secondComponent) { $null } else { $secondComponent.name }
@@ -223,6 +270,15 @@ function Compare-PeArtifacts {
             build_a_sha256 = if ($null -eq $firstComponent) { $null } else { $firstComponent.sha256 }
             build_b_sha256 = if ($null -eq $secondComponent) { $null } else { $secondComponent.sha256 }
             matches = $matches
+            first_difference_offset = $componentDifference
+            first_difference_component_offset = if (
+                $null -eq $componentDifference -or $null -eq $firstComponent
+            ) {
+                $null
+            } else {
+                $componentDifference - $firstComponent.raw_offset
+            }
+            first_difference_context = $componentContext
         }
         if ($null -eq $firstDifference -and -not $matches) {
             $firstDifferenceComponent = if ($null -eq $firstComponent) {
@@ -231,11 +287,7 @@ function Compare-PeArtifacts {
                 $firstComponent.name
             }
             if ($sameLayout) {
-                $firstDifference = Find-FirstDifferenceInRange `
-                    -First $first.bytes `
-                    -Second $second.bytes `
-                    -Offset ([int]$firstComponent.raw_offset) `
-                    -Count ([int]$firstComponent.raw_size)
+                $firstDifference = $componentDifference
                 if ($null -ne $firstDifference) {
                     $firstDifferenceComponentOffset = $firstDifference - $firstComponent.raw_offset
                 }
@@ -254,27 +306,13 @@ function Compare-PeArtifacts {
         $firstDifferenceComponentOffset = 0
     }
 
-    $context = $null
-    if ($null -ne $firstDifference) {
-        $contextStart = [Math]::Max([int64]0, $firstDifference - 16)
-        $sharedLength = [Math]::Min($first.bytes.Length, $second.bytes.Length)
-        $contextCount = [Math]::Min([int64]64, $sharedLength - $contextStart)
-        if ($contextCount -gt 0) {
-            $context = [ordered]@{
-                start_offset = $contextStart
-                byte_count = $contextCount
-                build_a_hex = [Convert]::ToHexString(
-                    $first.bytes,
-                    [int]$contextStart,
-                    [int]$contextCount
-                ).ToLowerInvariant()
-                build_b_hex = [Convert]::ToHexString(
-                    $second.bytes,
-                    [int]$contextStart,
-                    [int]$contextCount
-                ).ToLowerInvariant()
-            }
-        }
+    $context = if ($null -eq $firstDifference) {
+        $null
+    } else {
+        Get-DifferenceContext `
+            -First $first.bytes `
+            -Second $second.bytes `
+            -DifferenceOffset $firstDifference
     }
 
     return [ordered]@{
