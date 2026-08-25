@@ -11,8 +11,9 @@ $rarCorpus = Join-Path $repoRoot 'tests\interoperability\rar-corpus.ps1'
 $wackReadiness = Join-Path $repoRoot 'packaging\msix\Test-WackReadiness.ps1'
 $versionConsistency = Join-Path $repoRoot 'scripts\Test-VersionConsistency.ps1'
 $releaseNotes = Join-Path $repoRoot 'scripts\Test-ReleaseNotes.ps1'
+$contributorDocs = Join-Path $repoRoot 'scripts\Test-ContributorDocs.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -91,6 +92,10 @@ finally {
 $unreleasedNotes = & $releaseNotes | ConvertFrom-Json
 if (-not $unreleasedNotes.unreleased_section -or $unreleasedNotes.ready_for_tag) {
     throw 'The changelog structure gate rejected the current Unreleased state.'
+}
+$contributorResult = & $contributorDocs | ConvertFrom-Json
+if (-not $contributorResult.synchronized -or $contributorResult.locale_guides -ne 2) {
+    throw 'Contributor documentation is not synchronized with repository policy.'
 }
 $null = Get-ExpectedFailure -Pattern 'does not contain release heading' -Action {
     & $releaseNotes -ExpectedVersion $versionResult.tag
@@ -300,6 +305,9 @@ if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-VersionConsistency.ps1')
 if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ReleaseNotes.ps1')) {
     throw 'CI does not enforce the changelog structure.'
 }
+if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ContributorDocs.ps1')) {
+    throw 'CI does not enforce contributor documentation consistency.'
+}
 foreach ($requiredRepairWorkflowToken in @(
     'MSIX Repair helper',
     'timeout-minutes: 2',
@@ -371,4 +379,5 @@ foreach ($requiredWackToken in @(
     wack_readiness_wired = $true
     version_consistency_wired = $true
     release_notes_wired = $true
+    contributor_docs_wired = $true
 } | ConvertTo-Json
