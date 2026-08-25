@@ -66,6 +66,6 @@ RAR 校验基准使用确定性的 8 MiB RAR 5 method-3 归档，并加入低频
 
 `tests/smoke/store-listing.ps1` 验证简体中文和英文 Store JSON 都满足 Partner Center 的描述、短描述、功能、关键词、系统要求、许可与 HTTPS URL 限制，并用负向样本证明超长功能、过多关键词及描述中的 URL 会被拒绝。该门禁验证文字材料，不替代截图、年龄分级、正式 Identity 或认证。
 
-`tests/helpers/msix-repair` 是测试专用的 C# 控制台辅助程序，主产品仍以 Rust 实现。CI 以锁定的 Windows App SDK 1.8 依赖编译并运行无副作用 `--probe`。可信包生命周期支持 Repair 时，在包 LocalState 写入随机哨兵，调用 `RepairPackageAsync` 后要求内容不变，再要求 `Reset-AppxPackage` 删除哨兵；不支持时证据明确记为 `unsupported`。
+`tests/helpers/msix-repair` 是测试专用的 C# 控制台辅助程序，主产品仍以 Rust 实现。CI 以锁定的 Windows App SDK 1.8 依赖编译并运行无副作用 `--probe`。API 查询有 15 秒内部超时，工作流有 2 分钟外层上限；Runner 不返回时明确记录查询未完成/不支持，不会一直挂起或伪报 Repair 通过。可信包生命周期支持 Repair 时，在包 LocalState 写入随机哨兵，调用 `RepairPackageAsync` 后要求内容不变，再要求 `Reset-AppxPackage` 删除哨兵；不支持时证据明确记为 `unsupported`。
 
 `tests/performance/desktop-baseline.ps1` 对优化后的两个桌面程序各启动五次，计时到原生窗口可响应，并在 1.5 秒稳定期后汇总根进程与后代进程内存。参考机器为 Windows 11 build 26200、i9-14900HX：Iced 启动中位数 668.79 ms、工作集 225.87 MiB、私有内存 265.05 MiB；Dioxus/WebView2 候选分别为 294.25 ms、405.91 MiB、206.62 MiB。首轮冷启动包含在 p95 中（Iced 1785.51 ms、候选 644.20 ms）。工作集与私有内存口径不同，该数据是同机回归基线，不代表完整内容就绪、真实十万项归档的精确首屏/滚动延迟或跨机器门禁。

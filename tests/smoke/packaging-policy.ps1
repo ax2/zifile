@@ -146,6 +146,8 @@ foreach ($requiredRepairToken in @(
     'PackageDeploymentManager.IsPackageDeploymentFeatureSupported',
     'PackageDeploymentFeature.RepairPackage',
     'RepairPackageAsync',
+    'probeTimeoutSeconds',
+    'probe_completed',
     '--package-full-name',
     'preserve_application_data'
 )) {
@@ -153,12 +155,20 @@ foreach ($requiredRepairToken in @(
         throw "The MSIX Repair helper omits required token: $requiredRepairToken"
     }
 }
+$ciSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\ci.yml')
+foreach ($requiredRepairWorkflowToken in @(
+    'MSIX Repair helper',
+    'timeout-minutes: 2'
+)) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredRepairWorkflowToken)) {
+        throw "The CI Repair probe omits required timeout token: $requiredRepairWorkflowToken"
+    }
+}
 if ($repairProjectSource -notmatch [Regex]::Escape('Microsoft.WindowsAppSDK') -or
     $repairProjectSource -notmatch [Regex]::Escape('1.8.260804001')) {
     throw 'The MSIX Repair helper does not pin its Windows App SDK dependency.'
 }
 $rarCorpusSource = Get-Content -Raw -LiteralPath $rarCorpus
-$ciSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\ci.yml')
 foreach ($requiredRarToken in @(
     '7d8f9386ef777a2415da34fe1db193d8471ff7d0',
     'winrar721_header_encrypted_quickopen.rar',
