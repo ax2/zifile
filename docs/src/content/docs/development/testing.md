@@ -34,13 +34,13 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 
 性能门禁需要多轮运行和稳定基线，不能用一次共享 CI 结果直接判定回归。
 
-`tests/reproducibility/windows-build.ps1` 在两个全新目标目录使用固定 Rust 1.88.0、锁文件、单作业构建与 MSVC `/Brepro`，比较默认桌面、可访问候选、CLI、Worker 和 Explorer DLL。2026-08-24 本地 x64 及干净云端 x64/ARM64 证据均为 4/5 匹配；默认 Iced EXE 仍不同，所以门禁按预期失败、路线图未完成。定时/手动双架构工作流用于持续暴露该差异，不得把部分匹配写成整体通过。
+`tests/reproducibility/windows-build.ps1` 在两个全新目标目录使用固定 Rust 1.93.0、锁文件、单作业构建与 MSVC `/Brepro`，比较默认桌面、可访问候选、CLI、Worker 和 Explorer DLL。2026-08-24 基于 Rust 1.88.0 的本地 x64 及干净云端 x64/ARM64 证据均为 4/5 匹配；默认 Iced EXE 仍不同。升级工具链后的结果必须重新测量，所以在新证据完成前仍保持门禁未通过、路线图未完成。定时/手动双架构工作流用于持续暴露该差异，不得把部分匹配写成整体通过。
 
 Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.exe`，分别对 ZIP、tar.gz 与 7z 执行双向互操作：参考工具创建的包由 ZiFile 校验和解压，ZiFile 创建的包由参考工具解压并逐文件核对（含 Unicode 路径）。
 
 每次 CI 会编译 libFuzzer 目标；每周定时工作流对路径策略、格式识别和归档解析器各运行 180 秒有界 fuzz，失败时保留崩溃产物 14 天。归档目标用带格式签名的变异输入覆盖 ZIP、7z、四种 TAR 组合和六种单流格式，限制输入为 256 KiB、RSS 为 2 GiB、单输入为 10 秒；目标内部还使用 256 条目、4 MiB 展开量、64 倍压缩比和 32 层路径的严格限制。Windows/MSVC 本地 `cargo-fuzz` 因 `sevenz-rust2` DLL 与 libFuzzer 入口点参数冲突无法链接，Rust 编译检查可通过；动态 campaign 以 Linux GNU 定时工作流为验收环境。更广泛的第三方 7-Zip/libarchive 语料仍未完成。
 
-首轮归档解析器 campaign 32733658052 在约 569,000 次执行后发现 292 字节输入可令 `sevenz-rust2` 的文件数量分配触发 `capacity overflow`。崩溃输入已转为永久集成测试；ZiFile 的 7z Provider 边界现在把这种可 unwind 的后端 panic 转成错误。修复后的 campaign 必须独立通过后才可关闭该回归。
+首轮归档解析器 campaign 32733658052 在约 569,000 次执行后发现 292 字节输入可令 `sevenz-rust2` 0.20.2 的文件数量分配触发 `capacity overflow`。第二轮 campaign 32803785688 又发现 173 字节输入可触发 ASan 超大内存分配；这类 OOM 不能由 `catch_unwind` 可靠隔离。两份输入均已转为永久集成测试和 fuzz 启动重放夹具。项目因此升级到 Rust 1.93.0 与带有元数据计数边界修复的 `sevenz-rust2` 0.22.0；Provider 的 panic 边界继续作为纵深防御。新版必须在独立 Linux campaign 中通过后才可关闭该回归。
 
 `libfuzzer-sys` 默认 panic hook 会在 unwind 前 abort，绕过 Provider 的错误边界。归档 fuzz 目标只在自身进程初始化时移除这个 hook；libFuzzer 外层仍会令任何逃出 ZiFile 的 panic 失败。目标启动时必定重放上述固定样本，防止新 campaign 因随机语料未再次命中而产生假通过。
 

@@ -144,6 +144,10 @@ fuzz_target!(init: {
         "../../tests/fixtures/sevenz-capacity-overflow.hex"
     ));
     run_input(&regression);
+    let oversized_allocation = decode_hex(include_str!(
+        "../../tests/fixtures/sevenz-oversized-allocation.hex"
+    ));
+    run_input(&oversized_allocation);
 }, |input: &[u8]| {
     run_input(input);
 });

@@ -12,7 +12,7 @@ resolver = "3"
 [workspace.package]
 version = "0.1.0-alpha.1"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.93"
 authors = ["ZiCode <ax2@zicode.com>"]
 license = "MIT"
 repository = "https://github.com/ax2/zifile"
@@ -31,7 +31,7 @@ serde_json = "1"
 sys-locale = "0.3.2"
 thiserror = "2.0.20"
 zip = "8.2.0"
-sevenz-rust2 = "0.20.1"
+sevenz-rust2 = "0.22.0"
 tar = { version = "0.4.46", default-features = false }
 flate2 = "1.1.9"
 zstd = "0.13.3"

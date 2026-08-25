@@ -97,6 +97,9 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 该输入已转为永久回归测试；7z 列出、校验和解压 Provider 现在把可 unwind 的后端 panic 转成普通错误，OOM 与 sanitizer 失败不截获。修复后全工作区 60 次测试、严格 Clippy 和 nightly fuzz 编译检查通过，云端重跑待补证。
 - 归档 fuzz 初始化恢复可 unwind panic hook，使 Provider 边界能在 libFuzzer 进程中按发行语义运行；逃出边界的 panic 仍由外层判失败。首轮 292 字节输入作为文本十六进制固定夹具，每次 campaign 启动都强制重放。
 - 同批 [双架构复现 32733631204](https://github.com/ax2/zifile/actions/runs/32733631204) 仍为 x64/ARM64 各 4/5，仅默认 Iced EXE 不同；失败 JSON 已保留，没有将预期失败写成通过。
+- 第二轮 [动态 fuzz 32803785688](https://github.com/ax2/zifile/actions/runs/32803785688) 发现另一份 173 字节畸形 7z 可触发 ASan 超大内存分配，产物 SHA-256 为 `FBE1B601781F34CB96699A9114E243B9B8720451B3CC308F4A309EB44BAE90EC`。这证明只捕获 panic 不能构成 OOM 防线。
+- 上游 `sevenz-rust2` 0.21.3 起加入损坏归档、无限循环和无界分配加固，当前 0.22.0 包含有界元数据计数；该版本要求 Rust 1.93。项目因此同步升级固定工具链和 CI/Release/复现环境，并把两份崩溃输入都作为共享十六进制夹具，在集成测试和每次解析器 campaign 启动时重放。
+- Rust 1.93.0、`sevenz-rust2` 0.22.0 下两份固定样本回归、格式、严格 Clippy、60 次全工作区测试、benchmark 编译、基础与打包策略冒烟、Windows ZIP/tar.gz/7z 互操作、nightly fuzz 编译和 19 页 Astro 构建均通过；单作业 x64 全特性 Release 构建用时 14 分 20 秒并通过。Linux 定向 campaign、云端依赖策略、CI 与双架构复现仍待本批后续证据，不提前记为通过。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
 - 归档页完整表格/解压表单键盘遍历、可见焦点、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；主导航、创建表单与核心快捷键已有中英文键盘证据。真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索、翻页、加载取消及可重复的首内容/滚动/同时刻整树峰值采样。
 - Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树、Worker 功能路径、核心快捷键、本地 x64 运行及云端 x64/ARM64 打包，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、真实拖放和 ARM64 候选实机运行门禁约束。

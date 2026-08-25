@@ -411,25 +411,46 @@ fn malformed_primary_archive_headers_fail_without_panicking() {
 }
 
 #[test]
-fn fuzz_discovered_seven_zip_capacity_overflow_is_reported_as_an_error() {
-    let fuzz_input = include_str!("../../../tests/fixtures/sevenz-capacity-overflow.hex")
-        .trim()
-        .as_bytes()
-        .chunks_exact(2)
-        .map(|pair| {
-            let digits = std::str::from_utf8(pair).unwrap();
-            u8::from_str_radix(digits, 16).unwrap()
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(fuzz_input[0], 1, "fixture must select the 7z fuzz case");
-    let mut bytes = b"7z\xBC\xAF\x27\x1C".to_vec();
-    bytes.extend_from_slice(&fuzz_input[1..]);
+fn fuzz_discovered_seven_zip_oversized_allocations_are_rejected() {
+    let fixtures = [
+        (
+            "capacity-overflow",
+            292,
+            include_str!("../../../tests/fixtures/sevenz-capacity-overflow.hex"),
+        ),
+        (
+            "oversized-allocation",
+            173,
+            include_str!("../../../tests/fixtures/sevenz-oversized-allocation.hex"),
+        ),
+    ];
     let temp = tempfile::tempdir().unwrap();
-    let archive = temp.path().join("fuzz-capacity-overflow.7z");
-    fs::write(&archive, bytes).unwrap();
+    for (name, expected_len, fixture) in fixtures {
+        let fuzz_input = fixture
+            .trim()
+            .as_bytes()
+            .chunks_exact(2)
+            .map(|pair| {
+                let digits = std::str::from_utf8(pair).unwrap();
+                u8::from_str_radix(digits, 16).unwrap()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(fuzz_input.len(), expected_len, "{name} fixture drifted");
+        assert_eq!(
+            usize::from(fuzz_input[0]) % 13,
+            1,
+            "fixture must select the 7z fuzz case"
+        );
+        let mut bytes = b"7z\xBC\xAF\x27\x1C".to_vec();
+        bytes.extend_from_slice(&fuzz_input[1..]);
+        let archive = temp.path().join(format!("fuzz-{name}.7z"));
+        fs::write(&archive, bytes).unwrap();
 
-    let result = list_archive_with_limits(&archive, None, SafetyLimits::default());
+        let result = list_archive_with_limits(&archive, None, SafetyLimits::default());
 
-    assert!(matches!(result, Err(ZiFileError::Backend(message)) if
-        message == "7z backend rejected malformed metadata while listing the archive"));
+        assert!(
+            matches!(result, Err(ZiFileError::SevenZip(_))),
+            "upstream parser did not reject {name} before ZiFile's panic fallback: {result:?}"
+        );
+    }
 }
