@@ -17,7 +17,7 @@ Files and archives that the user selects or drops are processed only on the devi
 
 ZIP and 7z passwords are passed and used only for the current operation. They are not written to settings, logs, or command-line arguments. The CLI reads passwords from standard input. The app does not intentionally retain a password after the operation; as with any desktop process, data can exist briefly in memory while the process is running.
 
-ZiFile stores only non-sensitive preferences such as interface language and theme on the device. Users can clear these settings through app controls or Windows app reset/uninstall functions.
+ZiFile stores only non-sensitive preferences such as interface language and theme in `%LOCALAPPDATA%\ZiFile\settings.conf`. Users can change them in the app or delete that file after closing ZiFile. Whether uninstall or Windows app reset removes a file in an ordinary desktop path depends on deployment behavior, so this statement does not promise automatic removal.
 
 ## Network and third parties
 

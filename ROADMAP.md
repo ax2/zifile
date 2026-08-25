@@ -59,8 +59,9 @@ Goal: complete the Windows-focused daily workflow.
 - [x] Isolated worker process with versioned IPC, cancellation and Windows Job Object limits.
 - [x] x64/ARM64 MSIX and standalone executable packaging.
 - [ ] Signed install, upgrade, repair and uninstall tests (trusted-package lifecycle harness
-  now covers install, CLI launch, upgrade, Reset and guaranteed uninstall; real signed execution
-  and a distinct data-preserving Repair operation remain pending).
+  covers install, CLI launch, upgrade, guaranteed uninstall, Reset, and a Windows App SDK Repair
+  probe with LocalState preservation evidence when supported; real signed execution remains pending,
+  and current Windows 25H2 reports the distinct Repair API unsupported).
 - [x] Establish throughput, 100,000-entry UI-model, idle startup and process-tree memory baselines.
 - [x] Exercise Worker listing, bounded first-page rendering, search and pagination with a real 100,000-entry archive.
 - [x] Add repeatable first-content/scroll latency and simultaneous process-tree peak-memory instrumentation for the real 100,000-entry archive.

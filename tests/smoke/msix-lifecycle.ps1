@@ -11,6 +11,7 @@ param(
     [Parameter(Mandatory)][string]$Publisher,
     [Parameter(Mandatory)][string]$MinimumWindowsVersion,
     [string]$EvidencePath,
+    [string]$RepairHelper,
     [switch]$ConfirmLifecycle
 )
 
@@ -29,6 +30,13 @@ if (-not (Get-Command Reset-AppxPackage -ErrorAction SilentlyContinue)) {
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $packageAudit = Join-Path $repoRoot 'packaging\msix\Test-Package.ps1'
+$repairHelperPath = $null
+if (-not [string]::IsNullOrWhiteSpace($RepairHelper)) {
+    $repairHelperPath = [IO.Path]::GetFullPath($RepairHelper)
+    if (-not (Test-Path -LiteralPath $repairHelperPath -PathType Leaf)) {
+        throw "MSIX Repair helper does not exist: $repairHelperPath"
+    }
+}
 $baseline = [IO.Path]::GetFullPath($BaselinePackage)
 $upgrade = [IO.Path]::GetFullPath($UpgradePackage)
 foreach ($package in @($baseline, $upgrade)) {
@@ -106,6 +114,9 @@ $primaryError = $null
 $cleanupError = $null
 $installedPackage = $null
 $passed = $false
+$repairStatus = 'not-probed'
+$repairDataPreserved = $null
+$repairSentinel = $null
 
 try {
     Add-AppxPackage -Path $baseline -ForceApplicationShutdown -ErrorAction Stop
@@ -126,8 +137,64 @@ try {
     $installedPackage = Assert-InstalledVersion -ExpectedVersion $UpgradeVersion
     $events.Add([ordered]@{ step = 'upgrade'; version = $UpgradeVersion; passed = $true })
 
+    if ($null -ne $repairHelperPath) {
+        $probeJson = & $repairHelperPath --probe
+        if ($LASTEXITCODE -ne 0) {
+            throw "MSIX Repair helper probe failed with exit code $LASTEXITCODE."
+        }
+        $probe = $probeJson | ConvertFrom-Json
+        if ($probe.schema_version -ne 1 -or $probe.operation -cne 'probe') {
+            throw 'MSIX Repair helper returned an unexpected probe schema.'
+        }
+
+        if ($probe.repair_supported) {
+            $packageLocalState = Join-Path $env:LOCALAPPDATA "Packages\$($installedPackage.PackageFamilyName)\LocalState"
+            New-Item -ItemType Directory -Path $packageLocalState -Force | Out-Null
+            $repairSentinel = Join-Path $packageLocalState 'zifile-lifecycle-repair-sentinel.txt'
+            $sentinelValue = [Guid]::NewGuid().ToString('N')
+            Set-Content -LiteralPath $repairSentinel -Value $sentinelValue -Encoding utf8
+
+            $repairJson = & $repairHelperPath --package-full-name $installedPackage.PackageFullName
+            if ($LASTEXITCODE -ne 0) {
+                throw "MSIX Repair failed with exit code $LASTEXITCODE`: $($repairJson -join [Environment]::NewLine)"
+            }
+            $repair = $repairJson | ConvertFrom-Json
+            if ($repair.schema_version -ne 1 -or -not $repair.succeeded) {
+                throw "MSIX Repair helper reported failure: $($repairJson -join [Environment]::NewLine)"
+            }
+            $installedPackage = Assert-InstalledVersion -ExpectedVersion $UpgradeVersion
+            $repairDataPreserved = (
+                (Test-Path -LiteralPath $repairSentinel -PathType Leaf) -and
+                ((Get-Content -Raw -LiteralPath $repairSentinel).Trim() -ceq $sentinelValue)
+            )
+            if (-not $repairDataPreserved) {
+                throw 'MSIX Repair did not preserve the package LocalState sentinel.'
+            }
+            $repairStatus = 'passed'
+            $events.Add([ordered]@{
+                step = 'repair'
+                version = $UpgradeVersion
+                passed = $true
+                semantics = 'preserve-application-data'
+                local_state_preserved = $true
+            })
+        }
+        else {
+            $repairStatus = 'unsupported'
+            $events.Add([ordered]@{
+                step = 'repair'
+                passed = $null
+                skipped = $true
+                reason = 'PackageDeploymentManager reports RepairPackage unsupported'
+            })
+        }
+    }
+
     Reset-AppxPackage -Package $installedPackage.PackageFullName -Confirm:$false -ErrorAction Stop
     $installedPackage = Assert-InstalledVersion -ExpectedVersion $UpgradeVersion
+    if ($null -ne $repairSentinel -and (Test-Path -LiteralPath $repairSentinel)) {
+        throw 'Reset-AppxPackage retained the package LocalState sentinel unexpectedly.'
+    }
     $events.Add([ordered]@{
         step = 'reset'
         version = $UpgradeVersion
@@ -178,7 +245,12 @@ $evidence = [ordered]@{
         sha256 = $upgradeAudit.sha256
     }
     existing_installation_refused = $true
-    repair_semantics = 'not-claimed; Reset-AppxPackage is recorded separately'
+    repair = [ordered]@{
+        status = $repairStatus
+        semantics = 'preserve-application-data'
+        local_state_preserved = $repairDataPreserved
+    }
+    reset_semantics = 'restore-initial-configuration-and-remove-package-data'
     events = $events
     primary_error = $primaryError
     cleanup_error = $cleanupError
