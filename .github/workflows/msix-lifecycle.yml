@@ -16,11 +16,23 @@ permissions:
 
 jobs:
   lifecycle:
-    name: Signed x64 install, upgrade, reset and uninstall
+    name: Signed x64 install, upgrade, repair, reset and uninstall
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+      - name: Build data-preserving Repair helper
+        shell: pwsh
+        run: |
+          dotnet publish tests/helpers/msix-repair/MsixRepair.csproj `
+            --configuration Release `
+            --self-contained false `
+            -p:WindowsAppSDKSelfContained=true `
+            --output "$env:RUNNER_TEMP\msix-repair-helper"
+          & "$env:RUNNER_TEMP\msix-repair-helper\MsixRepair.exe" --probe
       - name: Download baseline package artifact
         uses: actions/download-artifact@v7
         with:
@@ -73,6 +85,7 @@ jobs:
             -IdentityName $baseline.audit.identity `
             -Publisher $baseline.audit.publisher `
             -MinimumWindowsVersion $baseline.audit.minimum_windows_version `
+            -RepairHelper "$env:RUNNER_TEMP\msix-repair-helper\MsixRepair.exe" `
             -EvidencePath "$env:RUNNER_TEMP\msix-lifecycle.json" `
             -ConfirmLifecycle
       - name: Upload lifecycle evidence

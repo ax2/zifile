@@ -20,6 +20,8 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 
 一次临时自签名演练证明 manifest Publisher、证书 subject 与 SignTool 链路一致；安装按预期停在不受信任根 `0x800B0109`。测试没有导入根证书，也没有保留私钥、证书或包注册。正式门禁必须使用可信证书或 Partner Center Identity，不能用这项演练替代。
 
+可信生命周期工作流还会构建固定 Windows App SDK 1.8 的自包含测试辅助程序。系统支持 Repair 时，它在升级后调用与 Windows 设置“修复”相同的 `RepairPackageAsync`，并要求包 LocalState 哨兵保持；随后 Reset 必须删除该哨兵。当前 Windows 25H2 build 26200 的无副作用探测返回 `repair_supported=false`，因此只记录能力缺失，不把 Reset 冒充 Repair。
+
 ## 首次上架前的外部门禁
 
 1. 在 Partner Center 注册 Windows 开发者账号并预留 `ZiFile` 名称。

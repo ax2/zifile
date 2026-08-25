@@ -4,6 +4,8 @@ $publishingPolicy = Join-Path $repoRoot 'packaging\msix\Test-PublishingInputs.ps
 $packageAudit = Join-Path $repoRoot 'packaging\msix\Test-Package.ps1'
 $packageBuild = Join-Path $repoRoot 'packaging\msix\Build-Package.ps1'
 $packageLifecycle = Join-Path $repoRoot 'tests\smoke\msix-lifecycle.ps1'
+$repairHelper = Join-Path $repoRoot 'tests\helpers\msix-repair\Program.cs'
+$repairProject = Join-Path $repoRoot 'tests\helpers\msix-repair\MsixRepair.csproj'
 
 foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle)) {
     $tokens = $null
@@ -110,7 +112,10 @@ foreach ($requiredLifecycleToken in @(
     'Refusing to modify an existing',
     'Reset-AppxPackage',
     'Remove-AppxPackage',
-    'repair_semantics'
+    'RepairHelper',
+    'preserve-application-data',
+    'local_state_preserved',
+    'reset_semantics'
 )) {
     if ($lifecycleSource -notmatch [Regex]::Escape($requiredLifecycleToken)) {
         throw "The MSIX lifecycle gate omits required policy token: $requiredLifecycleToken"
@@ -122,11 +127,31 @@ foreach ($requiredWorkflowToken in @(
     'actions/download-artifact@v7',
     'msix-lifecycle.ps1',
     'ConfirmLifecycle',
-    'msix-lifecycle-x64'
+    'msix-lifecycle-x64',
+    'WindowsAppSDKSelfContained=true',
+    'msix-repair-helper',
+    '-RepairHelper'
 )) {
     if ($lifecycleWorkflowSource -notmatch [Regex]::Escape($requiredWorkflowToken)) {
         throw "The trusted lifecycle workflow omits required token: $requiredWorkflowToken"
     }
+}
+$repairHelperSource = Get-Content -Raw -LiteralPath $repairHelper
+$repairProjectSource = Get-Content -Raw -LiteralPath $repairProject
+foreach ($requiredRepairToken in @(
+    'PackageDeploymentManager.IsPackageDeploymentFeatureSupported',
+    'PackageDeploymentFeature.RepairPackage',
+    'RepairPackageAsync',
+    '--package-full-name',
+    'preserve_application_data'
+)) {
+    if ($repairHelperSource -notmatch [Regex]::Escape($requiredRepairToken)) {
+        throw "The MSIX Repair helper omits required token: $requiredRepairToken"
+    }
+}
+if ($repairProjectSource -notmatch [Regex]::Escape('Microsoft.WindowsAppSDK') -or
+    $repairProjectSource -notmatch [Regex]::Escape('1.8.260804001')) {
+    throw 'The MSIX Repair helper does not pin its Windows App SDK dependency.'
 }
 
 [pscustomobject]@{
@@ -141,4 +166,5 @@ foreach ($requiredWorkflowToken in @(
     shell_extension_wired = $true
     lifecycle_gate_wired = $true
     lifecycle_workflow_wired = $true
+    repair_helper_wired = $true
 } | ConvertTo-Json
