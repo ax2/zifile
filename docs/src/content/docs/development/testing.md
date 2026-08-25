@@ -64,7 +64,7 @@ RAR 校验基准使用确定性的 8 MiB RAR 5 method-3 归档，并加入低频
 
 `tests/smoke/packaging-policy.ps1` 在每次 Windows CI 中解析三个打包脚本，并验证缺失正式凭据、开发 Identity 和未签名 OID Publisher 都会被标签发布门禁拒绝，形式正确的正式输入会被接受；它还要求打包脚本调用 MSIX 审计器，Release workflow 上传 `.audit.json`。真实包审计仍由 `Build-Package.ps1` 在 x64/ARM64 打包后执行，策略冒烟不能替代包内容检查。
 
-`tests/smoke/store-listing.ps1` 验证简体中文和英文 Store JSON 都满足 Partner Center 的描述、短描述、功能、关键词、系统要求、许可与 HTTPS URL 限制，并用负向样本证明超长功能、过多关键词及描述中的 URL 会被拒绝。该门禁验证文字材料，不替代截图、年龄分级、正式 Identity 或认证。
+`tests/smoke/store-listing.ps1` 验证简体中文和英文 Store JSON 都满足 Partner Center 的描述、短描述、功能、关键词、系统要求、许可与 HTTPS URL 限制，并要求两份可读文档逐段、逐功能包含结构化 JSON 的权威文案。负向样本证明超长功能、过多关键词及描述中的 URL 会被拒绝。该门禁验证文字材料，不替代截图、年龄分级、正式 Identity 或认证。
 
 `tests/helpers/msix-repair` 是测试专用的 C# 控制台辅助程序，主产品仍以 Rust 实现。CI 以锁定的 Windows App SDK 1.8 依赖编译，并由不加载 Windows App SDK 的 PowerShell 监护脚本启动无副作用 `--probe`；因此即使 App SDK 在 helper 入口前阻塞，监护脚本仍会在 15 秒后直接终止该进程，工作流另有 2 分钟外层上限。Runner 不返回时明确记录查询未完成/不支持，不会一直挂起或伪报 Repair 通过；1 秒阻塞夹具持续验证这条硬超时路径。可信包生命周期支持 Repair 时，在包 LocalState 写入随机哨兵，调用 `RepairPackageAsync` 后要求内容不变，再要求 `Reset-AppxPackage` 删除哨兵；不支持时证据明确记为 `unsupported`。
 

@@ -51,6 +51,25 @@ function Write-TestListing {
     $listing | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $path -Encoding utf8
 }
 
+function Assert-ListingDocumentation {
+    param(
+        [Parameter(Mandatory)][string]$Locale,
+        [Parameter(Mandatory)][string]$DocumentationPath
+    )
+
+    $listingPath = Join-Path $sourceDirectory "listing.$Locale.json"
+    $listing = Get-Content -Raw -LiteralPath $listingPath | ConvertFrom-Json
+    $documentation = Get-Content -Raw -LiteralPath $DocumentationPath
+    $requiredCopy = @($listing.short_description) +
+        @(([string]$listing.description -split "`r?`n") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) +
+        @($listing.features)
+    foreach ($text in $requiredCopy) {
+        if (-not $documentation.Contains([string]$text, [StringComparison]::Ordinal)) {
+            throw "$Locale Store documentation is out of sync with structured listing copy: $text"
+        }
+    }
+}
+
 function Write-TestScreenshot {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -80,6 +99,12 @@ try {
     if (-not $valid.validated -or $valid.listing_count -ne 2) {
         throw 'Valid bilingual Store listings did not pass validation.'
     }
+    Assert-ListingDocumentation `
+        -Locale 'zh-CN' `
+        -DocumentationPath (Join-Path $repoRoot 'docs\src\content\docs\releases\store-listing.md')
+    Assert-ListingDocumentation `
+        -Locale 'en-US' `
+        -DocumentationPath (Join-Path $repoRoot 'docs\src\content\docs\en\releases\store-listing.md')
     $draftScreenshots = & $screenshotValidator | ConvertFrom-Json
     if ($draftScreenshots.status -cne 'draft' -or $draftScreenshots.screenshots -ne 0 -or $draftScreenshots.complete) {
         throw 'Draft Store screenshot manifest did not pass its explicit incomplete-state validation.'
@@ -164,6 +189,7 @@ try {
     [pscustomobject]@{
         schema_version = 1
         valid_listings_accepted = $true
+        listing_documentation_synchronized = $true
         oversized_feature_rejected = $true
         excess_keywords_rejected = $true
         description_url_rejected = $true
