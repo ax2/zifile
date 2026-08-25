@@ -187,7 +187,10 @@ foreach ($requiredRarToken in @(
     '7d8f9386ef777a2415da34fe1db193d8471ff7d0',
     'api.github.com/repos/bitplane/rars/contents/crates/rars/tests/fixtures',
     'GITHUB_TOKEN',
+    'git_url',
     'FromBase64String',
+    'pinned-rars-golden',
+    'E70E00C521EE53176D194CFC66D2C284E340D50C07667776071B220ED956570E',
     'winrar721_header_encrypted_quickopen.rar',
     'rar50/wild/symlink.rar',
     'expected_rejection',
@@ -197,7 +200,12 @@ foreach ($requiredRarToken in @(
         throw "The RAR corpus gate omits required token: $requiredRarToken"
     }
 }
-foreach ($requiredCiToken in @('rar-corpus.ps1', 'target/rar-corpus.json')) {
+foreach ($requiredCiToken in @(
+    'RAR reference interoperability',
+    'cargo build -p zifile-cli --locked',
+    'rar-corpus.ps1',
+    'target/rar-corpus.json'
+)) {
     if ($ciSource -notmatch [Regex]::Escape($requiredCiToken)) {
         throw "CI does not publish the RAR corpus gate or evidence: $requiredCiToken"
     }
