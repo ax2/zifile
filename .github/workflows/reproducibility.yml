@@ -32,7 +32,7 @@ jobs:
         architecture: [x64, arm64]
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: dtolnay/rust-toolchain@1.93.0
         with:
           targets: ${{ matrix.architecture == 'x64' && 'x86_64-pc-windows-msvc' || 'aarch64-pc-windows-msvc' }}
       - uses: Swatinem/rust-cache@v2
