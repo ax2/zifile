@@ -12,6 +12,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 - 真实 Release SHA-256 的候选清单已通过本机 `winget validate`；该结果不等于已提交或已获社区仓库接受。
 - 每个 MSIX 在构建后自动解包审计 Identity、Publisher、版本、最低系统版本、四枚 PE 架构（桌面、CLI、Worker 与 Explorer DLL）、主要文件关联、CLI alias、敏感文件和签名状态，并随包生成 `.audit.json`。
 - 标签发布缺少正式 Identity、Publisher、PFX 或密码时会在打包前失败；`.Dev` Identity 和未签名 OID Publisher 不能用于标签发布。
+- 简体中文和英文 Store 文案、隐私说明与认证备注已经结构化归档；CI 验证描述、功能、关键词、许可与 HTTPS URL 的 Partner Center 字段限制。
 
 ## 开发包与签名边界
 
@@ -26,7 +27,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 3. 准备可信代码签名证书用于 GitHub/WinGet；Store 分发包由 Microsoft Store 签名。
 4. 用正式 Identity 重建 x64 与 ARM64 包，分别验证安装、启动、文件关联、升级和卸载。
 5. 在当前用户的管理员交互式会话中运行 Windows App Certification Kit，并完成键盘、讲述人、高对比度、DPI 与中文输入法检查。
-6. 准备商店说明、隐私说明、图标和桌面截图，填写年龄分级、市场与认证备注。
+6. 复核已准备的双语商店说明、隐私说明和认证备注，部署公开隐私页，采集正式候选包的双语桌面截图，并填写年龄分级与市场。
 7. 上传通过验证的 MSIX 包并提交认证；公开 Release 后再生成和验证 WinGet 清单 PR。
 
 未完成这些外部门禁时，任何 Alpha 构建都不得标记为“Microsoft Store 已就绪”或“已签名”。

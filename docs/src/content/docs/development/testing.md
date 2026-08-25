@@ -60,4 +60,6 @@ Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.
 
 `tests/smoke/packaging-policy.ps1` 在每次 Windows CI 中解析三个打包脚本，并验证缺失正式凭据、开发 Identity 和未签名 OID Publisher 都会被标签发布门禁拒绝，形式正确的正式输入会被接受；它还要求打包脚本调用 MSIX 审计器，Release workflow 上传 `.audit.json`。真实包审计仍由 `Build-Package.ps1` 在 x64/ARM64 打包后执行，策略冒烟不能替代包内容检查。
 
+`tests/smoke/store-listing.ps1` 验证简体中文和英文 Store JSON 都满足 Partner Center 的描述、短描述、功能、关键词、系统要求、许可与 HTTPS URL 限制，并用负向样本证明超长功能、过多关键词及描述中的 URL 会被拒绝。该门禁验证文字材料，不替代截图、年龄分级、正式 Identity 或认证。
+
 `tests/performance/desktop-baseline.ps1` 对优化后的两个桌面程序各启动五次，计时到原生窗口可响应，并在 1.5 秒稳定期后汇总根进程与后代进程内存。参考机器为 Windows 11 build 26200、i9-14900HX：Iced 启动中位数 668.79 ms、工作集 225.87 MiB、私有内存 265.05 MiB；Dioxus/WebView2 候选分别为 294.25 ms、405.91 MiB、206.62 MiB。首轮冷启动包含在 p95 中（Iced 1785.51 ms、候选 644.20 ms）。工作集与私有内存口径不同，该数据是同机回归基线，不代表完整内容就绪、真实十万项归档的精确首屏/滚动延迟或跨机器门禁。

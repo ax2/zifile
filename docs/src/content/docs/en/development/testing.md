@@ -27,6 +27,8 @@ Every CI compiles fuzz targets. Weekly bounded campaigns exercise path policy, f
 
 The 100,000-entry UI model constructs at most 500 visible rows. A real deterministic ZIP baseline validates Worker listing, search, paging, 50% scrolling, tree-wide memory sampling, and cancellation with Worker reclamation. Five cancellation runs completed at 930.78 ms median and 1088.73 ms p95 with zero Workers remaining. These are same-machine regression baselines, not universal performance promises.
 
+`tests/smoke/store-listing.ps1` verifies that the Simplified Chinese and English Store JSON satisfies Partner Center limits for descriptions, short descriptions, features, keywords, system requirements, licensing, and HTTPS URLs. Negative fixtures prove that an oversized feature, excess keywords, and a URL inside the description are rejected. This gate covers copy, not screenshots, age ratings, official identity, or certification.
+
 Foreground keyboard automation checks internal WebView2 focus, bilingual forward/reverse navigation, disabled-control skipping, 7z selection, level adjustment, password clearing, and source buttons. It verifies the exact ZiFile foreground window before every key and never records the password. Full archive/extract traversal and assistive-technology certification remain open.
 
 Reproducibility separately performs clean x64/ARM64 double builds. Schema-v2 evidence traced the former 4/5 result to `build-a`/`build-b` target paths embedded by generated `glutin_wgl_sys` code in the default Iced executable. The script remaps both isolated roots to one virtual path; run `32826187552` then proved 5/5 and `reproducible=true` on both architectures.
