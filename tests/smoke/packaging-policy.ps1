@@ -9,8 +9,9 @@ $repairProject = Join-Path $repoRoot 'tests\helpers\msix-repair\MsixRepair.cspro
 $repairProbe = Join-Path $repoRoot 'tests\helpers\msix-repair\Invoke-Probe.ps1'
 $rarCorpus = Join-Path $repoRoot 'tests\interoperability\rar-corpus.ps1'
 $wackReadiness = Join-Path $repoRoot 'packaging\msix\Test-WackReadiness.ps1'
+$versionConsistency = Join-Path $repoRoot 'scripts\Test-VersionConsistency.ps1'
 
-foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness)) {
+foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency)) {
     $tokens = $null
     $errors = $null
     [System.Management.Automation.Language.Parser]::ParseFile(
@@ -39,6 +40,50 @@ function Get-ExpectedFailure {
         return $_.Exception.Message
     }
     throw "Expected action to fail with '$Pattern'."
+}
+
+$versionResult = & $versionConsistency | ConvertFrom-Json
+if (-not $versionResult.consistent -or $versionResult.version -ne $versionResult.docs_version) {
+    throw 'The workspace version consistency gate rejected the current release version.'
+}
+if ($versionResult.version -notmatch '^(\d+)\.(\d+)\.(\d+)(?:-(?:alpha|beta|rc)\.(\d+))?$') {
+    throw 'The current version did not satisfy the tested release version grammar.'
+}
+$expectedMsix = "$($Matches[1]).$($Matches[2]).$($Matches[3]).$(if ($Matches[4]) { $Matches[4] } else { '0' })"
+if ($versionResult.tag -ne "v$($versionResult.version)" -or $versionResult.msix_version -ne $expectedMsix) {
+    throw 'Semantic version conversion did not produce the expected tag and MSIX version.'
+}
+$acceptedVersion = & $versionConsistency -ExpectedVersion $versionResult.tag | ConvertFrom-Json
+if (-not $acceptedVersion.consistent) {
+    throw 'The exact workspace release tag was not accepted.'
+}
+$null = Get-ExpectedFailure -Pattern 'does not match workspace version' -Action {
+    & $versionConsistency -ExpectedVersion "$($versionResult.tag)-mismatch"
+}
+$temporaryBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+$versionFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
+    'zifile-version-policy-{0}' -f [Guid]::NewGuid().ToString('N')
+)))
+if (-not $versionFixture.StartsWith($temporaryBase, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Refusing to create the version-policy fixture outside the system temporary directory.'
+}
+try {
+    New-Item -ItemType Directory -Path (Join-Path $versionFixture 'docs') -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'Cargo.toml') -Destination $versionFixture
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'Cargo.lock') -Destination $versionFixture
+    $fixturePackage = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'docs\package.json') |
+        ConvertFrom-Json
+    $fixturePackage.version = '9.9.9'
+    $fixturePackage | ConvertTo-Json -Depth 10 |
+        Set-Content -LiteralPath (Join-Path $versionFixture 'docs\package.json') -Encoding utf8NoBOM
+    $null = Get-ExpectedFailure -Pattern 'docs/package.json version' -Action {
+        & $versionConsistency -RepositoryRoot $versionFixture
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $versionFixture) {
+        Remove-Item -LiteralPath $versionFixture -Recurse -Force
+    }
 }
 
 $missingFailure = Get-ExpectedFailure -Pattern 'ZIFILE_MSIX_IDENTITY' -Action {
@@ -107,6 +152,12 @@ $releaseSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\wor
 $lifecycleWorkflowSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\msix-lifecycle.yml')
 if ($releaseSource -notmatch [Regex]::Escape('Test-PublishingInputs.ps1')) {
     throw 'The release workflow does not invoke the publishing input policy.'
+}
+if ($releaseSource -notmatch [Regex]::Escape('Test-VersionConsistency.ps1 @arguments')) {
+    throw 'The release workflow does not enforce the workspace version source.'
+}
+if ($releaseSource -match [Regex]::Escape('${{ inputs.version }}')) {
+    throw 'The release workflow still accepts a second mutable version source.'
 }
 if ($releaseSource -notmatch [Regex]::Escape('Test-Screenshots.ps1 -RequireComplete')) {
     throw 'The tagged release workflow does not require completed Store screenshots.'
@@ -193,6 +244,9 @@ foreach ($requiredProbeToken in @(
     }
 }
 $ciSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\ci.yml')
+if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-VersionConsistency.ps1')) {
+    throw 'CI does not enforce version consistency.'
+}
 foreach ($requiredRepairWorkflowToken in @(
     'MSIX Repair helper',
     'timeout-minutes: 2',
@@ -262,4 +316,5 @@ foreach ($requiredWackToken in @(
     rar_association_wired = $true
     rar_corpus_wired = $true
     wack_readiness_wired = $true
+    version_consistency_wired = $true
 } | ConvertTo-Json

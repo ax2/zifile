@@ -1,13 +1,16 @@
 use std::{
+    fmt::Write,
     io::{self, BufRead},
     path::PathBuf,
 };
 
 use clap::{Parser, Subcommand, ValueEnum};
 use zifile_core::{
-    ArchiveFormat, ConflictPolicy, CreateOptions, ExtractOptions, create_archive, detect_format,
-    detect_format_from_path, extract_archive, list_archive, test_archive,
+    ArchiveFormat, ConflictPolicy, CreateInputKind, CreateOptions, ExtractOptions, create_archive,
+    detect_format, detect_format_from_path, extract_archive, list_archive, test_archive,
 };
+
+const RUNTIME_ERROR_EXIT_CODE: i32 = 1;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -124,7 +127,7 @@ impl From<FormatArg> for ArchiveFormat {
 fn main() {
     if let Err(error) = run(Cli::parse()) {
         eprintln!("error: {error}");
-        std::process::exit(1);
+        std::process::exit(RUNTIME_ERROR_EXIT_CODE);
     }
 }
 
@@ -253,17 +256,34 @@ fn read_password_from(reader: &mut impl BufRead, enabled: bool) -> io::Result<Op
 }
 
 fn print_formats() {
-    println!("FORMAT\tLIST\tEXTRACT\tCREATE\tENCRYPTION\tSTAGE");
+    print!("{}", format_matrix());
+}
+
+fn format_matrix() -> String {
+    let mut output =
+        String::from("FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tENCRYPTION\tSTAGE\n");
     for format in ArchiveFormat::ALL {
         let capabilities = format.capabilities();
-        println!(
-            "{format}\t{}\t{}\t{}\t{}\t{}",
+        writeln!(
+            output,
+            "{format}\t{}\t{}\t{}\t{}\t{}\t{}",
             yes_no(capabilities.list),
             yes_no(capabilities.extract),
             yes_no(capabilities.create),
+            create_input_label(format.create_input()),
             yes_no(capabilities.encryption),
             capabilities.stage
-        );
+        )
+        .expect("writing to a String cannot fail");
+    }
+    output
+}
+
+const fn create_input_label(input: Option<CreateInputKind>) -> &'static str {
+    match input {
+        Some(CreateInputKind::FilesAndDirectories) => "files-or-directories",
+        Some(CreateInputKind::SingleFile) => "single-file",
+        None => "none",
     }
 }
 
@@ -275,7 +295,75 @@ const fn yes_no(value: bool) -> &'static str {
 mod tests {
     use std::io::Cursor;
 
-    use super::read_password_from;
+    use clap::{CommandFactory, Parser, ValueEnum};
+
+    use super::{
+        Cli, ConflictArg, FormatArg, RUNTIME_ERROR_EXIT_CODE, format_matrix, read_password_from,
+    };
+
+    #[test]
+    fn public_cli_surface_and_usage_exit_code_are_stable() {
+        let command = Cli::command();
+        let subcommands: Vec<_> = command
+            .get_subcommands()
+            .map(|subcommand| subcommand.get_name())
+            .collect();
+        assert_eq!(
+            subcommands,
+            ["formats", "detect", "list", "test", "extract", "create"]
+        );
+        assert_eq!(command.get_version(), Some(env!("CARGO_PKG_VERSION")));
+        assert_eq!(RUNTIME_ERROR_EXIT_CODE, 1);
+        assert_eq!(
+            Cli::try_parse_from(["zifile", "unknown"])
+                .unwrap_err()
+                .exit_code(),
+            2
+        );
+    }
+
+    #[test]
+    fn public_value_names_are_stable() {
+        let conflicts: Vec<_> = ConflictArg::value_variants()
+            .iter()
+            .map(|value| value.to_possible_value().unwrap().get_name().to_owned())
+            .collect();
+        assert_eq!(conflicts, ["overwrite", "skip", "rename", "error"]);
+
+        let formats: Vec<_> = FormatArg::value_variants()
+            .iter()
+            .map(|value| value.to_possible_value().unwrap().get_name().to_owned())
+            .collect();
+        assert_eq!(
+            formats,
+            [
+                "zip",
+                "seven-zip",
+                "tar",
+                "tar-gzip",
+                "tar-zstd",
+                "tar-xz",
+                "tar-bzip2",
+                "gzip",
+                "zstandard",
+                "xz",
+                "bzip2",
+                "lz4",
+                "brotli",
+            ]
+        );
+    }
+
+    #[test]
+    fn format_matrix_exposes_creation_input_contract() {
+        let matrix = format_matrix();
+        assert!(
+            matrix.starts_with("FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tENCRYPTION\tSTAGE\n")
+        );
+        assert!(matrix.contains("gzip\tyes\tyes\tyes\tsingle-file\tno\tAlpha"));
+        assert!(matrix.contains("ZIP\tyes\tyes\tyes\tfiles-or-directories\tyes\tAlpha"));
+        assert!(matrix.contains("RAR\tyes\tyes\tno\tnone\tyes\tBeta"));
+    }
 
     #[test]
     fn password_stdin_is_opt_in() {

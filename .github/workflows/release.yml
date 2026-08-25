@@ -2,11 +2,6 @@ name: Release
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: Semantic version used for a non-publishing package validation run
-        required: true
-        default: 0.1.0-alpha.1
   push:
     tags:
       - v*
@@ -39,16 +34,13 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            '${{ inputs.version }}'
-          } else {
-            '${{ github.ref_name }}'.TrimStart('v')
+          $arguments = @{}
+          if ('${{ github.event_name }}' -ne 'workflow_dispatch') {
+            $arguments.ExpectedVersion = '${{ github.ref_name }}'
           }
-          if ($tag -notmatch '^(\d+)\.(\d+)\.(\d+)(?:-[A-Za-z]+\.(\d+))?$') {
-            throw "Tag must look like v1.2.3 or v1.2.3-alpha.4: $tag"
-          }
-          $revision = if ($Matches[4]) { $Matches[4] } else { '0' }
-          "msix=$($Matches[1]).$($Matches[2]).$($Matches[3]).$revision" >> $env:GITHUB_OUTPUT
+          $version = ./scripts/Test-VersionConsistency.ps1 @arguments | ConvertFrom-Json
+          "semver=$($version.version)" >> $env:GITHUB_OUTPUT
+          "msix=$($version.msix_version)" >> $env:GITHUB_OUTPUT
       - name: Test workspace
         if: matrix.architecture == 'x64'
         run: cargo test --workspace --all-targets --all-features --locked
