@@ -32,7 +32,8 @@ jobs:
             --self-contained false `
             -p:WindowsAppSDKSelfContained=true `
             --output "$env:RUNNER_TEMP\msix-repair-helper"
-          & "$env:RUNNER_TEMP\msix-repair-helper\MsixRepair.exe" --probe
+          ./tests/helpers/msix-repair/Invoke-Probe.ps1 `
+            -HelperPath "$env:RUNNER_TEMP\msix-repair-helper\MsixRepair.exe"
       - name: Download baseline package artifact
         uses: actions/download-artifact@v7
         with:
