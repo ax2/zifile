@@ -10,8 +10,10 @@ $repairProbe = Join-Path $repoRoot 'tests\helpers\msix-repair\Invoke-Probe.ps1'
 $rarCorpus = Join-Path $repoRoot 'tests\interoperability\rar-corpus.ps1'
 $wackReadiness = Join-Path $repoRoot 'packaging\msix\Test-WackReadiness.ps1'
 $versionConsistency = Join-Path $repoRoot 'scripts\Test-VersionConsistency.ps1'
+$releaseNotes = Join-Path $repoRoot 'scripts\Test-ReleaseNotes.ps1'
 
-foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency)) {
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes)
+foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
     [System.Management.Automation.Language.Parser]::ParseFile(
@@ -86,6 +88,51 @@ finally {
     }
 }
 
+$unreleasedNotes = & $releaseNotes | ConvertFrom-Json
+if (-not $unreleasedNotes.unreleased_section -or $unreleasedNotes.ready_for_tag) {
+    throw 'The changelog structure gate rejected the current Unreleased state.'
+}
+$null = Get-ExpectedFailure -Pattern 'does not contain release heading' -Action {
+    & $releaseNotes -ExpectedVersion $versionResult.tag
+}
+$releaseFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
+    'zifile-release-notes-{0}' -f [Guid]::NewGuid().ToString('N')
+)))
+if (-not $releaseFixture.StartsWith($temporaryBase, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Refusing to create the release-notes fixture outside the system temporary directory.'
+}
+try {
+    New-Item -ItemType Directory -Path (Join-Path $releaseFixture 'docs') -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'Cargo.toml') -Destination $releaseFixture
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'Cargo.lock') -Destination $releaseFixture
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\package.json') -Destination (Join-Path $releaseFixture 'docs')
+    @"
+# Changelog
+
+## [Unreleased]
+
+## [$($versionResult.version)] - 2026-08-26
+
+### Added
+
+- Candidate release evidence.
+"@ | Set-Content -LiteralPath (Join-Path $releaseFixture 'CHANGELOG.md') -Encoding utf8NoBOM
+    $taggedNotes = & $releaseNotes -RepositoryRoot $releaseFixture -ExpectedVersion $versionResult.tag |
+        ConvertFrom-Json
+    if (-not $taggedNotes.ready_for_tag -or $taggedNotes.release_entries -ne 1) {
+        throw 'A complete versioned changelog section was not accepted.'
+    }
+    Add-Content -LiteralPath (Join-Path $releaseFixture 'CHANGELOG.md') -Value '- TODO: placeholder'
+    $null = Get-ExpectedFailure -Pattern 'TODO or TBD' -Action {
+        & $releaseNotes -RepositoryRoot $releaseFixture -ExpectedVersion $versionResult.tag
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $releaseFixture) {
+        Remove-Item -LiteralPath $releaseFixture -Recurse -Force
+    }
+}
+
 $missingFailure = Get-ExpectedFailure -Pattern 'ZIFILE_MSIX_IDENTITY' -Action {
     & $publishingPolicy -IdentityName '' -Publisher ''
 }
@@ -155,6 +202,9 @@ if ($releaseSource -notmatch [Regex]::Escape('Test-PublishingInputs.ps1')) {
 }
 if ($releaseSource -notmatch [Regex]::Escape('Test-VersionConsistency.ps1 @arguments')) {
     throw 'The release workflow does not enforce the workspace version source.'
+}
+if ($releaseSource -notmatch [Regex]::Escape('Test-ReleaseNotes.ps1 @arguments')) {
+    throw 'The release workflow does not enforce versioned release notes.'
 }
 if ($releaseSource -match [Regex]::Escape('${{ inputs.version }}')) {
     throw 'The release workflow still accepts a second mutable version source.'
@@ -247,6 +297,9 @@ $ciSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflow
 if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-VersionConsistency.ps1')) {
     throw 'CI does not enforce version consistency.'
 }
+if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ReleaseNotes.ps1')) {
+    throw 'CI does not enforce the changelog structure.'
+}
 foreach ($requiredRepairWorkflowToken in @(
     'MSIX Repair helper',
     'timeout-minutes: 2',
@@ -300,7 +353,7 @@ foreach ($requiredWackToken in @(
 
 [pscustomobject]@{
     schema_version = 1
-    parser_checks = 6
+    parser_checks = $scriptsToParse.Count
     missing_inputs_rejected = $true
     development_identity_rejected = $true
     unsigned_publisher_rejected = $true
@@ -317,4 +370,5 @@ foreach ($requiredWackToken in @(
     rar_corpus_wired = $true
     wack_readiness_wired = $true
     version_consistency_wired = $true
+    release_notes_wired = $true
 } | ConvertTo-Json

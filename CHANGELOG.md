@@ -59,3 +59,27 @@ All notable changes to ZiFile are documented here. The format follows
   final UI status, acknowledgement latency, Worker exit and temporary-fixture cleanup.
 - Foreground-safe Windows keyboard regression coverage for bilingual candidate navigation,
   create-form selects/ranges/passwords, reverse traversal and disabled-control skipping.
+- A bounded 32-operation FIFO shared by both desktop UIs, with monotonic completion IDs,
+  active cancellation, pending-work clearing, and non-persistent sensitive payloads.
+- A pure-Rust read-only RAR 1.3–7 beta provider with encrypted headers, solid archives,
+  selected extraction, resource limits, cancellation, and link/redirection rejection.
+- A Rust Windows 11 `IExplorerCommand` extension and shared `--create` startup protocol,
+  packaged behind trusted-install and Explorer-activation release gates.
+- Store listing, privacy, screenshot-import, WACK-readiness, signed-package lifecycle,
+  package-audit, and release-signing policy gates with structured evidence.
+- Candidate CLI and core-provider compatibility documentation with exact regression
+  coverage for commands, value names, exit codes, and creation-input capabilities.
+
+### Changed
+
+- The CLI accepts archive passwords only through opt-in standard input rather than a
+  plaintext command-line argument.
+- Archive parsing applies caller safety limits while listing and converts recoverable
+  7z backend failures into ordinary errors; historical fuzz findings are permanent tests.
+- Rust is pinned to 1.93.0 and the 7z backend to `sevenz-rust2` 0.22.0.
+- Windows builds use `/Brepro`, one Cargo job, and isolated-path remapping; x64 and ARM64
+  reproducibility gates compare five PE artifacts and currently pass 5/5.
+- Both desktop UIs preflight creation sources, distinguishing multi-source archives from
+  single-file stream formats before opening a save dialog or starting the Worker.
+- The Cargo workspace version is the single source for packages, documentation, tags,
+  Release runs, and deterministic four-part MSIX version mapping.
