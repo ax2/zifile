@@ -287,7 +287,9 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
         .filter(|entry| !entry.is_directory)
         .count();
     let selected_count = view.selected.len();
-    let selection_summary = format!("{selected_count} {}", locale.text(Text::Selected));
+    let all_selected = all_files > 0 && selected_count == all_files;
+    let selection_summary = archive_selection_summary(locale, selected_count, all_files);
+    let select_all_label = archive_select_all_label(locale, all_selected);
     let archive_name = archive
         .path
         .file_name()
@@ -305,14 +307,16 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
             label { span { {locale.text(Text::Search)} } input { r#type: "search", value: view.entry_filter.clone(), oninput: move |event| { let mut value = state.write(); value.entry_filter = event.value(); value.entry_page = 0; } } }
         }
         div { class: "selection-bar",
-            label { input { r#type: "checkbox", checked: selected_count == all_files && all_files > 0, "aria-label": selection_summary.clone(), "aria-keyshortcuts": "Control+A", onchange: move |event| select_all(state, event.checked()) } " {selection_summary}" }
+            label { input { r#type: "checkbox", checked: all_selected, "aria-label": select_all_label, "aria-describedby": "archive-selection-summary", "aria-keyshortcuts": "Control+A", onchange: move |event| select_all(state, event.checked()) }
+                output { id: "archive-selection-summary", role: "status", "aria-live": "polite", "aria-atomic": "true", {selection_summary.clone()} }
+            }
             div { class: "button-row",
                 select { value: conflict_value(view.conflict), "aria-label": choose(locale, "Conflict policy", "文件冲突策略"), onchange: move |event| state.write().conflict = parse_conflict(&event.value()),
                     for policy in [ConflictPolicy::Rename, ConflictPolicy::Overwrite, ConflictPolicy::Skip, ConflictPolicy::Error] { option { value: conflict_value(policy), {conflict_label(locale, policy)} } } }
-                button { class: "primary", disabled: selected_count == 0, onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
+                button { class: "primary", disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
             }
         }
-        div { class: "table-wrap", tabindex: "0", role: "region", "aria-label": choose(locale, "Archive entries", "压缩文件项目"), "aria-keyshortcuts": "Control+A",
+        div { class: "table-wrap", tabindex: "0", role: "region", "aria-label": choose(locale, "Archive entries", "压缩文件项目"), "aria-describedby": "archive-selection-summary", "aria-keyshortcuts": "Control+A",
             onkeydown: move |event: KeyboardEvent| {
                 let control = event.modifiers().contains(Modifiers::CONTROL);
                 if !event.is_composing()
@@ -350,7 +354,7 @@ fn ArchiveRow(mut state: Signal<UiState>, entry: ArchiveEntryInfo, locale: Local
     let selection_label = format!("{} {path_display}", choose(locale, "Select", "选择"));
     rsx! { tr {
         td { input { r#type: "checkbox", checked: selected, disabled: entry.is_directory, "aria-label": selection_label,
-            onchange: move |event| { let mut value = state.write(); if event.checked() { value.selected.insert(path.clone()); } else { value.selected.remove(&path); } } } }
+            onchange: move |event| update_archive_selection(state, path.clone(), event.checked()) } }
         td { class: "path-cell", {path_display} } td { {format_bytes(entry.size)} } td { {format_bytes(entry.compressed_size)} }
         td { if entry.encrypted { {locale.text(Text::Locked)} } else if entry.is_directory { {choose(locale, "Folder", "文件夹")} } else { "—" } }
     } }
@@ -807,6 +811,60 @@ fn select_all(mut state: Signal<UiState>, selected: bool) {
     };
 }
 
+fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected: bool) {
+    let mut value = state.write();
+    if selected {
+        value.selected.insert(path.clone());
+    } else {
+        value.selected.remove(&path);
+    }
+    let selected_count = value.selected.len();
+    value.status = archive_selection_change_status(
+        value.locale,
+        &path.to_string_lossy(),
+        selected,
+        selected_count,
+    );
+}
+
+fn archive_selection_summary(locale: Locale, selected: usize, total: usize) -> String {
+    match locale {
+        Locale::En => format!(
+            "{selected} of {total} files {}",
+            locale.text(Text::Selected)
+        ),
+        Locale::ZhCn => format!("{selected}/{total} {}", locale.text(Text::Selected)),
+    }
+}
+
+const fn archive_select_all_label(locale: Locale, all_selected: bool) -> &'static str {
+    match (locale, all_selected) {
+        (Locale::En, false) => "Select all archive files",
+        (Locale::En, true) => "Clear all archive selections",
+        (Locale::ZhCn, false) => "选择全部归档文件",
+        (Locale::ZhCn, true) => "清除全部归档文件选择",
+    }
+}
+
+fn archive_selection_change_status(
+    locale: Locale,
+    path: &str,
+    selected: bool,
+    selected_count: usize,
+) -> String {
+    let english_unit = if selected_count == 1 { "file" } else { "files" };
+    match (locale, selected) {
+        (Locale::En, true) => {
+            format!("Selected {path}; {selected_count} {english_unit} selected")
+        }
+        (Locale::En, false) => {
+            format!("Cleared {path}; {selected_count} {english_unit} selected")
+        }
+        (Locale::ZhCn, true) => format!("已选择 {path}；共选择 {selected_count} 个文件"),
+        (Locale::ZhCn, false) => format!("已取消选择 {path}；共选择 {selected_count} 个文件"),
+    }
+}
+
 fn archive_dialog(locale: Locale) -> FileDialog {
     FileDialog::new()
         .set_title(locale.text(Text::OpenDialog))
@@ -937,6 +995,38 @@ mod tests {
         ] {
             assert_eq!(parse_conflict(conflict_value(policy)), policy);
         }
+    }
+
+    #[test]
+    fn archive_selection_accessibility_copy_is_actionable_and_bilingual() {
+        assert_eq!(
+            archive_selection_summary(Locale::En, 2, 5),
+            "2 of 5 files selected"
+        );
+        assert_eq!(
+            archive_selection_summary(Locale::ZhCn, 2, 5),
+            "2/5 项已选择"
+        );
+        assert_eq!(
+            archive_select_all_label(Locale::En, false),
+            "Select all archive files"
+        );
+        assert_eq!(
+            archive_select_all_label(Locale::ZhCn, true),
+            "清除全部归档文件选择"
+        );
+    }
+
+    #[test]
+    fn archive_selection_change_status_identifies_item_and_count() {
+        assert_eq!(
+            archive_selection_change_status(Locale::En, "docs/readme.txt", true, 1),
+            "Selected docs/readme.txt; 1 file selected"
+        );
+        assert_eq!(
+            archive_selection_change_status(Locale::ZhCn, "文档/说明.txt", false, 3),
+            "已取消选择 文档/说明.txt；共选择 3 个文件"
+        );
     }
 
     #[test]
