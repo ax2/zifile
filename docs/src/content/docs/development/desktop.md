@@ -47,9 +47,11 @@ Worker 的字节进度（无字节总量时回退到条目进度）同步到 Win
 
 独立键盘回合已从干净启动点用 `Tab`/`Shift+Tab`/`Enter` 正反向切换首页、归档页与创建页，并用键盘切换主题和语言；`Ctrl+N`、`Ctrl+O` 与文件选择器 `Escape` 取消也通过。随后新增的前台保护脚本直接读取 WebView2 内部 `FocusedElement`，在中英文流程中复验导航顺序、disabled 按钮跳过、7z 格式选择、压缩等级 `6→7→6`、密码键入/清空和来源按钮可达。测试不会输出密码，用户切换到其他窗口时拒绝继续发送按键。
 
+归档选择区现在把全选复选框命名为“选择全部归档文件”或“清除全部归档文件选择”，并用原子 `aria-live` 状态报告“已选择 N/总数项”。归档表格区域和“解压选中项”按钮通过 `aria-describedby` 引用同一摘要；单项勾选或取消会在全局状态中报告路径和最新数量。中英文动作、摘要、单复数和状态变化由候选二进制的纯 Rust 单测覆盖。该证据证明语义接线和状态文案，不替代 Narrator 实机遍历。
+
 共享队列的 FIFO、容量、陈旧完成保护、清空语义和敏感载荷释放已有纯单元测试，两套 UI 已通过严格 Clippy 与全 feature 测试；真实前台多任务 UI 冒烟仍待无干扰交互回合，因此路线图暂不标记完成。
 
-这些检查尚不等同于完整辅助功能认证。当前 Iced 0.14 UI 不能宣称具备完整的 Windows UI Automation/Narrator 语义树。中文 IME、归档页完整表格/解压表单遍历、可见焦点、屏幕阅读器、高对比度、每显示器 DPI 和 Windows Application Certification Kit 仍是上架前门禁。可访问 UI 路线见 ADR-0005。
+这些检查尚不等同于完整辅助功能认证。当前 Iced 0.14 UI 不能宣称具备完整的 Windows UI Automation/Narrator 语义树。中文 IME、归档页完整实际键盘/Narrator 遍历、可见焦点、屏幕阅读器、高对比度、每显示器 DPI 和 Windows Application Certification Kit 仍是上架前门禁。可访问 UI 路线见 ADR-0005。
 
 ## 可访问 UI 候选
 

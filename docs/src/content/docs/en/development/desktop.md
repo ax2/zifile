@@ -37,7 +37,9 @@ Unit tests cover FIFO ordering, capacity, stale completions, clearing, and paylo
 
 The opt-in Dioxus/WebView2 candidate shares the Worker and supports the primary browse, test, selective-extract, create, progress, cancel, drop, and shortcut flows. Windows UI Automation has identified semantic controls; real bilingual keyboard flows, bounded 100,000-entry browsing, cancellation, x64 runnable/MSIX execution, and x64/ARM64 cloud packaging have passed.
 
-These checks are not full certification. Archive/extract traversal, visible focus, Narrator, Accessibility Insights, physical high contrast, Chinese IME, per-monitor DPI, real cross-window drop, physical ARM64 execution, and WACK remain release gates. Build the candidate with:
+The archive selection control now exposes an actionable “Select all archive files” or “Clear all archive selections” name and an atomic live “N of total” summary. The archive region and selective-extract button reference that summary with `aria-describedby`; individual selection changes report the path and current count through the global status. Pure Rust candidate tests cover bilingual actions, summaries, singular/plural status, and selection changes. This proves semantic wiring and state copy, not a real Narrator traversal.
+
+These checks are not full certification. Complete real keyboard/Narrator archive and extract traversal, visible focus, Narrator, Accessibility Insights, physical high contrast, Chinese IME, per-monitor DPI, real cross-window drop, physical ARM64 execution, and WACK remain release gates. Build the candidate with:
 
 ```powershell
 cargo build -p zifile-desktop --features accessible-ui --bin zifile-desktop-accessible
