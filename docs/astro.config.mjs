@@ -20,13 +20,40 @@ export default defineConfig({
           label: '简体中文',
           lang: 'zh-CN',
         },
+        en: {
+          label: 'English',
+          lang: 'en',
+        },
       },
       sidebar: [
-        { label: '概览', items: [{ label: '项目首页', slug: '' }, { label: '格式计划', slug: 'formats' }] },
-        { label: '产品', items: [{ autogenerate: { directory: 'product' } }] },
-        { label: '架构', items: [{ autogenerate: { directory: 'architecture' } }] },
-        { label: '开发', items: [{ autogenerate: { directory: 'development' } }] },
-        { label: '阶段记录', items: [{ autogenerate: { directory: 'releases' } }] },
+        {
+          label: '概览',
+          translations: { en: 'Overview' },
+          items: [
+            { label: '项目首页', translations: { en: 'Home' }, slug: '' },
+            { label: '格式计划', translations: { en: 'Format plan' }, slug: 'formats' },
+          ],
+        },
+        {
+          label: '产品',
+          translations: { en: 'Product' },
+          items: [{ autogenerate: { directory: 'product' } }],
+        },
+        {
+          label: '架构',
+          translations: { en: 'Architecture' },
+          items: [{ autogenerate: { directory: 'architecture' } }],
+        },
+        {
+          label: '开发',
+          translations: { en: 'Development' },
+          items: [{ autogenerate: { directory: 'development' } }],
+        },
+        {
+          label: '阶段记录',
+          translations: { en: 'Release records' },
+          items: [{ autogenerate: { directory: 'releases' } }],
+        },
       ],
     }),
   ],

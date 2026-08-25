@@ -78,7 +78,7 @@ Goal: distribution, accessibility, localization, and hardening.
 - [x] Add repeatable bilingual keyboard traversal for candidate navigation and the native create form, including disabled-control skipping and foreground-window protection.
 - [x] Cross-build, package, attest and checksum the candidate MSIX and executables for x64 and ARM64.
 - [ ] Run the candidate MSIX and runnable directory on physical ARM64 Windows hardware.
-- [ ] Complete equivalent Simplified Chinese and English product documentation.
+- [x] Complete equivalent Simplified Chinese and English product documentation.
 - [ ] Complete full keyboard traversal, Narrator, Accessibility Insights, high-contrast, IME and per-monitor DPI verification before replacing Iced.
 - [ ] Windows Application Certification Kit run.
 - [ ] WinGet manifest submission.
