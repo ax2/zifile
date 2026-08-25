@@ -42,6 +42,8 @@ Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.
 
 首轮归档解析器 campaign 32733658052 在约 569,000 次执行后发现 292 字节输入可令 `sevenz-rust2` 的文件数量分配触发 `capacity overflow`。崩溃输入已转为永久集成测试；ZiFile 的 7z Provider 边界现在把这种可 unwind 的后端 panic 转成错误。修复后的 campaign 必须独立通过后才可关闭该回归。
 
+`libfuzzer-sys` 默认 panic hook 会在 unwind 前 abort，绕过 Provider 的错误边界。归档 fuzz 目标只在自身进程初始化时移除这个 hook；libFuzzer 外层仍会令任何逃出 ZiFile 的 panic 失败。目标启动时必定重放上述固定样本，防止新 campaign 因随机语料未再次命中而产生假通过。
+
 当前 8 MiB 可压缩语料在本地 Windows x64 的一次基线中，ZIP 创建约为 262–275 MiB/s，完整性校验约为 3.04–3.15 GiB/s。该结果只用于建立初始量级，不作为跨机器 CI 阈值。
 
 桌面列表回归测试使用 100,000 个模拟条目，断言搜索结果正确且每次只构造最多 500 个可见行。默认 Iced 与 Dioxus 候选共用 `entry_view` 实现；运行 `cargo bench -p zifile-desktop --bench entry_browser --locked` 可复测。2026-08-24 的 Windows x64 基线中，选择性计数为 16.90–17.62 ms（5.68–5.92 M 条/秒），收集有界页为 15.46–15.96 ms（6.27–6.47 M 条/秒）。Windows 实机还以 100,000 个空条目的真实 ZIP 通过隔离 Worker 打开：UI Automation 报告 100,000 项和 200 页，但表格仅暴露当前 500 行；搜索 `99999` 精确定位末项，搜索 `000` 形成 3 页并可导航到第 3 页。
