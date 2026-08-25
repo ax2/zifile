@@ -54,3 +54,7 @@ An official 7-Zip bidirectional corpus gate now defines seven reference-created 
 The first cloud run, `32835391711`, reached the Deflate case and exposed that the optional `sevenz-rust2` Deflate decoder feature was not enabled by its defaults. ZiFile now enables that feature explicitly; the corpus remains pending a complete rerun.
 
 The corrected [CI run 32836336921](https://github.com/ax2/zifile/actions/runs/32836336921) passed all four jobs. Seven reference-created and two ZiFile-created cases passed complete file-set and SHA-256 comparison with 7-Zip 26.02. The evidence JSON SHA-256 is `06278BB8B96AB683A3C117BA5E30F1B4AB1CF89F1BBF01E72BAC0CC26B49DB14`.
+
+A trusted-signed MSIX lifecycle script now audits baseline and upgrade packages, refuses to overwrite an existing installation, checks install, packaged CLI, upgrade and Reset, and guarantees uninstall cleanup plus JSON evidence. No formally signed packages are available yet, so the mutating lifecycle has not been run; Reset and data-preserving Repair remain distinct claims.
+
+The trusted-signature precondition was exercised with a structurally current unsigned x64 development MSIX. Audit rejected `NotSigned`, and the `ZiCode.ZiFile.Dev` installed-package count remained zero before and after, proving that package registration was untouched.

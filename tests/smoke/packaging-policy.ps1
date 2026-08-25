@@ -3,8 +3,9 @@ $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $publishingPolicy = Join-Path $repoRoot 'packaging\msix\Test-PublishingInputs.ps1'
 $packageAudit = Join-Path $repoRoot 'packaging\msix\Test-Package.ps1'
 $packageBuild = Join-Path $repoRoot 'packaging\msix\Build-Package.ps1'
+$packageLifecycle = Join-Path $repoRoot 'tests\smoke\msix-lifecycle.ps1'
 
-foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild)) {
+foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle)) {
     $tokens = $null
     $errors = $null
     [System.Management.Automation.Language.Parser]::ParseFile(
@@ -78,6 +79,7 @@ if ($buildSource -notmatch [Regex]::Escape("Test-Package.ps1")) {
     throw 'Build-Package.ps1 does not invoke the package auditor.'
 }
 $releaseSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\release.yml')
+$lifecycleWorkflowSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\msix-lifecycle.yml')
 if ($releaseSource -notmatch [Regex]::Escape('Test-PublishingInputs.ps1')) {
     throw 'The release workflow does not invoke the publishing input policy.'
 }
@@ -101,10 +103,35 @@ if ($buildSource -notmatch [Regex]::Escape('zifile_shell.dll')) {
 if ($releaseSource -notmatch [Regex]::Escape('zifile-shell-windows-$arch.dll')) {
     throw 'The release workflow does not stage the standalone shell DLL.'
 }
+$lifecycleSource = Get-Content -Raw -LiteralPath $packageLifecycle
+foreach ($requiredLifecycleToken in @(
+    'ConfirmLifecycle',
+    'RequireSignature',
+    'Refusing to modify an existing',
+    'Reset-AppxPackage',
+    'Remove-AppxPackage',
+    'repair_semantics'
+)) {
+    if ($lifecycleSource -notmatch [Regex]::Escape($requiredLifecycleToken)) {
+        throw "The MSIX lifecycle gate omits required policy token: $requiredLifecycleToken"
+    }
+}
+foreach ($requiredWorkflowToken in @(
+    'baseline_run_id',
+    'upgrade_run_id',
+    'actions/download-artifact@v7',
+    'msix-lifecycle.ps1',
+    'ConfirmLifecycle',
+    'msix-lifecycle-x64'
+)) {
+    if ($lifecycleWorkflowSource -notmatch [Regex]::Escape($requiredWorkflowToken)) {
+        throw "The trusted lifecycle workflow omits required token: $requiredWorkflowToken"
+    }
+}
 
 [pscustomobject]@{
     schema_version = 1
-    parser_checks = 3
+    parser_checks = 4
     missing_inputs_rejected = $true
     development_identity_rejected = $true
     unsigned_publisher_rejected = $true
@@ -112,4 +139,6 @@ if ($releaseSource -notmatch [Regex]::Escape('zifile-shell-windows-$arch.dll')) 
     package_audit_wired = $true
     release_audit_staged = $true
     shell_extension_wired = $true
+    lifecycle_gate_wired = $true
+    lifecycle_workflow_wired = $true
 } | ConvertTo-Json

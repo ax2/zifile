@@ -61,6 +61,32 @@ desktop create page with the selected paths. The DLL never performs archive work
 Real menu activation remains an install-time gate because the current development package cannot
 be registered on this machine.
 
+Trusted signed baseline and upgrade packages can be exercised on a clean test account with:
+
+```powershell
+./tests/smoke/msix-lifecycle.ps1 `
+  -BaselinePackage ./ZiFile-1.0.0.0.msix `
+  -UpgradePackage ./ZiFile-1.0.1.0.msix `
+  -Architecture x64 `
+  -BaselineVersion 1.0.0.0 `
+  -UpgradeVersion 1.0.1.0 `
+  -IdentityName ZiCode.ZiFile `
+  -Publisher 'CN=ZiCode Official' `
+  -MinimumWindowsVersion 10.0.19041.0 `
+  -ConfirmLifecycle
+```
+
+The gate requires valid trusted signatures, refuses to touch any existing package with the same
+identity, verifies the installed CLI, upgrades in place, runs the supported `Reset-AppxPackage`
+recovery operation, and uninstalls in `finally`. Reset restores initial configuration and is
+recorded separately; it is not claimed as a data-preserving Repair operation.
+
+After two manual Release workflow runs have produced signed `windows-x64` artifacts, run
+**Trusted MSIX lifecycle** with their baseline and upgrade run IDs. The workflow downloads both
+artifacts into a clean Windows Runner, derives package metadata from their audit JSON, executes the
+same lifecycle gate, and retains evidence for 30 days. ARM64 package installation still requires a
+physical ARM64 Windows test environment.
+
 Before Store submission the project still needs a Partner Center identity,
 trusted signing credentials for direct distribution, upgrade/uninstall test
 evidence, Store listing screenshots, and Windows Application Certification Kit
