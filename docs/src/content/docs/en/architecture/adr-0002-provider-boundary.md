@@ -15,5 +15,5 @@ Every archive format is integrated through one Provider boundary. A Provider exp
 - The UI does not depend directly on compression crates.
 - The CLI and desktop share capability and error models.
 - A backend with security or maintenance issues can be replaced.
-- Special-license formats such as RAR remain isolated for review.
+- Formats with separate compatibility or licensing questions, including RAR, remain isolated for review.
 - Benchmarks, interoperability tests, and fuzzing can run per Provider.

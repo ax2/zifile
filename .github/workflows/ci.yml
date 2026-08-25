@@ -43,11 +43,18 @@ jobs:
         run: |
           ./tests/interoperability/windows-tools.ps1 -SkipBuild
           ./tests/interoperability/sevenzip-corpus.ps1 -SkipBuild
+          ./tests/interoperability/rar-corpus.ps1 -SkipBuild
       - name: Upload 7-Zip interoperability evidence
         uses: actions/upload-artifact@v6
         with:
           name: sevenzip-corpus
           path: target/sevenzip-corpus.json
+          retention-days: 30
+      - name: Upload RAR interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: rar-corpus
+          path: target/rar-corpus.json
           retention-days: 30
 
   licenses:

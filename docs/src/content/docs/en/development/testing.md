@@ -12,6 +12,7 @@ description: Unit, property, interoperability, security, performance, fuzz, and 
 - Real Worker and packaging-policy smoke tests.
 - Windows ZIP, tar.gz, and 7z bidirectional interoperability.
 - Official 7-Zip codec, filter, solid-mode, and AES interoperability with JSON evidence.
+- Pinned RAR 1.3/1.5/3/5/7, PPMd, filter, encrypted-header and unsafe-link corpus cross-checked against 7-Zip with JSON evidence.
 
 ## Layers
 
@@ -22,6 +23,8 @@ The Worker smoke streams a real list request and requires metadata, a Unicode en
 CLI password tests cover explicit opt-in, CRLF/LF removal, preservation of surrounding spaces, and rejection of missing or empty input. The foundation smoke requires help to expose only `--password-stdin`, then creates, tests, and extracts a real AES 7z through standard input without printing the fixed test password.
 
 The official 7-Zip corpus gate uses `7z.exe` on the GitHub Windows Runner. Reference-created cases cover Copy, LZMA, LZMA2+BCJ, Deflate, BZip2, PPMd, and LZMA2+AES with encrypted headers. In the reverse direction, 7-Zip must test and extract both ordinary and AES archives created by ZiFile. Every case compares the complete relative file set and SHA-256 content hashes; the uploaded JSON evidence contains no password. CI `32836336921` passed all nine cases with 7-Zip 26.02; the evidence JSON SHA-256 is `06278BB8B96AB683A3C117BA5E30F1B4AB1CF89F1BBF01E72BAC0CC26B49DB14`.
+
+The RAR gate downloads six fixtures from the pinned `rars` source commit `7d8f9386ef777a2415da34fe1db193d8471ff7d0`, verifies hard-coded SHA-256 values before use, and compares ZiFile and 7-Zip extraction trees byte for byte. It covers RAR 1.3, 1.54 multi-file, RAR 3 PPMd, RAR 5 compression and E8E9 filtering, plus a WinRAR 7.21 encrypted-header/Quick Open archive. Three pinned link/redirection archives must be rejected without output. The first GitHub Runner result remains pending and will not be recorded as passed in advance.
 
 Every CI compiles fuzz targets. Weekly bounded campaigns exercise path policy, format detection, and every supported parser for 180 seconds each. Two historical malformed 7z artifacts (292 and 173 bytes) are replayed at every parser campaign start. Their discoveries led to Rust 1.93.0 and bounded-metadata `sevenz-rust2` 0.22.0; targeted run `32813469578` replayed both, executed another 498,937 inputs in 181 seconds, peaked at 370 MiB RSS, and found no new crash.
 

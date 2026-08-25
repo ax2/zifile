@@ -19,7 +19,7 @@ struct FormatCase {
     tar_header: bool,
 }
 
-const CASES: [FormatCase; 13] = [
+const CASES: [FormatCase; 14] = [
     FormatCase {
         suffix: ".zip",
         magic: b"PK\x03\x04",
@@ -28,6 +28,11 @@ const CASES: [FormatCase; 13] = [
     FormatCase {
         suffix: ".7z",
         magic: b"7z\xBC\xAF\x27\x1C",
+        tar_header: false,
+    },
+    FormatCase {
+        suffix: ".rar",
+        magic: b"Rar!\x1A\x07\x01\x00",
         tar_header: false,
     },
     FormatCase {

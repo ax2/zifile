@@ -119,3 +119,9 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 ### 发布结果
 
 进行中。已验证本地 x64 开发 MSIX、候选运行目录和远程 x64/ARM64 默认/候选非发布产物链；当前提交仍是 Alpha 开发检查点，不是可上架版本，也没有创建公开 Release。最新演练证据保存在 [GitHub Actions run 32685678567](https://github.com/ax2/zifile/actions/runs/32685678567)。
+
+## 2026-08-25 — 纯 Rust RAR 只读 Beta
+
+在 `rars` 0.9.3 提供纯 Rust、禁止 `unsafe`、MIT OR Apache-2.0 且覆盖 RAR 1.3 至 RAR 7 的实现后，项目重新完成了原先暂缓的 RAR 评审。ZiFile 现在报告浏览、校验、解压和加密读取能力，RAR 创建仍明确禁用。
+
+核心测试逐一覆盖 Provider 暴露的九个归档版本，并覆盖固实包选择性解压、Unicode 文件名、加密头、密码错误/缺失、严格资源限制、取消、临时文件提交语义、链接、reparse 属性和 RAR 5+ 重定向。parser fuzz 已加入 RAR，MSIX 增加 `.rar` 文件关联。六个固定外部语料已通过本地 ZiFile 完整性校验；新增的 7-Zip 交叉读取与三个拒绝夹具门禁尚待首次云端结果，因此不提前记为互操作通过。

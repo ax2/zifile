@@ -25,8 +25,8 @@ Stage 0 已在 `zifile-core::SafetyLimits` 中建立保守上限。公开的 `li
 
 CLI 不接受明文 `--password` 参数；需要密码的命令只能显式使用 `--password-stdin` 读取一行，避免密码进入进程命令行。调用者仍应从安全提示或秘密提供器写入管道，不应把真实密码作为命令文本字面量。
 
-7z Provider 还在读取、校验和解压入口设置窄范围 unwind 边界。若第三方解析器因畸形元数据触发可恢复的 Rust panic，核心返回普通后端错误；OOM、进程终止和 sanitizer 发现不会被该边界截获，仍由 Worker 隔离和 fuzz 门禁处理。
+7z 与 RAR Provider 都在读取、校验和解压入口设置窄范围 unwind 边界。RAR 还会在解码前拒绝 Unix 链接、Windows reparse 条目和 RAR 5+ 重定向，按实际解码字节独立计数，并在整个操作成功前只保留临时文件。若第三方解析器因畸形元数据触发可恢复的 Rust panic，核心返回普通后端错误；OOM、进程终止和 sanitizer 发现不会被该边界截获，仍由 Worker 隔离和 fuzz 门禁处理。
 
 ## 依赖与许可证
 
-默认发行物只允许经过批准的宽松许可证。`cargo-deny` 阻止未知 registry、未知 Git 来源和通配依赖。RAR 支持必须单独评审，不能将带额外限制的代码静默带入 MIT 发行物。
+默认发行物只允许经过批准的宽松许可证。`cargo-deny` 阻止未知 registry、未知 Git 来源和通配依赖。RAR Provider 使用 MIT OR Apache-2.0 的 `rars`，不会改变 ZiFile 的 MIT 分发边界；升级仍必须重新执行依赖、语料、fuzz 与互操作评审。
