@@ -64,6 +64,7 @@ jobs:
           ./packaging/msix/Test-PublishingInputs.ps1 `
             -IdentityName $env:ZIFILE_MSIX_IDENTITY `
             -Publisher $env:ZIFILE_MSIX_PUBLISHER `
+            -ReleaseVersion '${{ github.ref_name }}' `
             -SigningCertificateAvailable:(-not [string]::IsNullOrWhiteSpace($env:ZIFILE_PFX_BASE64)) `
             -SigningPasswordAvailable:(-not [string]::IsNullOrWhiteSpace($env:ZIFILE_PFX_PASSWORD))
           ./packaging/store/Test-Screenshots.ps1 -RequireComplete
