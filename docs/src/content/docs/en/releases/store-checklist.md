@@ -11,7 +11,7 @@ description: External distribution gates, required material, and repeatable chec
 - WinGet 1.12 multi-file manifests with both architectures, associations, and bilingual metadata.
 - Package audits for identity, publisher, version, minimum OS, four PE architectures, associations, CLI alias, sensitive-file/ZIP absence, and signature state.
 - Tag policy rejects missing official credentials, `.Dev` identities, and unsigned OID publishers.
-- Structured English and Simplified Chinese listing copy, privacy statements, and certification notes are present; CI validates Partner Center limits for descriptions, features, keywords, licensing, and HTTPS URLs.
+- Structured English and Simplified Chinese listing copy, privacy statements, and certification notes are present; CI validates Partner Center limits for descriptions, features, keywords, licensing, and HTTPS URLs, and rejects drift between JSON description paragraphs/features and the readable pages.
 - The bilingual Desktop screenshot manifest has explicit `draft/complete` state. Its gate validates PNG/IHDR, the 1366×768 minimum (or portrait equivalent), the 50 MB limit, SHA-256, path containment, order, scenarios, and 200-character captions. Tagged publishing requires at least four screenshots per language and fails before packaging otherwise.
 - The Store smoke test dynamically creates four real PNGs for each locale, proves that a complete manifest passes, and proves that undersized and duplicate images are rejected. The repository manifest remains an explicit zero-image `draft`; test images are never presented as formal assets.
 

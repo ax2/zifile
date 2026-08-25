@@ -13,17 +13,17 @@ Category: Utilities & tools
 
 Pricing: Free; no ads, in-app purchases, or subscriptions
 
-Short description: A modern open-source archive utility for Windows 10 and 11. Browse, create, and safely extract ZIP, 7z, TAR, and common compressed streams with encryption, drag-and-drop, and Explorer integration.
+Short description: A modern open-source archive utility for Windows 10 and 11. Browse and safely extract RAR, ZIP, 7z, and TAR; create open formats; use encryption, drag-and-drop, and the command line.
 
 ## Full description
 
 ZiFile is a modern open-source archive utility for Windows with clear workflows and cautious security defaults.
 
-Browse archive contents, extract only selected entries, or create ZIP, 7z, TAR, and common compressed streams from files and folders. ZIP and 7z support AES encryption, and passwords are never written to logs or settings.
+Browse archive contents, extract only selected entries, or create ZIP, 7z, TAR, and common compressed streams from files and folders. RAR 1.3 through RAR 7 archives can be browsed, tested, and extracted but not created. ZIP and 7z support AES encryption, and passwords are never written to logs or settings.
 
 ZiFile blocks path traversal, link escapes, reserved Windows names, unsafe overwrites, and excessive archive expansion. Long-running work executes in an isolated background process with visible progress and cancellation.
 
-The app provides English and Simplified Chinese interfaces, drag-and-drop, file associations, a command-line tool, and Windows File Explorer context-menu integration. All archive processing happens locally, with no account, cloud service, advertising, or telemetry.
+The app provides English and Simplified Chinese interfaces, drag-and-drop, file associations, and a command-line tool. All archive processing happens locally, with no account, cloud service, advertising, or telemetry.
 
 ZiFile is open source under the MIT License and supports x64 and ARM64 Windows devices.
 
@@ -31,11 +31,11 @@ ZiFile is open source under the MIT License and supports x64 and ARM64 Windows d
 
 Partner Center adds feature bullets automatically. Paste each line without a bullet marker.
 
-1. Browse, create, and extract ZIP, 7z, TAR, and common compressed streams
+1. Browse and extract RAR, ZIP, 7z, TAR, and common compressed streams
 2. AES encryption for ZIP and 7z without saving passwords to logs or settings
 3. Protection from path traversal, link escapes, unsafe overwrites, and archive bombs
 4. Isolated background operations with visible progress and cancellation
-5. Drag-and-drop, file associations, command line, and File Explorer context menu
+5. Drag-and-drop, file associations, and a command-line tool
 6. English and Simplified Chinese interfaces on x64 and ARM64
 
 Keywords: archive, compression, extract, ZIP, 7z, TAR, file utility.
