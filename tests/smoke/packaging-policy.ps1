@@ -194,6 +194,7 @@ foreach ($requiredRarToken in @(
     'winrar721_header_encrypted_quickopen.rar',
     'rar50/wild/symlink.rar',
     'expected_rejection',
+    '$global:LASTEXITCODE = 0',
     'Assert-TreesMatch'
 )) {
     if ($rarCorpusSource -notmatch [Regex]::Escape($requiredRarToken)) {
