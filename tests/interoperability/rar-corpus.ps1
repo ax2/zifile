@@ -179,6 +179,7 @@ try {
         $rejectedOutput = Join-Path $testRoot ($case.name + '-rejected')
         & $cli extract $archive $rejectedOutput 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) { throw "ZiFile accepted unsafe RAR case $($case.name)." }
+        $global:LASTEXITCODE = 0
         if ((Test-Path -LiteralPath $rejectedOutput) -and @(Get-ChildItem -LiteralPath $rejectedOutput -Recurse -File).Count -ne 0) {
             throw "ZiFile wrote output for unsafe RAR case $($case.name)."
         }
