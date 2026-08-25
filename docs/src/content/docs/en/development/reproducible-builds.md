@@ -3,7 +3,7 @@ title: Reproducible Windows builds
 description: Pinned tools, deterministic linking, and double-build SHA-256 comparison.
 ---
 
-ZiFile distinguishes “can be built again” from byte-for-byte identical output. `rust-toolchain.toml` pins Rust 1.93.0. Windows Release uses one Cargo job, MSVC `/Brepro`, committed `Cargo.lock`, and `--locked`.
+ZiFile distinguishes “can be built again” from byte-for-byte identical output. `rust-toolchain.toml` pins Rust 1.93.0. Windows Release uses one Cargo job, MSVC `/Brepro`, committed `Cargo.lock`, and `--locked`. The double-build script also uses `CARGO_ENCODED_RUSTFLAGS` to map each isolated `CARGO_TARGET_DIR` to `Z:\zifile-target` with `--remap-path-prefix`, preventing generated Rust sources from embedding the distinct `build-a` and `build-b` roots in panic locations.
 
 ## Local verification
 
@@ -25,6 +25,6 @@ Use `-Architecture arm64` for ARM64. Monthly, manual, and build-affecting PR run
 
 ## Current evidence and boundary
 
-Cloud run `32813453959` on Rust 1.93.0 produced 4/5 identical PE files on both x64 and ARM64. Only the default Iced executable differed, so the overall gate correctly failed and the roadmap remains open. A later schema-v2 run showed matching `.text`, `.data`, `.pdata`, `.rsrc`, and `.reloc` with differences in headers and `.rdata`; component-level evidence is being collected to locate the remaining source.
+Cloud run `32813453959` on Rust 1.93.0 produced 4/5 identical PE files on both x64 and ARM64. Schema-v2 run `32822543635` then identified the same cause on both architectures: the first `.rdata` difference was the `build-a` versus `build-b` isolated target path embedded in generated `glutin_wgl_sys` bindings. Checked code/data/resource sections otherwise matched; the header changed because `/Brepro` derives its value from differing content. The path-remapping fix is implemented, but the roadmap remains open until a fresh dual-architecture cloud run passes.
 
 This gate covers raw PE bytes on one Windows Runner, source revision, and locked toolchain. Signatures and MSIX container metadata require separate double-package checks, and cross-machine/MSVC-version reproducibility remains unproven. A 4/5 result must never be described as fully reproducible.

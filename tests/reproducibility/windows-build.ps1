@@ -39,6 +39,8 @@ $temporaryRoot = Join-Path $temporaryBase "zifile-repro-$([Guid]::NewGuid().ToSt
 $originalTargetDirectory = $env:CARGO_TARGET_DIR
 $originalIncremental = $env:CARGO_INCREMENTAL
 $originalRustFlags = $env:RUSTFLAGS
+$originalEncodedRustFlags = $env:CARGO_ENCODED_RUSTFLAGS
+$encodedRustFlagSeparator = [char]0x1f
 
 function Get-RangeSha256 {
     param(
@@ -349,12 +351,20 @@ function Invoke-IsolatedBuild {
     $targetDirectory = Join-Path $temporaryRoot $Label
     $env:CARGO_TARGET_DIR = $targetDirectory
     $env:CARGO_INCREMENTAL = '0'
-    $deterministicFlags = '-C link-arg=/Brepro'
-    $env:RUSTFLAGS = if ([string]::IsNullOrWhiteSpace($originalRustFlags)) {
-        $deterministicFlags
+    $inheritedRustFlags = if (-not [string]::IsNullOrWhiteSpace($originalEncodedRustFlags)) {
+        @($originalEncodedRustFlags.Split($encodedRustFlagSeparator))
+    } elseif (-not [string]::IsNullOrWhiteSpace($originalRustFlags)) {
+        @($originalRustFlags -split '\s+')
     } else {
-        "$originalRustFlags $deterministicFlags"
+        @()
     }
+    $deterministicFlags = @(
+        '-C',
+        'link-arg=/Brepro',
+        "--remap-path-prefix=$targetDirectory=Z:\zifile-target"
+    )
+    $env:CARGO_ENCODED_RUSTFLAGS = @($inheritedRustFlags + $deterministicFlags) -join $encodedRustFlagSeparator
+    Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue
 
     Push-Location $repository
     try {
@@ -423,6 +433,7 @@ try {
         cargo_incremental = 0
         cargo_build_jobs = 1
         deterministic_linker_flag = '/Brepro'
+        isolated_target_path_remap = 'each isolated CARGO_TARGET_DIR -> Z:\zifile-target'
         rustc = $rustcVersion
         cargo = $cargoVersion
         builds = 2
@@ -452,6 +463,11 @@ try {
         Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue
     } else {
         $env:RUSTFLAGS = $originalRustFlags
+    }
+    if ($null -eq $originalEncodedRustFlags) {
+        Remove-Item Env:CARGO_ENCODED_RUSTFLAGS -ErrorAction SilentlyContinue
+    } else {
+        $env:CARGO_ENCODED_RUSTFLAGS = $originalEncodedRustFlags
     }
 
     $resolvedTemporaryRoot = [IO.Path]::GetFullPath($temporaryRoot)

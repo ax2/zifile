@@ -85,8 +85,9 @@ Goal: distribution, accessibility, localization, and hardening.
 - [ ] Microsoft Store submission and certification.
 - [x] Tag workflow for SBOM, provenance attestation and checksums.
 - [ ] Reproducible-build documentation and comparison evidence (toolchain pin
-  and double-build workflow implemented; clean x64/ARM64 evidence matches 4/5
-  PE files, while the default Iced executable remains non-reproducible).
+  and double-build workflow implemented; schema v2 traced the clean x64/ARM64
+  4/5 result to generated `glutin_wgl_sys` target paths, and path remapping is
+  implemented pending fresh 5/5 evidence).
 
 ## Stage 4 — 1.0
 

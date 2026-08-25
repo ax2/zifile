@@ -34,7 +34,7 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 
 性能门禁需要多轮运行和稳定基线，不能用一次共享 CI 结果直接判定回归。
 
-`tests/reproducibility/windows-build.ps1` 在两个全新目标目录使用固定 Rust 1.93.0、锁文件、单作业构建与 MSVC `/Brepro`，比较默认桌面、可访问候选、CLI、Worker 和 Explorer DLL。2026-08-25 云端运行 32813453959 在新工具链上再次得到 x64/ARM64 各 4/5 匹配，仍只有默认 Iced EXE 不同，所以门禁按预期失败、路线图未完成。后续 schema v2 证据会进一步记录不同 PE 的 section 哈希和首个差异偏移。定时/手动双架构工作流用于持续暴露该差异，不得把部分匹配写成整体通过。
+`tests/reproducibility/windows-build.ps1` 在两个全新目标目录使用固定 Rust 1.93.0、锁文件、单作业构建与 MSVC `/Brepro`，比较默认桌面、可访问候选、CLI、Worker 和 Explorer DLL。云端 32813453959 在新工具链上得到双架构各 4/5；schema v2 运行 32822543635 进一步确认默认 Iced EXE 的 `.rdata` 首差异是 `glutin_wgl_sys` 生成绑定内嵌的 `build-a`/`build-b` target 路径。脚本现用 `CARGO_ENCODED_RUSTFLAGS` 与 `--remap-path-prefix` 把两个根映射到同一虚拟路径；新云端运行通过前，路线图仍未完成，不得把部分匹配写成整体通过。
 
 Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.exe`，分别对 ZIP、tar.gz 与 7z 执行双向互操作：参考工具创建的包由 ZiFile 校验和解压，ZiFile 创建的包由参考工具解压并逐文件核对（含 Unicode 路径）。
 

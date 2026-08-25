@@ -3,7 +3,7 @@ title: 可复现 Windows 构建
 description: 固定工具链、确定性链接和双构建 SHA-256 对比方法。
 ---
 
-ZiFile 将“同一源码可以再次编译”与“产物逐字节相同”分开验证。仓库通过 `rust-toolchain.toml` 固定 Rust 1.93.0；Windows Release 还固定为单作业构建并向 MSVC 链接器传递 `/Brepro`。依赖版本必须来自已提交的 `Cargo.lock`，所有命令使用 `--locked`。
+ZiFile 将“同一源码可以再次编译”与“产物逐字节相同”分开验证。仓库通过 `rust-toolchain.toml` 固定 Rust 1.93.0；Windows Release 还固定为单作业构建并向 MSVC 链接器传递 `/Brepro`。依赖版本必须来自已提交的 `Cargo.lock`，所有命令使用 `--locked`。双构建脚本还用 `CARGO_ENCODED_RUSTFLAGS` 为每个隔离的 `CARGO_TARGET_DIR` 注入 `--remap-path-prefix=FROM=Z:\zifile-target`，避免依赖生成的 Rust 源文件把 `build-a`/`build-b` 绝对路径编入 panic 位置。
 
 ## 本机复测
 
@@ -37,7 +37,7 @@ ARM64 使用同一脚本和 `-Architecture arm64`。每月计划任务、手动�
 
 2026-08-24 基于 Rust 1.88.0 的本地 Windows x64 完整双构建中，可访问候选、CLI、Worker 与 Explorer DLL 的两组 SHA-256 完全相同；默认 `zifile-desktop.exe` 不同。云端运行 `32707399686` 随后在干净 PR 合并提交上复现了相同结论：x64 与 ARM64 都是 4/5 匹配，只有默认 Iced EXE 不同，因此两项总体结果均为 `reproducible=false`，路线图保持未完成。此前的小范围调查确认 `/Brepro` 能消除 PE 时间戳/调试标识差异，单作业能让 CLI 稳定复现；Iced/WGPU 默认桌面路径仍有额外非确定性，需要继续定位。
 
-2026-08-25 为采用已修复解析器后端把固定工具链升级到 Rust 1.93.0。云端运行 `32813453959` 在干净 PR 合并提交上重新建立证据：x64 与 ARM64 仍各有 4/5 PE 匹配，只有默认 Iced EXE 不同；两份失败 JSON 已下载并核对，不能把工具链升级描述为修复了可复现缺口。该运行仍使用 schema v1；随后加入的 schema v2 section 诊断将在下一轮提供更细的根因证据。
+2026-08-25 为采用已修复解析器后端把固定工具链升级到 Rust 1.93.0。云端运行 `32813453959` 在干净 PR 合并提交上重新建立证据：x64 与 ARM64 仍各有 4/5 PE 匹配，只有默认 Iced EXE 不同。schema v2 运行 `32822543635` 随后定位了两个架构的同一根因：`.rdata` 首差异均是 `glutin_wgl_sys` 生成绑定中的 `build-a` 对 `build-b` 隔离 target 路径；`.text` 和其他已检查 section 相同，header 差异是 `/Brepro` 内容哈希随 `.rdata` 变化的后果。路径重映射修复已加入，但在新双架构云端结果完成前仍不把门禁标记为通过。
 
 ## 已知边界
 

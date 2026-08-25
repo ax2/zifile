@@ -24,4 +24,4 @@ The 100,000-entry UI model constructs at most 500 visible rows. A real determini
 
 Foreground keyboard automation checks internal WebView2 focus, bilingual forward/reverse navigation, disabled-control skipping, 7z selection, level adjustment, password clearing, and source buttons. It verifies the exact ZiFile foreground window before every key and never records the password. Full archive/extract traversal and assistive-technology certification remain open.
 
-Reproducibility separately performs clean x64/ARM64 double builds. Current evidence is 4/5 identical PE files because the default Iced executable still differs; partial equality is never treated as a passing gate.
+Reproducibility separately performs clean x64/ARM64 double builds. Schema-v2 evidence traced the former 4/5 result to `build-a`/`build-b` target paths embedded by generated `glutin_wgl_sys` code in the default Iced executable. The script now remaps both isolated roots to one virtual path; the gate remains open until a fresh cloud run proves 5/5 on both architectures.

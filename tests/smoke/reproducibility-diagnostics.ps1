@@ -3,6 +3,7 @@ Set-StrictMode -Version Latest
 
 $repository = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $diagnosticScript = Join-Path $repository 'tests\reproducibility\windows-build.ps1'
+$diagnosticSource = Get-Content -LiteralPath $diagnosticScript -Raw
 $defaultDesktop = Join-Path $repository 'target\debug\zifile-desktop.exe'
 $differentPe = Join-Path $repository 'target\debug\zifile-worker.exe'
 
@@ -10,6 +11,12 @@ foreach ($path in @($diagnosticScript, $defaultDesktop, $differentPe)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Required reproducibility diagnostic input is missing: $path"
     }
+}
+if (
+    $diagnosticSource -notmatch 'CARGO_ENCODED_RUSTFLAGS' -or
+    $diagnosticSource -notmatch '--remap-path-prefix=\$targetDirectory=Z:\\zifile-target'
+) {
+    throw 'Reproducibility build no longer normalizes isolated target-directory paths.'
 }
 
 $same = & $diagnosticScript `
@@ -62,5 +69,6 @@ if ($differentComponentWithContext.Count -eq 0) {
     different_first_offset_found = $true
     different_context_preserved = $true
     different_component_context_preserved = $true
+    isolated_target_path_remap_present = $true
     different_components = $differentComponents.Count
 } | ConvertTo-Json
