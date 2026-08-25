@@ -34,11 +34,20 @@ if ($null -eq $different.first_difference_offset) {
 if ($differentComponents.Count -eq 0) {
     throw 'Different PE files did not report a mismatched component.'
 }
+if (
+    [string]::IsNullOrWhiteSpace($different.first_difference_component) -or
+    $null -eq $different.first_difference_context -or
+    [string]::IsNullOrWhiteSpace($different.first_difference_context.build_a_hex) -or
+    [string]::IsNullOrWhiteSpace($different.first_difference_context.build_b_hex)
+) {
+    throw 'Different PE files did not preserve bounded first-difference context.'
+}
 
 [ordered]@{
     schema_version = 1
     identical_components = @($same.pe_components).Count
     identical_all_match = $true
     different_first_offset_found = $true
+    different_context_preserved = $true
     different_components = $differentComponents.Count
 } | ConvertTo-Json
