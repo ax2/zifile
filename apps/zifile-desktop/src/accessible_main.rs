@@ -386,15 +386,17 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
     let view = state.read().clone();
     let locale = view.locale;
     let encrypted = view.create_format.capabilities().encryption;
+    let source_summary = create_source_summary(locale, view.create_sources.len());
     rsx! { section { class: "create-page", "aria-labelledby": "create-title",
         div { class: "page-heading", div { h2 { id: "create-title", {locale.text(Text::CreateHeading)} } p { {locale.text(Text::CreateHelp)} } }
             div { class: "button-row", button { onclick: move |_| add_files(state), {locale.text(Text::AddFiles)} }
                 button { onclick: move |_| add_folder(state), {locale.text(Text::AddFolder)} }
-                button { disabled: view.create_sources.is_empty(), onclick: move |_| state.write().create_sources.clear(), {locale.text(Text::Clear)} } } }
-        section { class: "source-list", "aria-label": choose(locale, "Archive sources", "压缩来源"),
+                button { disabled: view.create_sources.is_empty(), "aria-describedby": "create-source-summary", onclick: move |_| clear_create_sources(state), {locale.text(Text::Clear)} } } }
+        section { class: "source-list", "aria-label": choose(locale, "Archive sources", "压缩来源"), "aria-describedby": "create-source-summary",
+            output { id: "create-source-summary", class: "source-summary", role: "status", "aria-live": "polite", "aria-atomic": "true", {source_summary} }
             if view.create_sources.is_empty() { p { class: "muted", {locale.text(Text::NoSources)} } }
-            ul { for (index, source) in view.create_sources.iter().enumerate() { li { key: "{source.display()}", span { {source.to_string_lossy().to_string()} }
-                button { onclick: move |_| { if index < state.read().create_sources.len() { state.write().create_sources.remove(index); } }, {locale.text(Text::Remove)} } } } }
+            ul { for source in view.create_sources.iter() { li { key: "{source.display()}", span { {source.to_string_lossy().to_string()} }
+                button { "aria-label": create_source_remove_label(locale, &source.to_string_lossy()), onclick: { let source = source.clone(); move |_| remove_create_source(state, source.clone()) }, {locale.text(Text::Remove)} } } } }
         }
         div { class: "form-grid",
             label { span { {locale.text(Text::Format)} } select { value: format_value(view.create_format),
@@ -456,9 +458,10 @@ fn handle_dropped_paths(mut state: Signal<UiState>, paths: Vec<PathBuf>) {
     let existing = paths.into_iter().filter(|path| path.exists()).collect();
     let locale = state.read().locale;
     let mut value = state.write();
-    append_unique(&mut value.create_sources, existing);
+    let added = append_unique(&mut value.create_sources, existing);
+    let total = value.create_sources.len();
     value.page = Page::Create;
-    value.set_status(choose(locale, "Added dropped sources", "已添加拖入的来源").to_owned());
+    value.set_status(create_sources_added_status(locale, added, total));
 }
 
 fn reload_archive(state: Signal<UiState>) {
@@ -568,7 +571,10 @@ fn add_files(mut state: Signal<UiState>) {
         .set_title(locale.text(Text::AddFilesDialog))
         .pick_files()
     {
-        append_unique(&mut state.write().create_sources, paths);
+        let mut value = state.write();
+        let added = append_unique(&mut value.create_sources, paths);
+        let status = create_sources_added_status(locale, added, value.create_sources.len());
+        value.set_status(status);
     }
 }
 
@@ -578,8 +584,37 @@ fn add_folder(mut state: Signal<UiState>) {
         .set_title(locale.text(Text::AddFolderDialog))
         .pick_folder()
     {
-        append_unique(&mut state.write().create_sources, vec![path]);
+        let mut value = state.write();
+        let added = append_unique(&mut value.create_sources, vec![path]);
+        let status = create_sources_added_status(locale, added, value.create_sources.len());
+        value.set_status(status);
     }
+}
+
+fn remove_create_source(mut state: Signal<UiState>, path: PathBuf) {
+    let mut value = state.write();
+    let before = value.create_sources.len();
+    value.create_sources.retain(|source| source != &path);
+    if value.create_sources.len() == before {
+        return;
+    }
+    let status = create_source_removed_status(
+        value.locale,
+        &path.to_string_lossy(),
+        value.create_sources.len(),
+    );
+    value.set_status(status);
+}
+
+fn clear_create_sources(mut state: Signal<UiState>) {
+    let mut value = state.write();
+    let cleared = value.create_sources.len();
+    value.create_sources.clear();
+    let status = match value.locale {
+        Locale::En => format!("Cleared {cleared} archive sources"),
+        Locale::ZhCn => format!("已清除 {cleared} 个压缩来源"),
+    };
+    value.set_status(status);
 }
 
 fn create_archive(state: Signal<UiState>) {
@@ -907,6 +942,40 @@ fn archive_selection_change_status(
     }
 }
 
+fn create_source_summary(locale: Locale, count: usize) -> String {
+    match locale {
+        Locale::En => format!(
+            "{count} archive {} added",
+            if count == 1 { "source" } else { "sources" }
+        ),
+        Locale::ZhCn => format!("已添加 {count} 个压缩来源"),
+    }
+}
+
+fn create_source_remove_label(locale: Locale, path: &str) -> String {
+    match locale {
+        Locale::En => format!("Remove archive source {path}"),
+        Locale::ZhCn => format!("移除压缩来源 {path}"),
+    }
+}
+
+fn create_sources_added_status(locale: Locale, added: usize, total: usize) -> String {
+    match locale {
+        Locale::En => format!(
+            "Added {added} archive {}; {total} total",
+            if added == 1 { "source" } else { "sources" }
+        ),
+        Locale::ZhCn => format!("已添加 {added} 个压缩来源；共 {total} 个"),
+    }
+}
+
+fn create_source_removed_status(locale: Locale, path: &str, remaining: usize) -> String {
+    match locale {
+        Locale::En => format!("Removed archive source {path}; {remaining} remaining"),
+        Locale::ZhCn => format!("已移除压缩来源 {path}；剩余 {remaining} 个"),
+    }
+}
+
 fn archive_dialog(locale: Locale) -> FileDialog {
     FileDialog::new()
         .set_title(locale.text(Text::OpenDialog))
@@ -1002,12 +1071,14 @@ const fn choose<'a>(locale: Locale, english: &'a str, chinese: &'a str) -> &'a s
         Locale::ZhCn => chinese,
     }
 }
-fn append_unique(destination: &mut Vec<PathBuf>, paths: Vec<PathBuf>) {
+fn append_unique(destination: &mut Vec<PathBuf>, paths: Vec<PathBuf>) -> usize {
+    let before = destination.len();
     for path in paths {
         if !destination.contains(&path) {
             destination.push(path);
         }
     }
+    destination.len() - before
 }
 fn format_bytes(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
@@ -1084,6 +1155,30 @@ mod tests {
             ("status", "polite")
         );
         assert_eq!(status_semantics(StatusKind::Error), ("alert", "assertive"));
+    }
+
+    #[test]
+    fn create_source_accessibility_copy_identifies_paths_and_counts() {
+        assert_eq!(
+            create_source_summary(Locale::En, 1),
+            "1 archive source added"
+        );
+        assert_eq!(
+            create_source_summary(Locale::ZhCn, 3),
+            "已添加 3 个压缩来源"
+        );
+        assert_eq!(
+            create_source_remove_label(Locale::En, "docs/readme.txt"),
+            "Remove archive source docs/readme.txt"
+        );
+        assert_eq!(
+            create_source_removed_status(Locale::ZhCn, "文档/说明.txt", 2),
+            "已移除压缩来源 文档/说明.txt；剩余 2 个"
+        );
+        assert_eq!(
+            create_sources_added_status(Locale::En, 0, 2),
+            "Added 0 archive sources; 2 total"
+        );
     }
 
     #[test]
