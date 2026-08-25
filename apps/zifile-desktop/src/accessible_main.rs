@@ -27,6 +27,7 @@ use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 
 const STYLES: &str = include_str!("accessible_ui.css");
+const ARCHIVE_FILTER_LIVE: &str = "off";
 const OPERATION_PROGRESS_LIVE: &str = "off";
 const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src dioxus: ws://127.0.0.1:* http://dioxus.index.html https://dioxus.index.html ipc:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
 const CREATE_FORMATS: [ArchiveFormat; 13] = [
@@ -320,6 +321,8 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
     let selected_count = view.selected.len();
     let all_selected = all_files > 0 && selected_count == all_files;
     let selection_summary = archive_selection_summary(locale, selected_count, all_files);
+    let filter_summary =
+        archive_filter_summary(locale, &view.entry_filter, count, archive.entries.len());
     let select_all_label = archive_select_all_label(locale, all_selected);
     let archive_name = archive
         .path
@@ -335,7 +338,22 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
         div { class: "toolbar",
             label { span { {locale.text(Text::PasswordEncrypted)} } input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() } }
             button { onclick: move |_| reload_archive(state), {locale.text(Text::Reload)} }
-            label { span { {locale.text(Text::Search)} } input { r#type: "search", value: view.entry_filter.clone(), oninput: move |event| { let mut value = state.write(); value.entry_filter = event.value(); value.entry_page = 0; } } }
+            div { class: "search-field",
+                div { class: "search-row",
+                    label { span { {locale.text(Text::Search)} }
+                        input { r#type: "search", value: view.entry_filter.clone(), "aria-describedby": "archive-filter-summary", "aria-controls": "archive-entry-table",
+                            oninput: move |event| { let mut value = state.write(); value.entry_filter = event.value(); value.entry_page = 0; },
+                            onkeydown: move |event: KeyboardEvent| {
+                                if !event.is_composing() && event.key().to_string().eq_ignore_ascii_case("Enter") {
+                                    announce_archive_filter(state);
+                                }
+                            }
+                        }
+                    }
+                    button { disabled: view.entry_filter.is_empty(), "aria-describedby": "archive-filter-summary", onclick: move |_| clear_archive_filter(state), {choose(locale, "Clear search", "清除搜索")} }
+                }
+                output { id: "archive-filter-summary", class: "filter-summary", "aria-live": ARCHIVE_FILTER_LIVE, "aria-atomic": "true", {filter_summary} }
+            }
         }
         div { class: "selection-bar",
             label { input { r#type: "checkbox", checked: all_selected, "aria-label": select_all_label, "aria-describedby": "archive-selection-summary", "aria-keyshortcuts": "Control+A", onchange: move |event| select_all(state, event.checked()) }
@@ -347,7 +365,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 button { class: "primary", disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
             }
         }
-        div { class: "table-wrap", tabindex: "0", role: "region", "aria-label": choose(locale, "Archive entries", "压缩文件项目"), "aria-describedby": "archive-selection-summary", "aria-keyshortcuts": "Control+A",
+        div { class: "table-wrap", tabindex: "0", role: "region", "aria-label": choose(locale, "Archive entries", "压缩文件项目"), "aria-describedby": "archive-selection-summary archive-filter-summary", "aria-keyshortcuts": "Control+A",
             onkeydown: move |event: KeyboardEvent| {
                 let control = event.modifiers().contains(Modifiers::CONTROL);
                 if !event.is_composing()
@@ -357,7 +375,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                     select_all(state, true);
                 }
             },
-            table {
+            table { id: "archive-entry-table",
                 caption { class: "sr-only", {choose(locale, "Archive entry details and selection", "压缩文件项目详情与选择")} }
                 thead { tr {
                     th { scope: "col", span { class: "sr-only", {choose(locale, "Select", "选择")} } }
@@ -368,11 +386,14 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 } }
                 tbody { for entry in rows { ArchiveRow { key: "{entry.path.display()}", state, entry, locale } } }
             }
+            if count == 0 { p { class: "empty-filter", {archive_no_matches(locale, &view.entry_filter)} } }
         }
-        nav { class: "pagination", "aria-label": choose(locale, "Entry pages", "项目分页"),
-            button { disabled: current_page == 0, onclick: move |_| state.write().entry_page = current_page.saturating_sub(1), {locale.text(Text::Previous)} }
-            span { "{locale.text(Text::Page)} {current_page + 1} / {last_page + 1}" }
-            button { disabled: current_page >= last_page, onclick: move |_| state.write().entry_page = (current_page + 1).min(last_page), {locale.text(Text::Next)} }
+        if count > 0 {
+            nav { class: "pagination", "aria-label": choose(locale, "Entry pages", "项目分页"),
+                button { disabled: current_page == 0, onclick: move |_| state.write().entry_page = current_page.saturating_sub(1), {locale.text(Text::Previous)} }
+                span { "{locale.text(Text::Page)} {current_page + 1} / {last_page + 1}" }
+                button { disabled: current_page >= last_page, onclick: move |_| state.write().entry_page = (current_page + 1).min(last_page), {locale.text(Text::Next)} }
+            }
         }
     } }
 }
@@ -914,6 +935,33 @@ fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected:
     value.set_status(status);
 }
 
+fn announce_archive_filter(mut state: Signal<UiState>) {
+    let value = state.read();
+    let Some(archive) = value.archive.as_ref() else {
+        return;
+    };
+    let status = archive_filter_summary(
+        value.locale,
+        &value.entry_filter,
+        filtered_entry_count(archive, &value.entry_filter),
+        archive.entries.len(),
+    );
+    drop(value);
+    state.write().set_status(status);
+}
+
+fn clear_archive_filter(mut state: Signal<UiState>) {
+    let mut value = state.write();
+    let total = value
+        .archive
+        .as_ref()
+        .map_or(0, |archive| archive.entries.len());
+    value.entry_filter.clear();
+    value.entry_page = 0;
+    let status = archive_filter_summary(value.locale, "", total, total);
+    value.set_status(status);
+}
+
 fn archive_selection_summary(locale: Locale, selected: usize, total: usize) -> String {
     match locale {
         Locale::En => format!(
@@ -921,6 +969,30 @@ fn archive_selection_summary(locale: Locale, selected: usize, total: usize) -> S
             locale.text(Text::Selected)
         ),
         Locale::ZhCn => format!("{selected}/{total} {}", locale.text(Text::Selected)),
+    }
+}
+
+fn archive_filter_summary(locale: Locale, filter: &str, matches: usize, total: usize) -> String {
+    match locale {
+        Locale::En if filter.is_empty() => format!(
+            "Showing all {total} {}",
+            if total == 1 { "entry" } else { "entries" }
+        ),
+        Locale::En => format!(
+            "Showing {matches} of {total} {} for “{filter}”",
+            if total == 1 { "entry" } else { "entries" }
+        ),
+        Locale::ZhCn if filter.is_empty() => format!("显示全部 {total} 个项目"),
+        Locale::ZhCn => format!("{total} 个项目中显示 {matches} 个匹配“{filter}”的结果"),
+    }
+}
+
+fn archive_no_matches(locale: Locale, filter: &str) -> String {
+    match locale {
+        Locale::En if filter.is_empty() => "This archive has no entries".to_owned(),
+        Locale::En => format!("No archive entries match “{filter}”"),
+        Locale::ZhCn if filter.is_empty() => "此压缩文件没有项目".to_owned(),
+        Locale::ZhCn => format!("没有压缩文件项目匹配“{filter}”"),
     }
 }
 
@@ -1217,6 +1289,28 @@ mod tests {
             archive_selection_change_status(Locale::ZhCn, "文档/说明.txt", false, 3),
             "已取消选择 文档/说明.txt；共选择 3 个文件"
         );
+    }
+
+    #[test]
+    fn archive_filter_copy_is_visible_bilingual_and_not_live() {
+        assert_eq!(ARCHIVE_FILTER_LIVE, "off");
+        assert_eq!(
+            archive_filter_summary(Locale::En, "", 1, 1),
+            "Showing all 1 entry"
+        );
+        assert_eq!(
+            archive_filter_summary(Locale::En, "beta", 1, 2),
+            "Showing 1 of 2 entries for “beta”"
+        );
+        assert_eq!(
+            archive_filter_summary(Locale::ZhCn, "文档", 0, 3),
+            "3 个项目中显示 0 个匹配“文档”的结果"
+        );
+        assert_eq!(
+            archive_no_matches(Locale::En, "missing"),
+            "No archive entries match “missing”"
+        );
+        assert_eq!(archive_no_matches(Locale::ZhCn, ""), "此压缩文件没有项目");
     }
 
     #[test]
