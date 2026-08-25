@@ -107,6 +107,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - [路径重映射复现 32826187552](https://github.com/ax2/zifile/actions/runs/32826187552) 首次在 x64 和 ARM64 同时实现 5/5；两份 JSON 均为 `reproducible=true`，证据哈希分别为 `B7C22C8F3728301BD804AE93AA9DE446645F27C8734955D780CBDAD14EC25C3D` 与 `D6BB828B984B811F56173C9E44418F8C71501A45D86DCF1D4501C0AF7A179DFF`。
 - CLI 删除会把密码暴露到进程参数的 `--password <值>`，改为显式 `--password-stdin`；3 项单测与基础冒烟覆盖非空单行读取、空格保留、帮助面策略及 AES 7z 创建/校验/解压。
 - 新增官方 7-Zip 双向语料门禁，计划覆盖 7 种参考创建的编码/过滤器/加密组合与 2 种 ZiFile 创建归档，并上传逐文件哈希证据；本机没有 `7z.exe`，因此此项仍等待 GitHub Windows Runner 的首次真实结果，不提前记为通过。
+- 首次云端运行 32835391711 在 Deflate 场景发现 `sevenz-rust2` 的对应解码 feature 未启用；既有默认 feature 不包含 Deflate。项目已显式启用后端 `deflate` feature，等待完整语料重跑，失败结果不记为通过。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
 - 归档页完整表格/解压表单键盘遍历、可见焦点、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；主导航、创建表单与核心快捷键已有中英文键盘证据。真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索、翻页、加载取消及可重复的首内容/滚动/同时刻整树峰值采样。
 - Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树、Worker 功能路径、核心快捷键、本地 x64 运行及云端 x64/ARM64 打包，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、真实拖放和 ARM64 候选实机运行门禁约束。
