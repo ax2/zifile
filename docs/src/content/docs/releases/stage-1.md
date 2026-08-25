@@ -99,7 +99,10 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 同批 [双架构复现 32733631204](https://github.com/ax2/zifile/actions/runs/32733631204) 仍为 x64/ARM64 各 4/5，仅默认 Iced EXE 不同；失败 JSON 已保留，没有将预期失败写成通过。
 - 第二轮 [动态 fuzz 32803785688](https://github.com/ax2/zifile/actions/runs/32803785688) 发现另一份 173 字节畸形 7z 可触发 ASan 超大内存分配，产物 SHA-256 为 `FBE1B601781F34CB96699A9114E243B9B8720451B3CC308F4A309EB44BAE90EC`。这证明只捕获 panic 不能构成 OOM 防线。
 - 上游 `sevenz-rust2` 0.21.3 起加入损坏归档、无限循环和无界分配加固，当前 0.22.0 包含有界元数据计数；该版本要求 Rust 1.93。项目因此同步升级固定工具链和 CI/Release/复现环境，并把两份崩溃输入都作为共享十六进制夹具，在集成测试和每次解析器 campaign 启动时重放。
-- Rust 1.93.0、`sevenz-rust2` 0.22.0 下两份固定样本回归、格式、严格 Clippy、60 次全工作区测试、benchmark 编译、基础与打包策略冒烟、Windows ZIP/tar.gz/7z 互操作、nightly fuzz 编译和 19 页 Astro 构建均通过；单作业 x64 全特性 Release 构建用时 14 分 20 秒并通过。Linux 定向 campaign、云端依赖策略、CI 与双架构复现仍待本批后续证据，不提前记为通过。
+- Rust 1.93.0、`sevenz-rust2` 0.22.0 下两份固定样本回归、格式、严格 Clippy、60 次全工作区测试、benchmark 编译、基础与打包策略冒烟、Windows ZIP/tar.gz/7z 互操作、nightly fuzz 编译和 19 页 Astro 构建均通过；单作业 x64 全特性 Release 构建用时 14 分 20 秒并通过。云端依赖策略与文档作业也已通过；完整 CI 与双架构复现仍在运行，不提前记为通过。
+- 升级后的 [定向 fuzz 32813469578](https://github.com/ax2/zifile/actions/runs/32813469578) 通过：路径与格式目标按手动参数跳过，归档解析器强制重放两份历史 artifact 后运行 181 秒、执行 498,937 次，最终覆盖计数 4,266、峰值 RSS 370 MiB，未上传新崩溃产物。
+- 升级批次 [CI 32813453887](https://github.com/ax2/zifile/actions/runs/32813453887) 四个作业全部通过，复验 Rust 1.93 下的依赖策略、格式、严格 Clippy、60 次测试、benchmark、真实 Worker/打包冒烟、ZIP/tar.gz/7z 互操作、19 页文档和 Linux fuzz 目标构建。
+- [双架构复现 32813453959](https://github.com/ax2/zifile/actions/runs/32813453959) 在 Rust 1.93 干净合并提交上仍为 x64/ARM64 各 4/5，只有默认 Iced EXE 不同；两份 JSON 已下载核对。复现脚本随后升级为 schema v2，对不同 PE 记录 headers/section/overlay 哈希与首个差异偏移，并新增无需双构建的诊断器冒烟测试。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
 - 归档页完整表格/解压表单键盘遍历、可见焦点、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；主导航、创建表单与核心快捷键已有中英文键盘证据。真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索、翻页、加载取消及可重复的首内容/滚动/同时刻整树峰值采样。
 - Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树、Worker 功能路径、核心快捷键、本地 x64 运行及云端 x64/ARM64 打包，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、真实拖放和 ARM64 候选实机运行门禁约束。
