@@ -105,6 +105,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - [双架构复现 32813453959](https://github.com/ax2/zifile/actions/runs/32813453959) 在 Rust 1.93 干净合并提交上仍为 x64/ARM64 各 4/5，只有默认 Iced EXE 不同；两份 JSON 已下载核对。复现脚本随后升级为 schema v2，对不同 PE 记录 headers/section/overlay 哈希与首个差异偏移，并新增无需双构建的诊断器冒烟测试。
 - [schema v2 双架构复现 32822543635](https://github.com/ax2/zifile/actions/runs/32822543635) 确认 x64 与 ARM64 的 `.rdata` 首差异都是 `glutin_wgl_sys` 生成绑定内嵌的 `build-a`/`build-b` 隔离 target 路径；headers 差异是 `/Brepro` 内容哈希的后果。双构建现用 `CARGO_ENCODED_RUSTFLAGS` 将每个 target 根重映射到 `Z:\zifile-target`，新云端 5/5 证据产生前不提前勾选路线图。
 - [路径重映射复现 32826187552](https://github.com/ax2/zifile/actions/runs/32826187552) 首次在 x64 和 ARM64 同时实现 5/5；两份 JSON 均为 `reproducible=true`，证据哈希分别为 `B7C22C8F3728301BD804AE93AA9DE446645F27C8734955D780CBDAD14EC25C3D` 与 `D6BB828B984B811F56173C9E44418F8C71501A45D86DCF1D4501C0AF7A179DFF`。
+- CLI 删除会把密码暴露到进程参数的 `--password <值>`，改为显式 `--password-stdin`；3 项单测与基础冒烟覆盖非空单行读取、空格保留、帮助面策略及 AES 7z 创建/校验/解压。
 - Shell 命令、任务栏进度、MSIX 安装升级和签名验证。
 - 归档页完整表格/解压表单键盘遍历、可见焦点、屏幕阅读器、高对比度、中文 IME 和每显示器 DPI 验证；主导航、创建表单与核心快捷键已有中英文键盘证据。真实十万项归档已覆盖 Worker 列出、首屏有界渲染、搜索、翻页、加载取消及可重复的首内容/滚动/同时刻整树峰值采样。
 - Iced 当前没有可用于认证的完整 Windows UI Automation/Narrator 语义树；Dioxus 候选已证明 UI Automation 语义树、Worker 功能路径、核心快捷键、本地 x64 运行及云端 x64/ARM64 打包，但默认替换仍受 Narrator、Accessibility Insights、高对比度、IME、DPI、真实拖放和 ARM64 候选实机运行门禁约束。

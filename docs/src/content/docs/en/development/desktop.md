@@ -5,6 +5,15 @@ description: Languages, themes, shortcuts, large archives, and open accessibilit
 
 ZiFile's desktop is written in Rust. Compression, testing, and extraction run in background Workers with entry/byte progress and cancellation. File names, contents, and passwords are never uploaded.
 
+## CLI password input
+
+The CLI does not accept `--password <value>`, which would expose a secret through process arguments and ordinary shell history. Encrypted `list`, `test`, `extract`, and `create` operations use `--password-stdin` to read one non-empty line from standard input. Only line endings are removed; leading and trailing spaces remain part of the password.
+
+```powershell
+$password | zifile test archive.7z --password-stdin
+$password | zifile extract archive.7z output --password-stdin
+```
+
 ## Settings and shortcuts
 
 The first launch selects Simplified Chinese or English from the system locale. Language and light/dark theme can be changed at any time. Only those two preferences are stored in `%LOCALAPPDATA%\ZiFile\settings.conf`; passwords, paths, and recent files are not persisted.

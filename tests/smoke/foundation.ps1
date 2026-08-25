@@ -16,6 +16,14 @@ try {
     if ($LASTEXITCODE -ne 0 -or $formats -notmatch 'ZIP' -or $formats -notmatch '7z') {
         throw 'CLI format registry smoke test failed.'
     }
+    $createHelp = (cargo run --quiet -p zifile-cli -- create --help) -join "`n"
+    if (
+        $LASTEXITCODE -ne 0 -or
+        $createHelp -notmatch '--password-stdin' -or
+        $createHelp -match '(?m)^\s*--password(?:\s|=|<)'
+    ) {
+        throw 'CLI password input policy smoke test failed.'
+    }
 
     $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
     $smokeRoot = Join-Path $tempRoot ("zifile-smoke-" + [guid]::NewGuid().ToString('N'))
@@ -31,6 +39,28 @@ try {
     cargo run --quiet -p zifile-cli -- create $archivePath (Join-Path $smokeRoot 'input') --format tar-gzip
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $archivePath)) {
         throw 'CLI archive creation smoke test failed.'
+    }
+
+    $encryptedArchive = Join-Path $smokeRoot 'smoke-encrypted.7z'
+    'zifile-smoke-password' |
+        cargo run --quiet -p zifile-cli -- create $encryptedArchive `
+            (Join-Path $smokeRoot 'input\hello.txt') --format seven-zip --password-stdin
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $encryptedArchive)) {
+        throw 'CLI encrypted archive creation through standard input failed.'
+    }
+    'zifile-smoke-password' |
+        cargo run --quiet -p zifile-cli -- test $encryptedArchive --password-stdin
+    if ($LASTEXITCODE -ne 0) {
+        throw 'CLI encrypted archive verification through standard input failed.'
+    }
+    $encryptedOutput = Join-Path $smokeRoot 'encrypted-output'
+    'zifile-smoke-password' |
+        cargo run --quiet -p zifile-cli -- extract $encryptedArchive $encryptedOutput --password-stdin
+    if (
+        $LASTEXITCODE -ne 0 -or
+        (Get-Content -Raw -LiteralPath (Join-Path $encryptedOutput 'hello.txt')) -ne 'hello ZiFile'
+    ) {
+        throw 'CLI encrypted archive extraction through standard input failed.'
     }
 
     $detection = (cargo run --quiet -p zifile-cli -- detect $archivePath) -join "`n"

@@ -1,4 +1,7 @@
-use std::path::PathBuf;
+use std::{
+    io::{self, BufRead},
+    path::PathBuf,
+};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use zifile_core::{
@@ -26,14 +29,16 @@ enum Command {
     /// List archive contents.
     List {
         archive: PathBuf,
+        /// Read the archive password from one line of standard input.
         #[arg(long)]
-        password: Option<String>,
+        password_stdin: bool,
     },
     /// Verify every archive entry without extracting it.
     Test {
         archive: PathBuf,
+        /// Read the archive password from one line of standard input.
         #[arg(long)]
-        password: Option<String>,
+        password_stdin: bool,
     },
     /// Safely extract an archive.
     Extract {
@@ -41,8 +46,9 @@ enum Command {
         destination: PathBuf,
         #[arg(long, value_enum, default_value_t = ConflictArg::Error)]
         conflict: ConflictArg,
+        /// Read the archive password from one line of standard input.
         #[arg(long)]
-        password: Option<String>,
+        password_stdin: bool,
     },
     /// Create an archive from one or more files/directories.
     Create {
@@ -53,8 +59,9 @@ enum Command {
         format: Option<FormatArg>,
         #[arg(long, default_value_t = 6, value_parser = clap::value_parser!(u8).range(0..=22))]
         level: u8,
+        /// Read the archive password from one line of standard input.
         #[arg(long)]
-        password: Option<String>,
+        password_stdin: bool,
     },
 }
 
@@ -128,7 +135,11 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             let format = detect_format(&path)?;
             println!("{format}\t{}", format.canonical_extension());
         }
-        Command::List { archive, password } => {
+        Command::List {
+            archive,
+            password_stdin,
+        } => {
+            let password = read_password(password_stdin)?;
             let info = list_archive(&archive, password.as_deref())?;
             println!(
                 "{}\t{} entries\t{} bytes expanded\t{} bytes archive",
@@ -149,7 +160,11 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
         }
-        Command::Test { archive, password } => {
+        Command::Test {
+            archive,
+            password_stdin,
+        } => {
+            let password = read_password(password_stdin)?;
             let info = test_archive(&archive, password.as_deref())?;
             println!(
                 "OK: {} entries, {} expanded bytes",
@@ -161,8 +176,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             archive,
             destination,
             conflict,
-            password,
+            password_stdin,
         } => {
+            let password = read_password(password_stdin)?;
             let summary = extract_archive(
                 archive,
                 destination,
@@ -182,8 +198,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             sources,
             format,
             level,
-            password,
+            password_stdin,
         } => {
+            let password = read_password(password_stdin)?;
             let format = format
                 .map(ArchiveFormat::from)
                 .or_else(|| detect_format_from_path(&destination))
@@ -207,6 +224,34 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn read_password(enabled: bool) -> io::Result<Option<String>> {
+    let stdin = io::stdin();
+    read_password_from(&mut stdin.lock(), enabled)
+}
+
+fn read_password_from(reader: &mut impl BufRead, enabled: bool) -> io::Result<Option<String>> {
+    if !enabled {
+        return Ok(None);
+    }
+    let mut password = String::new();
+    if reader.read_line(&mut password)? == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "--password-stdin requires one line on standard input",
+        ));
+    }
+    while matches!(password.chars().last(), Some('\r' | '\n')) {
+        password.pop();
+    }
+    if password.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--password-stdin does not accept an empty password",
+        ));
+    }
+    Ok(Some(password))
+}
+
 fn print_formats() {
     println!("FORMAT\tLIST\tEXTRACT\tCREATE\tENCRYPTION\tSTAGE");
     for format in ArchiveFormat::ALL {
@@ -224,4 +269,36 @@ fn print_formats() {
 
 const fn yes_no(value: bool) -> &'static str {
     if value { "yes" } else { "no" }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use super::read_password_from;
+
+    #[test]
+    fn password_stdin_is_opt_in() {
+        let mut input = Cursor::new(b"ignored\n");
+        assert_eq!(read_password_from(&mut input, false).unwrap(), None);
+        assert_eq!(input.position(), 0);
+    }
+
+    #[test]
+    fn password_stdin_removes_only_line_endings() {
+        let mut input = Cursor::new(b"  secret phrase  \r\n");
+        assert_eq!(
+            read_password_from(&mut input, true).unwrap().as_deref(),
+            Some("  secret phrase  ")
+        );
+    }
+
+    #[test]
+    fn password_stdin_rejects_missing_or_empty_input() {
+        let mut missing = Cursor::new(Vec::<u8>::new());
+        assert!(read_password_from(&mut missing, true).is_err());
+
+        let mut empty = Cursor::new(b"\n");
+        assert!(read_password_from(&mut empty, true).is_err());
+    }
 }

@@ -72,6 +72,15 @@ pnpm --dir docs build
 | Packaging | Real x64/ARM64 runnable directory, EXE, MSIX, CLI alias and audited Rust shell DLL |
 | Distribution | Tag workflow produces checksums, SBOM, provenance and WinGet manifest candidates |
 
+Encrypted CLI operations read one password line from standard input. ZiFile does
+not accept a plaintext password argument, keeping it out of the process command
+line and ordinary shell history:
+
+```powershell
+$password | zifile test archive.7z --password-stdin
+$password | zifile extract archive.7z output --password-stdin
+```
+
 RAR remains disabled pending the explicit license, security and interoperability
 review required by this repository. Trusted-package shell activation, signing, accessibility
 certification and Store submission are still in

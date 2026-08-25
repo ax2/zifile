@@ -23,6 +23,8 @@ Stage 0 已在 `zifile-core::SafetyLimits` 中建立保守上限。公开的 `li
 
 桌面端不在 UI 进程解析归档。版本化 IPC 请求限制为 16 MiB，单个 Worker 事件限制为 4 MiB，归档条目逐条传输。Worker 的 Windows Job Object 限制为一个活动进程和 4 GiB 进程内存，并启用 kill-on-close；创建和解压优先协作取消，2 秒超时后才强制回收。密码只经标准输入发送，不进入命令行。该机制不削减当前用户的文件系统权限，AppContainer 仍属于后续纵深防御。
 
+CLI 不接受明文 `--password` 参数；需要密码的命令只能显式使用 `--password-stdin` 读取一行，避免密码进入进程命令行。调用者仍应从安全提示或秘密提供器写入管道，不应把真实密码作为命令文本字面量。
+
 7z Provider 还在读取、校验和解压入口设置窄范围 unwind 边界。若第三方解析器因畸形元数据触发可恢复的 Rust panic，核心返回普通后端错误；OOM、进程终止和 sanitizer 发现不会被该边界截获，仍由 Worker 隔离和 fuzz 门禁处理。
 
 ## 依赖与许可证
