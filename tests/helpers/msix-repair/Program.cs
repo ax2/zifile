@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Windows.Management.Deployment;
 
@@ -12,17 +13,65 @@ static void WriteResult(object value)
     }));
 }
 
-if (args.Length == 1 && args[0] == "--probe")
+if (args.Length == 1 && args[0] == "--probe-child")
 {
-    var probe = Task.Run(() => PackageDeploymentManager.IsPackageDeploymentFeatureSupported(
-        PackageDeploymentFeature.RepairPackage));
-    bool supported;
+    var supported = PackageDeploymentManager.IsPackageDeploymentFeatureSupported(
+        PackageDeploymentFeature.RepairPackage);
+    WriteResult(new
+    {
+        schema_version = schemaVersion,
+        operation = "probe",
+        probe_completed = true,
+        probe_timed_out = false,
+        repair_supported = supported,
+        repair_semantics = "preserve_application_data",
+    });
+    return 0;
+}
+
+if (args.Length == 1 && args[0] == "--probe-child-hang")
+{
+    await Task.Delay(Timeout.InfiniteTimeSpan);
+    return 0;
+}
+
+if (args.Length == 1 && (args[0] == "--probe" || args[0] == "--probe-timeout-fixture"))
+{
+    var isTimeoutFixture = args[0] == "--probe-timeout-fixture";
+    var childArgument = isTimeoutFixture ? "--probe-child-hang" : "--probe-child";
+    var timeout = TimeSpan.FromSeconds(isTimeoutFixture ? 1 : probeTimeoutSeconds);
+    var executable = Environment.ProcessPath
+        ?? throw new InvalidOperationException("Cannot resolve the Repair helper executable path.");
+    using var child = new Process
+    {
+        StartInfo = new ProcessStartInfo(executable, childArgument)
+        {
+            CreateNoWindow = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        },
+    };
+    if (!child.Start())
+    {
+        throw new InvalidOperationException("Cannot start the isolated Repair probe.");
+    }
+    var outputTask = child.StandardOutput.ReadToEndAsync();
+    var errorTask = child.StandardError.ReadToEndAsync();
     try
     {
-        supported = await probe.WaitAsync(TimeSpan.FromSeconds(probeTimeoutSeconds));
+        await child.WaitForExitAsync().WaitAsync(timeout);
     }
     catch (TimeoutException)
     {
+        try
+        {
+            child.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException)
+        {
+            // The process exited between the timeout and the termination request.
+        }
         WriteResult(new
         {
             schema_version = schemaVersion,
@@ -34,16 +83,15 @@ if (args.Length == 1 && args[0] == "--probe")
         });
         return 0;
     }
-    WriteResult(new
+
+    var output = await outputTask;
+    if (child.ExitCode != 0)
     {
-        schema_version = schemaVersion,
-        operation = "probe",
-        probe_completed = true,
-        probe_timed_out = false,
-        repair_supported = supported,
-        repair_semantics = "preserve_application_data",
-    });
-    return 0;
+        _ = await errorTask;
+        throw new InvalidOperationException($"The isolated Repair probe exited with code {child.ExitCode}.");
+    }
+    Console.Write(output);
+    return child.ExitCode;
 }
 
 if (args.Length != 2 || args[0] != "--package-full-name" || string.IsNullOrWhiteSpace(args[1]))
