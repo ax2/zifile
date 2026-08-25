@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $validator = Join-Path $repoRoot 'packaging\store\Test-Listings.ps1'
+$screenshotValidator = Join-Path $repoRoot 'packaging\store\Test-Screenshots.ps1'
 $sourceDirectory = Join-Path $repoRoot 'packaging\store'
 $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
 $testDirectory = Join-Path $tempRoot "zifile-store-listing-$([Guid]::NewGuid().ToString('N'))"
@@ -15,6 +16,10 @@ $errors = $null
 if ($errors.Count -gt 0) {
     throw "PowerShell parser rejected Test-Listings.ps1: $($errors -join '; ')"
 }
+$tokens = $null
+$errors = $null
+[System.Management.Automation.Language.Parser]::ParseFile($screenshotValidator, [ref]$tokens, [ref]$errors) | Out-Null
+if ($errors.Count -gt 0) { throw "PowerShell parser rejected Test-Screenshots.ps1: $($errors -join '; ')" }
 
 function Get-ExpectedFailure {
     param(
@@ -55,6 +60,11 @@ try {
     if (-not $valid.validated -or $valid.listing_count -ne 2) {
         throw 'Valid bilingual Store listings did not pass validation.'
     }
+    $draftScreenshots = & $screenshotValidator | ConvertFrom-Json
+    if ($draftScreenshots.status -cne 'draft' -or $draftScreenshots.screenshots -ne 0 -or $draftScreenshots.complete) {
+        throw 'Draft Store screenshot manifest did not pass its explicit incomplete-state validation.'
+    }
+    Get-ExpectedFailure -Pattern 'not marked complete' -Action { & $screenshotValidator -RequireComplete }
 
     Write-TestListing -Locale 'en-US' -Mutation { param($listing) $listing.features[0] = 'x' * 201 }
     Get-ExpectedFailure -Pattern 'maximum is 200' -Action {
@@ -82,6 +92,8 @@ try {
         oversized_feature_rejected = $true
         excess_keywords_rejected = $true
         description_url_rejected = $true
+        screenshot_draft_validated = $true
+        incomplete_screenshots_rejected_for_release = $true
     } | ConvertTo-Json
 }
 finally {

@@ -13,6 +13,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 - 每个 MSIX 在构建后自动解包审计 Identity、Publisher、版本、最低系统版本、四枚 PE 架构（桌面、CLI、Worker 与 Explorer DLL）、主要文件关联、CLI alias、敏感文件和签名状态，并随包生成 `.audit.json`。
 - 标签发布缺少正式 Identity、Publisher、PFX 或密码时会在打包前失败；`.Dev` Identity 和未签名 OID Publisher 不能用于标签发布。
 - 简体中文和英文 Store 文案、隐私说明与认证备注已经结构化归档；CI 验证描述、功能、关键词、许可与 HTTPS URL 的 Partner Center 字段限制。
+- 双语 Desktop 截图清单具有显式 `draft/complete` 状态；门禁验证 PNG/IHDR、1366×768（或纵向等价）最低尺寸、50 MB 上限、SHA-256、路径边界、顺序、场景和 200 字符说明。标签发布必须达到每语言至少四张，否则在打包前失败。
 
 ## 开发包与签名边界
 

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "status": "draft",
+  "source_commit": null,
+  "requirements_source": "https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/screenshots-and-images",
+  "locales": [
+    { "locale": "zh-CN", "screenshots": [] },
+    { "locale": "en-US", "screenshots": [] }
+  ]
+}
