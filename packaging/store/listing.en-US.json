@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "locale": "en-US",
+  "product_name": "ZiFile",
+  "short_description": "A modern open-source archive utility for Windows 10 and 11. Browse, create, and safely extract ZIP, 7z, TAR, and common compressed streams with encryption, drag-and-drop, and Explorer integration.",
+  "description": "ZiFile is a modern open-source archive utility for Windows with clear workflows and cautious security defaults.\n\nBrowse archive contents, extract only selected entries, or create ZIP, 7z, TAR, and common compressed streams from files and folders. ZIP and 7z support AES encryption, and passwords are never written to logs or settings.\n\nZiFile blocks path traversal, link escapes, reserved Windows names, unsafe overwrites, and excessive archive expansion. Long-running work executes in an isolated background process with visible progress and cancellation.\n\nThe app provides English and Simplified Chinese interfaces, drag-and-drop, file associations, a command-line tool, and Windows File Explorer context-menu integration. All archive processing happens locally, with no account, cloud service, advertising, or telemetry.\n\nZiFile is open source under the MIT License and supports x64 and ARM64 Windows devices.",
+  "whats_new": "",
+  "features": [
+    "Browse, create, and extract ZIP, 7z, TAR, and common compressed streams",
+    "AES encryption for ZIP and 7z without saving passwords to logs or settings",
+    "Protection from path traversal, link escapes, unsafe overwrites, and archive bombs",
+    "Isolated background operations with visible progress and cancellation",
+    "Drag-and-drop, file associations, command line, and File Explorer context menu",
+    "English and Simplified Chinese interfaces on x64 and ARM64"
+  ],
+  "keywords": [
+    "archive",
+    "compression",
+    "extract",
+    "ZIP",
+    "7z",
+    "TAR",
+    "file utility"
+  ],
+  "category": "Utilities & tools",
+  "pricing": "Free; no ads, in-app purchases, or subscriptions",
+  "applicable_license_terms": "MIT License",
+  "developed_by": "ZiCode",
+  "copyright_trademark": "Copyright © 2026 ZiCode. ZiFile is open source under the MIT License.",
+  "support_url": "https://github.com/ax2/zifile/issues",
+  "website_url": "https://ax2.github.io/zifile/",
+  "privacy_policy_url": "https://ax2.github.io/zifile/en/product/privacy/",
+  "minimum_system_requirements": [
+    "Windows 10 version 2004 (build 19041) or later",
+    "x64 or ARM64 processor"
+  ]
+}
