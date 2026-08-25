@@ -39,6 +39,8 @@ The opt-in Dioxus/WebView2 candidate shares the Worker and supports the primary 
 
 The archive selection control now exposes an actionable “Select all archive files” or “Clear all archive selections” name and an atomic live “N of total” summary. The archive region and selective-extract button reference that summary with `aria-describedby`; individual selection changes report the path and current count through the global status. Pure Rust candidate tests cover bilingual actions, summaries, singular/plural status, and selection changes. This proves semantic wiring and state copy, not a real Narrator traversal.
 
+The global announcer distinguishes information from failure. Progress, queue, cancellation, and selection updates remain `status`/polite; Worker failures, a full queue, unexpected Worker output, and internal queue errors use atomic `alert`/assertive semantics plus visible normal- and forced-color emphasis. A unit test locks the “interrupt only for errors” contract so frequent progress does not repeatedly interrupt assistive technology.
+
 These checks are not full certification. Complete real keyboard/Narrator archive and extract traversal, visible focus, Narrator, Accessibility Insights, physical high contrast, Chinese IME, per-monitor DPI, real cross-window drop, physical ARM64 execution, and WACK remain release gates. Build the candidate with:
 
 ```powershell
