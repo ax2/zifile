@@ -45,6 +45,8 @@ The global announcer distinguishes information from failure. Queue, cancellation
 
 The create-source list now has an atomic live count. Every Remove button includes its full source path in its accessible name instead of exposing a set of indistinguishable controls. File/folder add, drop, remove, and clear actions announce the change and resulting count; removal matches the path rather than a potentially stale list index. Rust tests cover bilingual path/count copy and English singular/plural behavior.
 
+Create-input requirements now come from the shared core capability model. ZIP, 7z, and TAR compositions accept files and folders, while the six single-stream formats require exactly one existing file. Both the Iced baseline and Dioxus candidate disable Add folder for stream formats, disable creation for an invalid selection, and show bilingual recovery guidance before opening a destination dialog. A defensive preflight also rejects invalid submissions that bypass the rendered control state.
+
 These checks are not full certification. Complete real keyboard/Narrator archive and extract traversal, visible focus, Narrator, Accessibility Insights, physical high contrast, Chinese IME, per-monitor DPI, real cross-window drop, physical ARM64 execution, and WACK remain release gates. Build the candidate with:
 
 ```powershell

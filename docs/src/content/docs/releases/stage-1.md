@@ -58,6 +58,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 候选首次云端依赖策略检查只拒绝 `libfuzzer-sys` 的 `NCSA` 和 `target-lexicon` 的 `Apache-2.0 WITH LLVM-exception` 许可证表达式；两者均为 OSI 认可的宽松许可证/例外。策略仅显式增加这两项，没有放宽未知来源、通配依赖或其他许可证检查。
 - 修正后的 [CI 32665872620](https://github.com/ax2/zifile/actions/runs/32665872620) 全部通过：依赖策略、格式、Clippy、全 feature 测试、benchmark 编译、真实 Worker 冒烟、第三方互操作、文档和 fuzz 目标编译均成功。
 - 候选新增原生拖放处理及 `Ctrl+O`、`Ctrl+N`、`Escape`；实机确认两个 Ctrl 快捷键分别打开原生文件选择器和创建页。CSP 仅允许内联 Dioxus 运行时、本地样式/数据图像、本地 Dioxus 协议和 `127.0.0.1` 回环 WebSocket，非 Dioxus 自定义导航被拒绝；首次过严策略导致空白页，补入 Dioxus 必需的回环 WebSocket后，1182×791 界面与 UI Automation 语义树恢复。
+- 核心能力模型新增创建输入形态；ZIP、7z 与 TAR 组合接受文件和目录，gzip、Zstandard、XZ、Bzip2、LZ4 与 Brotli 要求恰好一个文件。Iced 与 Dioxus 均在目标对话框前预检、禁用无效创建并显示双语修复建议。
 - 本地 x64 候选 `0.1.0.3` MSIX 与完整可运行目录构建成功；包内候选桌面 EXE 与 Release 构建 SHA-256 一致，可运行目录含桌面、CLI、Worker、MIT 许可证和 README，不含 ZIP。完整目录启动后 UI Automation 再次识别 `main-content` 与 live status。
 - [Release 演练 32667737142](https://github.com/ax2/zifile/actions/runs/32667737142) 全部成功：x64、ARM64 和 CycloneDX SBOM 作业通过，两个架构都完成默认与候选 MSIX/EXE 构建、staging、来源证明和上传。下载复核确认每个架构 6 个校验目标全部匹配，x64/ARM64 EXE 的 PE machine 分别为 `0x8664`/`0xAA64`，发布目录无 ZIP。ARM64 物理设备运行仍未验证。
 - 候选 `Ctrl+A` 仅在条目区域拥有焦点时拦截，不影响密码/搜索输入；真实窗口从 0 项经单项焦点后全选 2 项，动态 UI Automation 标签从“0 项已选择”更新到“2 项已选择”，live status 同步报告结果。CSS 已加入 `forced-colors: active` 系统颜色映射，但尚未完成 Windows 高对比度实机视觉检查。
