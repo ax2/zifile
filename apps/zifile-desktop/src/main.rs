@@ -15,14 +15,15 @@ use iced::widget::{
 use iced::{Element, Fill, Length, Subscription, Task, Theme};
 use rfd::FileDialog;
 use zifile_core::{
-    ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy, OperationProgress,
-    OperationSummary, SafetyLimits, detect_format_from_path,
+    ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy, CreateInputKind,
+    OperationProgress, OperationSummary, SafetyLimits, detect_format_from_path,
 };
 use zifile_worker_protocol::WorkerRequest;
 
 use i18n::{Locale, Text};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
+use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
 use zifile_desktop::entry_view::{ENTRIES_PER_PAGE, filtered_entry_count, filtered_entry_page};
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
@@ -471,7 +472,9 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
         }
         Message::AddFolder => {
-            if let Some(path) = FileDialog::new()
+            if state.create_format.create_input() == Some(CreateInputKind::SingleFile) {
+                state.status = state.locale.text(Text::SingleFileRequired).to_owned();
+            } else if let Some(path) = FileDialog::new()
                 .set_title(state.locale.text(Text::AddFolderDialog))
                 .pick_folder()
             {
@@ -485,17 +488,18 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
         }
         Message::ClearSources => state.create_sources.clear(),
-        Message::CreateFormatChanged(format) => state.create_format = format,
+        Message::CreateFormatChanged(format) => {
+            state.create_format = format;
+            if !format.capabilities().encryption {
+                state.create_password.clear();
+            }
+            state.status = create_input_help(state.locale, format).to_owned();
+        }
         Message::CreatePasswordChanged(password) => state.create_password = password,
         Message::CompressionLevelChanged(level) => state.compression_level = level,
         Message::Create => {
-            if state.create_sources.is_empty() {
-                state.status = choose(
-                    state.locale,
-                    "Add at least one file or folder first",
-                    "请先添加至少一个文件或文件夹",
-                )
-                .to_owned();
+            if let Some(issue) = create_source_issue(state.create_format, &state.create_sources) {
+                state.status = create_source_issue_text(state.locale, issue).to_owned();
                 return Task::none();
             }
             let extension = state.create_format.canonical_extension();
@@ -1094,13 +1098,17 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
         );
     }
     let encryption_supported = state.create_format.capabilities().encryption;
+    let source_issue = create_source_issue(state.create_format, &state.create_sources);
+    let single_file_format =
+        state.create_format.create_input() == Some(CreateInputKind::SingleFile);
 
     column![
         text(state.locale.text(Text::CreateHeading)).size(32),
         text(state.locale.text(Text::CreateHelp)),
         row![
             button(state.locale.text(Text::AddFiles)).on_press(Message::AddFiles),
-            button(state.locale.text(Text::AddFolder)).on_press(Message::AddFolder),
+            button(state.locale.text(Text::AddFolder))
+                .on_press_maybe((!single_file_format).then_some(Message::AddFolder)),
             button(state.locale.text(Text::Clear))
                 .style(button::secondary)
                 .on_press_maybe(
@@ -1142,6 +1150,7 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
                     .width(Fill),
                 ]
                 .spacing(20),
+                text(create_input_help(state.locale, state.create_format)).size(13),
                 column![
                     text(if encryption_supported {
                         state.locale.text(Text::PasswordOptional)
@@ -1167,12 +1176,28 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
             space().width(Fill),
             button(state.locale.text(Text::CreateAction))
                 .style(button::primary)
-                .on_press_maybe((!state.create_sources.is_empty()).then_some(Message::Create)),
+                .on_press_maybe(source_issue.is_none().then_some(Message::Create)),
         ],
     ]
     .spacing(14)
     .height(Fill)
     .into()
+}
+
+fn create_input_help(locale: Locale, format: ArchiveFormat) -> &'static str {
+    match format.create_input() {
+        Some(CreateInputKind::FilesAndDirectories) => locale.text(Text::FilesAndFoldersSupported),
+        Some(CreateInputKind::SingleFile) => locale.text(Text::SingleFileRequired),
+        None => locale.text(Text::FormatCannotCreate),
+    }
+}
+
+fn create_source_issue_text(locale: Locale, issue: CreateSourceIssue) -> &'static str {
+    match issue {
+        CreateSourceIssue::MissingSources => locale.text(Text::NoSources),
+        CreateSourceIssue::SingleFileRequired => locale.text(Text::SingleFileRequired),
+        CreateSourceIssue::UnsupportedFormat => locale.text(Text::FormatCannotCreate),
+    }
 }
 
 fn nav_button(label: &str, page: Page, active: Page) -> iced::widget::Button<'_, Message> {
@@ -1260,6 +1285,19 @@ fn format_bytes(bytes: u64) -> String {
 mod tests {
     use super::*;
     use zifile_core::ArchiveEntryInfo;
+
+    #[test]
+    fn create_input_guidance_is_bilingual_and_matches_capabilities() {
+        assert_eq!(
+            create_input_help(Locale::En, ArchiveFormat::Tar),
+            "This format accepts files and folders."
+        );
+        assert!(create_input_help(Locale::ZhCn, ArchiveFormat::Brotli).contains("TAR 组合格式"));
+        assert_eq!(
+            create_source_issue_text(Locale::ZhCn, CreateSourceIssue::UnsupportedFormat),
+            "此格式不支持创建。"
+        );
+    }
 
     #[test]
     fn large_archive_filtering_keeps_rendered_page_bounded() {

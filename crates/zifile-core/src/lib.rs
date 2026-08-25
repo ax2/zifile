@@ -75,6 +75,23 @@ impl ArchiveFormat {
         }
     }
 
+    /// Source shape accepted when creating this format.
+    pub const fn create_input(self) -> Option<CreateInputKind> {
+        match self {
+            Self::Rar => None,
+            Self::Gzip | Self::Zstandard | Self::Xz | Self::Bzip2 | Self::Lz4 | Self::Brotli => {
+                Some(CreateInputKind::SingleFile)
+            }
+            Self::Zip
+            | Self::SevenZip
+            | Self::Tar
+            | Self::TarGzip
+            | Self::TarZstd
+            | Self::TarXz
+            | Self::TarBzip2 => Some(CreateInputKind::FilesAndDirectories),
+        }
+    }
+
     pub const fn canonical_extension(self) -> &'static str {
         match self {
             Self::Zip => "zip",
@@ -93,6 +110,13 @@ impl ArchiveFormat {
             Self::Rar => "rar",
         }
     }
+}
+
+/// Source shape supported by a format during archive creation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateInputKind {
+    FilesAndDirectories,
+    SingleFile,
 }
 
 impl fmt::Display for ArchiveFormat {
@@ -368,6 +392,35 @@ mod tests {
         assert!(!capabilities.create);
         assert!(capabilities.encryption);
         assert_eq!(capabilities.stage, ReleaseStage::Beta);
+    }
+
+    #[test]
+    fn creation_input_shape_distinguishes_archives_from_single_streams() {
+        for format in [
+            ArchiveFormat::Zip,
+            ArchiveFormat::SevenZip,
+            ArchiveFormat::Tar,
+            ArchiveFormat::TarGzip,
+            ArchiveFormat::TarZstd,
+            ArchiveFormat::TarXz,
+            ArchiveFormat::TarBzip2,
+        ] {
+            assert_eq!(
+                format.create_input(),
+                Some(CreateInputKind::FilesAndDirectories)
+            );
+        }
+        for format in [
+            ArchiveFormat::Gzip,
+            ArchiveFormat::Zstandard,
+            ArchiveFormat::Xz,
+            ArchiveFormat::Bzip2,
+            ArchiveFormat::Lz4,
+            ArchiveFormat::Brotli,
+        ] {
+            assert_eq!(format.create_input(), Some(CreateInputKind::SingleFile));
+        }
+        assert_eq!(ArchiveFormat::Rar.create_input(), None);
     }
 
     #[test]

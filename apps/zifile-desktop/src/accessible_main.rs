@@ -10,7 +10,8 @@ use dioxus_html::HasFileData;
 use rfd::FileDialog;
 use zifile_core::{
     ArchiveEntryInfo, ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy,
-    OperationProgress, OperationSummary, ProgressSnapshot, SafetyLimits, detect_format_from_path,
+    CreateInputKind, OperationProgress, OperationSummary, ProgressSnapshot, SafetyLimits,
+    detect_format_from_path,
 };
 use zifile_worker_protocol::WorkerRequest;
 
@@ -22,6 +23,7 @@ mod worker_client;
 use i18n::{Locale, Text};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
+use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
 use zifile_desktop::entry_view::{ENTRIES_PER_PAGE, filtered_entry_count, filtered_entry_page};
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
@@ -418,10 +420,13 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
     let locale = view.locale;
     let encrypted = view.create_format.capabilities().encryption;
     let source_summary = create_source_summary(locale, view.create_sources.len());
+    let source_issue = create_source_issue(view.create_format, &view.create_sources);
+    let single_file_format = view.create_format.create_input() == Some(CreateInputKind::SingleFile);
+    let input_help = create_input_help(locale, view.create_format);
     rsx! { section { class: "create-page", "aria-labelledby": "create-title",
         div { class: "page-heading", div { h2 { id: "create-title", {locale.text(Text::CreateHeading)} } p { {locale.text(Text::CreateHelp)} } }
             div { class: "button-row", button { onclick: move |_| add_files(state), {locale.text(Text::AddFiles)} }
-                button { onclick: move |_| add_folder(state), {locale.text(Text::AddFolder)} }
+                button { disabled: single_file_format, "aria-describedby": "create-format-help", onclick: move |_| add_folder(state), {locale.text(Text::AddFolder)} }
                 button { disabled: view.create_sources.is_empty(), "aria-describedby": "create-source-summary", onclick: move |_| clear_create_sources(state), {locale.text(Text::Clear)} } } }
         section { class: "source-list", "aria-label": choose(locale, "Archive sources", "压缩来源"), "aria-describedby": "create-source-summary",
             output { id: "create-source-summary", class: "source-summary", role: "status", "aria-live": "polite", "aria-atomic": "true", {source_summary} }
@@ -430,7 +435,7 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
                 button { "aria-label": create_source_remove_label(locale, &source.to_string_lossy()), onclick: { let source = source.clone(); move |_| remove_create_source(state, source.clone()) }, {locale.text(Text::Remove)} } } } }
         }
         div { class: "form-grid",
-            label { span { {locale.text(Text::Format)} } select { value: format_value(view.create_format),
+            label { span { {locale.text(Text::Format)} } select { value: format_value(view.create_format), "aria-describedby": "create-format-help",
                 onchange: move |event| { let mut value = state.write(); value.create_format = parse_format(&event.value()); if !value.create_format.capabilities().encryption { value.create_password.clear(); } },
                 for format in CREATE_FORMATS { option { value: format_value(format), "{format}" } } } }
             label { span { "{locale.text(Text::CompressionLevel)} · {view.compression_level}" } input { r#type: "range", min: "0", max: "9", value: "{view.compression_level}",
@@ -438,7 +443,8 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
             label { span { if encrypted { {locale.text(Text::PasswordOptional)} } else { {locale.text(Text::PasswordUnavailable)} } }
                 input { r#type: "password", autocomplete: "off", spellcheck: "false", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: !encrypted, oninput: move |event| state.write().create_password = event.value() } }
         }
-        div { class: "create-actions", button { class: "primary", disabled: view.create_sources.is_empty(), onclick: move |_| create_archive(state), {locale.text(Text::CreateAction)} } }
+        output { id: "create-format-help", class: "muted", role: "status", "aria-live": "off", {input_help} }
+        div { class: "create-actions", button { class: "primary", disabled: source_issue.is_some(), "aria-describedby": "create-source-summary create-format-help", onclick: move |_| create_archive(state), {locale.text(Text::CreateAction)} } }
     } }
 }
 
@@ -648,9 +654,12 @@ fn clear_create_sources(mut state: Signal<UiState>) {
     value.set_status(status);
 }
 
-fn create_archive(state: Signal<UiState>) {
+fn create_archive(mut state: Signal<UiState>) {
     let value = state.read();
-    if value.create_sources.is_empty() {
+    if let Some(issue) = create_source_issue(value.create_format, &value.create_sources) {
+        let message = create_source_issue_text(value.locale, issue).to_owned();
+        drop(value);
+        state.write().set_status(message);
         return;
     }
     let locale = value.locale;
@@ -685,6 +694,22 @@ fn create_archive(state: Signal<UiState>) {
             destination.display()
         ),
     );
+}
+
+fn create_input_help(locale: Locale, format: ArchiveFormat) -> &'static str {
+    match format.create_input() {
+        Some(CreateInputKind::FilesAndDirectories) => locale.text(Text::FilesAndFoldersSupported),
+        Some(CreateInputKind::SingleFile) => locale.text(Text::SingleFileRequired),
+        None => locale.text(Text::FormatCannotCreate),
+    }
+}
+
+fn create_source_issue_text(locale: Locale, issue: CreateSourceIssue) -> &'static str {
+    match issue {
+        CreateSourceIssue::MissingSources => locale.text(Text::NoSources),
+        CreateSourceIssue::SingleFileRequired => locale.text(Text::SingleFileRequired),
+        CreateSourceIssue::UnsupportedFormat => locale.text(Text::FormatCannotCreate),
+    }
 }
 
 fn launch_worker(
@@ -1246,6 +1271,19 @@ mod tests {
         for format in CREATE_FORMATS {
             assert_eq!(parse_format(format_value(format)), format);
         }
+    }
+
+    #[test]
+    fn create_input_guidance_is_bilingual_and_matches_capabilities() {
+        assert_eq!(
+            create_input_help(Locale::En, ArchiveFormat::Zip),
+            "This format accepts files and folders."
+        );
+        assert!(create_input_help(Locale::ZhCn, ArchiveFormat::Gzip).contains("只能压缩一个文件"));
+        assert_eq!(
+            create_source_issue_text(Locale::En, CreateSourceIssue::UnsupportedFormat),
+            "This format cannot be created."
+        );
     }
     #[test]
     fn conflict_values_round_trip() {

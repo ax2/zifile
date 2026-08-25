@@ -15,6 +15,8 @@ Provider review selected replaceable permissive backends for ZIP, 7z, TAR, gzip,
 
 The core gained signature detection, capability reporting, list/test/create/extract, ZIP64 and AES ZIP, 7z and AES 7z, TAR compositions, single streams, path/link/device-name/collision defenses, safety limits, conflict policies, progress, temporary writes, and cooperative cancellation. Desktop and CLI share the same behavior.
 
+The core capability model now also reports creation input shape. ZIP, 7z, and TAR compositions accept files and directories; gzip, Zstandard, XZ, Bzip2, LZ4, and Brotli require exactly one file. Iced and Dioxus preflight this before the destination dialog, disable invalid creation, and present bilingual recovery guidance.
+
 `zifile-worker.exe` and versioned JSON Lines IPC moved desktop parsing out of process. Windows Job Objects limit one process to 4 GiB and kill on close. A 32-operation FIFO scheduler serves both Iced and the Dioxus/WebView2 accessibility candidate. Windows integration includes associations, taskbar progress, App Execution Alias, x64/ARM64 MSIX and runnable artifacts, and an implemented Explorer command DLL/manifest whose trusted-package activation remains open.
 
 The Dioxus candidate added semantic browse/create flows, CSP and offline policy, native drop, shortcuts, bilingual persisted UI, UI Automation-visible controls, bounded 500-row paging, and foreground-protected bilingual keyboard regression. It remains opt-in until Narrator, Accessibility Insights, visible focus, high contrast, IME, DPI, physical ARM64, and real drop gates pass.
