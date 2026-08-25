@@ -37,7 +37,15 @@ jobs:
         run: ./tests/smoke/packaging-policy.ps1
       - name: Reference-tool interoperability
         shell: pwsh
-        run: ./tests/interoperability/windows-tools.ps1 -SkipBuild
+        run: |
+          ./tests/interoperability/windows-tools.ps1 -SkipBuild
+          ./tests/interoperability/sevenzip-corpus.ps1 -SkipBuild
+      - name: Upload 7-Zip interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: sevenzip-corpus
+          path: target/sevenzip-corpus.json
+          retention-days: 30
 
   licenses:
     name: Dependency policy

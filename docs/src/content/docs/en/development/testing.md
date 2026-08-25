@@ -11,6 +11,7 @@ description: Unit, property, interoperability, security, performance, fuzz, and 
 - Criterion and libFuzzer target compilation.
 - Real Worker and packaging-policy smoke tests.
 - Windows ZIP, tar.gz, and 7z bidirectional interoperability.
+- Official 7-Zip codec, filter, solid-mode, and AES interoperability with JSON evidence.
 
 ## Layers
 
@@ -19,6 +20,8 @@ Unit and property tests cover detection, paths, limits, conflict policy, randomi
 The Worker smoke streams a real list request and requires metadata, a Unicode entry, and exactly one terminal event. It then cancels a 32 MiB random 7z creation and requires timely exit with no target or temporary residue. Queue unit tests cover strict FIFO, 32-item capacity, stale completion IDs, clearing, and immediate sensitive-payload release.
 
 CLI password tests cover explicit opt-in, CRLF/LF removal, preservation of surrounding spaces, and rejection of missing or empty input. The foundation smoke requires help to expose only `--password-stdin`, then creates, tests, and extracts a real AES 7z through standard input without printing the fixed test password.
+
+The official 7-Zip corpus gate uses `7z.exe` on the GitHub Windows Runner. Reference-created cases cover Copy, LZMA, LZMA2+BCJ, Deflate, BZip2, PPMd, and LZMA2+AES with encrypted headers. In the reverse direction, 7-Zip must test and extract both ordinary and AES archives created by ZiFile. Every case compares the complete relative file set and SHA-256 content hashes; the uploaded JSON evidence contains no password. This gate is not counted as passed until a real cloud run succeeds.
 
 Every CI compiles fuzz targets. Weekly bounded campaigns exercise path policy, format detection, and every supported parser for 180 seconds each. Two historical malformed 7z artifacts (292 and 173 bytes) are replayed at every parser campaign start. Their discoveries led to Rust 1.93.0 and bounded-metadata `sevenz-rust2` 0.22.0; targeted run `32813469578` replayed both, executed another 498,937 inputs in 181 seconds, peaked at 370 MiB RSS, and found no new crash.
 
