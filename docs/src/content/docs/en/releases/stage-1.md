@@ -48,3 +48,5 @@ ZiFile upgraded to Rust 1.93.0 and `sevenz-rust2` 0.22.0, whose bounded metadata
 Double-build run `32813453959` remained 4/5 identical on both x64 and ARM64. Schema-v2 run `32822543635` proved that both default Iced executables first differed at the `build-a`/`build-b` target path embedded in generated `glutin_wgl_sys` code. After remapping each isolated root to `Z:\zifile-target`, run `32826187552` produced 5/5 and `reproducible=true` on both architectures. This remains an Alpha checkpoint, not a Store-ready release.
 
 The CLI removed plaintext `--password <value>` process arguments in favor of explicit `--password-stdin`. Three unit tests and the foundation smoke cover non-empty single-line input, space preservation, the help-surface policy, and real AES 7z create/test/extract operations.
+
+An official 7-Zip bidirectional corpus gate now defines seven reference-created codec/filter/encryption cases and two ZiFile-created cases, with complete file-set and SHA-256 comparison plus uploaded JSON evidence. The local machine has no `7z.exe`, so this item remains pending its first real GitHub Windows Runner result and is not yet recorded as passed.
