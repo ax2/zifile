@@ -39,6 +39,8 @@ jobs:
         shell: pwsh
         run: ./tests/smoke/store-listing.ps1
       - name: Reference-tool interoperability
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
           ./tests/interoperability/windows-tools.ps1 -SkipBuild

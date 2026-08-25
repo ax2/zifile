@@ -59,7 +59,30 @@ function Assert-TreesMatch {
 }
 
 $sourceCommit = '7d8f9386ef777a2415da34fe1db193d8471ff7d0'
-$sourceRoot = "https://raw.githubusercontent.com/bitplane/rars/$sourceCommit/tests/fixtures"
+$sourceRoot = 'https://api.github.com/repos/bitplane/rars/contents/crates/rars/tests/fixtures'
+
+function Receive-RarFixture {
+    param(
+        [Parameter(Mandatory)][string]$RelativePath,
+        [Parameter(Mandatory)][string]$Destination
+    )
+    $headers = @{
+        Accept = 'application/vnd.github+json'
+        'X-GitHub-Api-Version' = '2022-11-28'
+        'User-Agent' = 'ZiFile-RAR-corpus'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+        $headers.Authorization = "Bearer $env:GITHUB_TOKEN"
+    }
+    $response = Invoke-RestMethod -Uri "$sourceRoot/$RelativePath`?ref=$sourceCommit" -Headers $headers
+    if ($response.type -cne 'file' -or $response.encoding -cne 'base64') {
+        throw "GitHub did not return an inline base64 RAR fixture: $RelativePath"
+    }
+    [IO.File]::WriteAllBytes(
+        $Destination,
+        [Convert]::FromBase64String(($response.content -replace '\s', ''))
+    )
+}
 $cases = @(
     [ordered]@{ name = 'rar13-compressed'; path = 'rar13/README.RAR'; sha256 = 'E5692692645C18BE15326273997FBEE0FB95CCCAF13A93F7557BB8469D44C23A'; password = $null },
     [ordered]@{ name = 'rar154-multifile'; path = 'rar15_40/rar154/doc_154_best.rar'; sha256 = 'FAA2B922D3AC7AE5BB4D7660E2B7DA5169AB79295574F1BA63BD72B59D2C407A'; password = $null },
@@ -92,7 +115,7 @@ try {
 
     foreach ($case in $cases) {
         $archive = Join-Path $testRoot ($case.name + '.rar')
-        Invoke-WebRequest -Uri "$sourceRoot/$($case.path)" -OutFile $archive
+        Receive-RarFixture -RelativePath $case.path -Destination $archive
         $actualArchiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
         if ($actualArchiveHash -cne $case.sha256) { throw "RAR fixture hash mismatch: $($case.name)" }
 
@@ -129,7 +152,7 @@ try {
 
     foreach ($case in $rejectedCases) {
         $archive = Join-Path $testRoot ($case.name + '.rar')
-        Invoke-WebRequest -Uri "$sourceRoot/$($case.path)" -OutFile $archive
+        Receive-RarFixture -RelativePath $case.path -Destination $archive
         $actualArchiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
         if ($actualArchiveHash -cne $case.sha256) { throw "RAR rejection fixture hash mismatch: $($case.name)" }
         $rejectedOutput = Join-Path $testRoot ($case.name + '-rejected')

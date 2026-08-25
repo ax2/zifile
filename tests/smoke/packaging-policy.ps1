@@ -185,6 +185,9 @@ if ($repairProjectSource -notmatch [Regex]::Escape('Microsoft.WindowsAppSDK') -o
 $rarCorpusSource = Get-Content -Raw -LiteralPath $rarCorpus
 foreach ($requiredRarToken in @(
     '7d8f9386ef777a2415da34fe1db193d8471ff7d0',
+    'api.github.com/repos/bitplane/rars/contents/crates/rars/tests/fixtures',
+    'GITHUB_TOKEN',
+    'FromBase64String',
     'winrar721_header_encrypted_quickopen.rar',
     'rar50/wild/symlink.rar',
     'expected_rejection',
