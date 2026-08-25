@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{self, BufReader, BufWriter, Read, Seek, Write};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -210,7 +211,9 @@ pub fn list_archive_with_limits(
     let format = detect_format(path)?;
     let entries = match format {
         ArchiveFormat::Zip => list_zip(path, password, limits)?,
-        ArchiveFormat::SevenZip => list_seven_zip(path, password, limits)?,
+        ArchiveFormat::SevenZip => {
+            guard_archive_backend(format, "listing", || list_seven_zip(path, password, limits))?
+        }
         ArchiveFormat::Tar
         | ArchiveFormat::TarGzip
         | ArchiveFormat::TarZstd
@@ -256,7 +259,9 @@ pub fn test_archive_with_limits(
     validate_declared_limits(&info, limits)?;
     match info.format {
         ArchiveFormat::Zip => test_zip(path, password, limits)?,
-        ArchiveFormat::SevenZip => test_seven_zip(path, password, limits)?,
+        ArchiveFormat::SevenZip => guard_archive_backend(info.format, "testing", || {
+            test_seven_zip(path, password, limits)
+        })?,
         ArchiveFormat::Tar
         | ArchiveFormat::TarGzip
         | ArchiveFormat::TarZstd
@@ -311,7 +316,9 @@ pub fn extract_archive(
 
     match info.format {
         ArchiveFormat::Zip => extract_zip(archive, destination, options),
-        ArchiveFormat::SevenZip => extract_seven_zip(archive, destination, options),
+        ArchiveFormat::SevenZip => guard_archive_backend(info.format, "extracting", || {
+            extract_seven_zip(archive, destination, options)
+        }),
         ArchiveFormat::Tar
         | ArchiveFormat::TarGzip
         | ArchiveFormat::TarZstd
@@ -748,6 +755,21 @@ fn open_tar_reader(path: &Path, format: ArchiveFormat) -> ZiFileResult<Box<dyn R
         ArchiveFormat::TarBzip2 => Ok(Box::new(BzDecoder::new(file))),
         _ => Err(ZiFileError::UnsupportedOperation(format)),
     }
+}
+
+fn guard_archive_backend<T>(
+    format: ArchiveFormat,
+    operation: &str,
+    action: impl FnOnce() -> ZiFileResult<T>,
+) -> ZiFileResult<T> {
+    // Third-party decoders may panic on impossible sizes in malformed metadata.
+    // Keep that failure inside the provider boundary; process-aborting failures
+    // such as OOM and sanitizer findings are intentionally not intercepted.
+    catch_unwind(AssertUnwindSafe(action)).unwrap_or_else(|_| {
+        Err(ZiFileError::Backend(format!(
+            "{format} backend rejected malformed metadata while {operation} the archive"
+        )))
+    })
 }
 
 fn list_seven_zip(
