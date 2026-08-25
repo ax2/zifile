@@ -9,7 +9,7 @@ The signing boundary is defined by [ADR-0006](/zifile/en/architecture/adr-0006-r
 
 Releases contain x64 and ARM64 desktop/CLI programs, MSIX packages, standalone executables, SHA-256 files, per-package audit JSON, CycloneDX JSON SBOMs, GitHub build provenance, release notes, and a matching documentation snapshot. GitHub Release is the first public channel. WinGet uses planned ID `ZiCode.ZiFile`; Microsoft Store uses MSIX.
 
-A `v*` tag builds both architectures and WinGet 1.12 multi-file manifest candidates. Tag publishing requires the official Identity, Publisher, PFX, and password secrets. Missing inputs, `.Dev` identities, or Microsoft's unsigned-package OID are rejected before build. Without official credentials, only manual unsigned development artifacts may be produced and they must not be submitted to WinGet or Store.
+A `v*` tag builds both architectures and WinGet 1.12 multi-file manifest candidates. The current pre-release path requires official Identity, Publisher, PFX, and password secrets. Missing inputs, `.Dev` identities, or Microsoft's unsigned-package OID are rejected before build. Stable tags additionally reject the PFX scaffolding until ADR-0006 cloud-HSM signing is integrated, preventing an accidental noncompliant 1.0 release. Without official credentials, only manual unsigned development artifacts may be produced and they must not be submitted to WinGet or Store.
 
 Each MSIX is unpacked and audited for identity, publisher, version, minimum Windows build, PE architecture of desktop/CLI/Worker/Explorer DLL, associations, `zifile.exe` alias, absence of sensitive files and ZIP artifacts, and signature state. Audit output does not replace real install, upgrade, uninstall, or WACK testing.
 

@@ -72,11 +72,31 @@ $null = Get-ExpectedFailure -Pattern 'unsigned development publisher' -Action {
 $accepted = & $publishingPolicy `
     -IdentityName 'ZiCode.ZiFile' `
     -Publisher 'CN=ZiCode Official' `
+    -ReleaseVersion 'v0.1.0-alpha.1' `
     -SigningCertificateAvailable `
     -SigningPasswordAvailable |
     ConvertFrom-Json
 if (-not $accepted.validated) {
     throw 'Formal publishing inputs were not accepted.'
+}
+if ($accepted.signing_provider -ne 'pfx-scaffolding') {
+    throw 'Pre-release publishing policy did not identify the PFX path as scaffolding.'
+}
+$null = Get-ExpectedFailure -Pattern 'cloud-HSM signing integration' -Action {
+    & $publishingPolicy `
+        -IdentityName 'ZiCode.ZiFile' `
+        -Publisher 'CN=ZiCode Official' `
+        -ReleaseVersion 'v1.0.0' `
+        -SigningCertificateAvailable `
+        -SigningPasswordAvailable
+}
+$null = Get-ExpectedFailure -Pattern 'supported semantic version' -Action {
+    & $publishingPolicy `
+        -IdentityName 'ZiCode.ZiFile' `
+        -Publisher 'CN=ZiCode Official' `
+        -ReleaseVersion 'release' `
+        -SigningCertificateAvailable `
+        -SigningPasswordAvailable
 }
 
 $buildSource = Get-Content -Raw -LiteralPath $packageBuild
@@ -231,6 +251,8 @@ foreach ($requiredWackToken in @(
     development_identity_rejected = $true
     unsigned_publisher_rejected = $true
     formal_inputs_accepted = $true
+    stable_pfx_release_rejected = $true
+    malformed_release_version_rejected = $true
     package_audit_wired = $true
     release_audit_staged = $true
     shell_extension_wired = $true
