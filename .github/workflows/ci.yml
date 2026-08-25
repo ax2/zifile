@@ -18,11 +18,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Version consistency
+      - name: Repository policy
         shell: pwsh
         run: |
           ./scripts/Test-VersionConsistency.ps1
           ./scripts/Test-ReleaseNotes.ps1
+          ./scripts/Test-ContributorDocs.ps1
       - uses: dtolnay/rust-toolchain@1.93.0
         with:
           components: clippy,rustfmt

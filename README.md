@@ -56,6 +56,7 @@ pnpm --dir docs build
 - [Architecture](docs/src/content/docs/architecture/overview.md)
 - [Security model](docs/src/content/docs/architecture/security.md)
 - [Testing strategy](docs/src/content/docs/development/testing.md)
+- [Contributing](CONTRIBUTING.md)
 - [Desktop usage and accessibility](docs/src/content/docs/development/desktop.md)
 - [Release process](docs/src/content/docs/development/releasing.md)
 - [Stage 0 work log](docs/src/content/docs/releases/stage-0.md)
