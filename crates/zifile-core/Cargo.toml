@@ -13,6 +13,7 @@ brotli.workspace = true
 bzip2.workspace = true
 flate2.workspace = true
 lz4_flex.workspace = true
+rars.workspace = true
 serde.workspace = true
 sevenz-rust2.workspace = true
 tar.workspace = true

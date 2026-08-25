@@ -68,7 +68,7 @@ pnpm --dir docs build
 | Core model | Real create/list/test/extract operations with shared safety policy |
 | Desktop | Bilingual modern browser/creator, isolated archive worker and Windows taskbar progress |
 | CLI | `formats`, `detect`, `list`, `test`, `extract`, and `create` |
-| Archive providers | ZIP/ZIP64/AES, 7z/AES, TAR + gzip/zstd/xz/bzip2, and common streams |
+| Archive providers | ZIP/ZIP64/AES, 7z/AES, read-only RAR 1.3 through RAR 7 with encryption, TAR compositions, and common streams |
 | Packaging | Real x64/ARM64 runnable directory, EXE, MSIX, CLI alias and audited Rust shell DLL |
 | Distribution | Tag workflow produces checksums, SBOM, provenance and WinGet manifest candidates |
 
@@ -81,7 +81,8 @@ $password | zifile test archive.7z --password-stdin
 $password | zifile extract archive.7z output --password-stdin
 ```
 
-RAR remains disabled pending the explicit license, security and interoperability
-review required by this repository. Trusted-package shell activation, signing, accessibility
+RAR creation remains disabled; browsing, testing and selective extraction use the
+pure-Rust permissively licensed `rars` provider behind ZiFile's safety and Worker-isolation
+boundaries. Trusted-package shell activation, signing, accessibility
 certification and Store submission are still in
 progress, so no production release has been tagged yet.

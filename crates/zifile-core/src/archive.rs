@@ -1,9 +1,10 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, BufReader, BufWriter, Read, Seek, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use bzip2::read::BzDecoder;
@@ -12,6 +13,10 @@ use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use lz4_flex::frame::{FrameDecoder, FrameEncoder};
+use rars::{
+    Archive as RarArchive, ArchiveMemberDetail as RarMemberDetail,
+    ArchiveReadOptions as RarReadOptions, ArchiveReader as RarReader,
+};
 use serde::{Deserialize, Serialize};
 use sevenz_rust2::{ArchiveReader as SevenZReader, ArchiveWriter as SevenZWriter, Password};
 use tempfile::NamedTempFile;
@@ -225,7 +230,9 @@ pub fn list_archive_with_limits(
         | ArchiveFormat::Bzip2
         | ArchiveFormat::Lz4
         | ArchiveFormat::Brotli => list_stream(path, format, limits)?,
-        ArchiveFormat::Rar => return Err(ZiFileError::UnsupportedOperation(format)),
+        ArchiveFormat::Rar => {
+            guard_archive_backend(format, "listing", || list_rar(path, password, limits))?
+        }
     };
 
     let total_size = entries.iter().try_fold(0_u64, |total, entry| {
@@ -284,7 +291,9 @@ pub fn test_archive_with_limits(
                 None,
             )?;
         }
-        ArchiveFormat::Rar => return Err(ZiFileError::UnsupportedOperation(info.format)),
+        ArchiveFormat::Rar => {
+            guard_archive_backend(info.format, "testing", || test_rar(path, password, limits))?
+        }
     }
     Ok(info)
 }
@@ -294,6 +303,7 @@ pub fn extract_archive(
     destination: impl AsRef<Path>,
     options: &ExtractOptions,
 ) -> ZiFileResult<OperationSummary> {
+    options.cancellation.check()?;
     if options.conflict == ConflictPolicy::Ask {
         return Err(ZiFileError::ConflictPolicyRequired);
     }
@@ -330,7 +340,9 @@ pub fn extract_archive(
         | ArchiveFormat::Bzip2
         | ArchiveFormat::Lz4
         | ArchiveFormat::Brotli => extract_stream(archive, destination, info.format, options),
-        ArchiveFormat::Rar => Err(ZiFileError::UnsupportedOperation(info.format)),
+        ArchiveFormat::Rar => guard_archive_backend(info.format, "extracting", || {
+            extract_rar(archive, destination, options, &info)
+        }),
     }
 }
 
@@ -368,6 +380,407 @@ pub fn create_archive(
         | ArchiveFormat::Brotli => create_stream(sources, destination, format, options),
         ArchiveFormat::Rar => Err(ZiFileError::UnsupportedOperation(format)),
     }
+}
+
+const RAR_BUFFERED_DECODE_LIMIT: u64 = 256 * 1024 * 1024;
+const WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT: u64 = 0x400;
+
+fn rar_read_options<'a>(password: Option<&'a str>, limits: SafetyLimits) -> RarReadOptions<'a> {
+    RarReadOptions::with_optional_password(password.map(str::as_bytes))
+        .with_rar50_buffered_decode_limit(limits.max_expanded_bytes.min(RAR_BUFFERED_DECODE_LIMIT))
+}
+
+fn read_rar(path: &Path, password: Option<&str>, limits: SafetyLimits) -> ZiFileResult<RarArchive> {
+    RarReader::read_path_with_options(path, rar_read_options(password, limits))
+        .map_err(map_rar_error)
+}
+
+fn map_rar_error(error: rars::Error) -> ZiFileError {
+    if rar_error_needs_password(&error) {
+        ZiFileError::PasswordRequired
+    } else if rar_error_is_limit(&error) {
+        ZiFileError::LimitExceeded(format!("RAR decoder resource limit: {error}"))
+    } else {
+        ZiFileError::Backend(format!("RAR backend: {error}"))
+    }
+}
+
+fn rar_error_needs_password(error: &rars::Error) -> bool {
+    match error {
+        rars::Error::NeedPassword => true,
+        rars::Error::AtArchiveOffset { source, .. }
+        | rars::Error::AtEntry { source, .. }
+        | rars::Error::InVolume { source, .. } => rar_error_needs_password(source),
+        _ => false,
+    }
+}
+
+fn rar_error_is_limit(error: &rars::Error) -> bool {
+    match error {
+        rars::Error::Rar50BufferedDecodeLimitExceeded { .. }
+        | rars::Error::MemoryLimitExceeded { .. } => true,
+        rars::Error::AtArchiveOffset { source, .. }
+        | rars::Error::AtEntry { source, .. }
+        | rars::Error::InVolume { source, .. } => rar_error_is_limit(source),
+        _ => false,
+    }
+}
+
+fn list_rar(
+    path: &Path,
+    password: Option<&str>,
+    limits: SafetyLimits,
+) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    let archive = read_rar(path, password, limits)?;
+    reject_rar_special_entries(&archive)?;
+    let mut entries = Vec::new();
+    for member in archive.members() {
+        if entries.len() as u64 >= limits.max_entries {
+            return Err(ZiFileError::LimitExceeded(format!(
+                "entry count exceeds {}",
+                limits.max_entries
+            )));
+        }
+        reject_rar_member_link(&member)?;
+        let name = member.meta.name_lossy();
+        let safe = safe_relative_path(&name, limits.max_path_depth)?;
+        entries.push(ArchiveEntryInfo {
+            path: safe,
+            size: member.meta.unpacked_size,
+            compressed_size: member.meta.packed_size,
+            is_directory: member.meta.is_directory,
+            encrypted: member.meta.is_encrypted,
+        });
+    }
+    validate_entry_names(&entries, limits)?;
+    Ok(entries)
+}
+
+fn reject_rar_special_entries(archive: &RarArchive) -> ZiFileResult<()> {
+    if let RarArchive::Rar50Plus(archive) = archive {
+        for block in &archive.blocks {
+            if let rars::rar50::Block::File(file) = block
+                && file.redirection.is_some()
+            {
+                return Err(ZiFileError::LinkEntry(
+                    String::from_utf8_lossy(&file.name).into_owned(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn reject_rar_member_link(member: &rars::ArchiveMember) -> ZiFileResult<()> {
+    let host = member.meta.host_os;
+    let attributes = member.meta.file_attr;
+    let (unix_link, windows_reparse) = match &member.detail {
+        RarMemberDetail::Rar13 { .. } => (
+            false,
+            attributes & WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT != 0,
+        ),
+        RarMemberDetail::Rar15To40 { .. } => (
+            matches!(host, Some(3 | 5)) && attributes & 0o170000 == 0o120000,
+            matches!(host, Some(0 | 1 | 2 | 4))
+                && attributes & WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT != 0,
+        ),
+        RarMemberDetail::Rar50Plus { .. } => (
+            host == Some(1) && attributes & 0o170000 == 0o120000,
+            host == Some(0) && attributes & WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT != 0,
+        ),
+        _ => (false, false),
+    };
+    if unix_link || windows_reparse {
+        return Err(ZiFileError::LinkEntry(member.meta.name_lossy()));
+    }
+    Ok(())
+}
+
+fn test_rar(path: &Path, password: Option<&str>, limits: SafetyLimits) -> ZiFileResult<()> {
+    let archive = read_rar(path, password, limits)?;
+    reject_rar_special_entries(&archive)?;
+    for member in archive.members() {
+        reject_rar_member_link(&member)?;
+    }
+    let total = Arc::new(AtomicU64::new(0));
+    let limit_exceeded = Arc::new(AtomicBool::new(false));
+    let result = archive.extract_to_with_options(rar_read_options(password, limits), |_| {
+        Ok(Box::new(RarGuardedWriter::discard(
+            Arc::clone(&total),
+            limits.max_expanded_bytes,
+            Arc::clone(&limit_exceeded),
+            None,
+        )) as Box<dyn Write>)
+    });
+    if limit_exceeded.load(Ordering::Acquire) {
+        return Err(ZiFileError::LimitExceeded(format!(
+            "expanded data exceeds {} bytes",
+            limits.max_expanded_bytes
+        )));
+    }
+    result.map_err(map_rar_error)
+}
+
+struct PendingRarFile {
+    temporary: Arc<Mutex<Option<NamedTempFile>>>,
+    destination: PathBuf,
+}
+
+struct RarGuardedWriter {
+    temporary: Option<Arc<Mutex<Option<NamedTempFile>>>>,
+    decoded_total: Arc<AtomicU64>,
+    selected_total: Option<Arc<AtomicU64>>,
+    maximum: u64,
+    limit_exceeded: Arc<AtomicBool>,
+    cancellation: Option<CancellationToken>,
+    progress: Option<OperationProgress>,
+}
+
+impl RarGuardedWriter {
+    fn discard(
+        decoded_total: Arc<AtomicU64>,
+        maximum: u64,
+        limit_exceeded: Arc<AtomicBool>,
+        cancellation: Option<CancellationToken>,
+    ) -> Self {
+        Self {
+            temporary: None,
+            decoded_total,
+            selected_total: None,
+            maximum,
+            limit_exceeded,
+            cancellation,
+            progress: None,
+        }
+    }
+
+    fn file(
+        temporary: Arc<Mutex<Option<NamedTempFile>>>,
+        decoded_total: Arc<AtomicU64>,
+        selected_total: Arc<AtomicU64>,
+        maximum: u64,
+        limit_exceeded: Arc<AtomicBool>,
+        cancellation: CancellationToken,
+        progress: OperationProgress,
+    ) -> Self {
+        Self {
+            temporary: Some(temporary),
+            decoded_total,
+            selected_total: Some(selected_total),
+            maximum,
+            limit_exceeded,
+            cancellation: Some(cancellation),
+            progress: Some(progress),
+        }
+    }
+
+    fn should_write(&self, length: usize) -> bool {
+        if self
+            .cancellation
+            .as_ref()
+            .is_some_and(CancellationToken::is_cancelled)
+        {
+            return false;
+        }
+        let length = length as u64;
+        let current = self.decoded_total.load(Ordering::Acquire);
+        if current
+            .checked_add(length)
+            .is_none_or(|next| next > self.maximum)
+        {
+            self.limit_exceeded.store(true, Ordering::Release);
+            return false;
+        }
+        true
+    }
+}
+
+impl Write for RarGuardedWriter {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        // rars 0.9.3 can leave its solid-decoder worker waiting when a
+        // destination writer returns an error. Consume but do not persist data
+        // after cancellation/limit detection, then surface the recorded ZiFile
+        // error before any temporary file is committed.
+        if !self.should_write(buffer.len()) {
+            return Ok(buffer.len());
+        }
+        let written = if let Some(temporary) = &self.temporary {
+            let mut guard = temporary
+                .lock()
+                .map_err(|_| io::Error::other("RAR temporary writer lock poisoned"))?;
+            guard
+                .as_mut()
+                .ok_or_else(|| io::Error::other("RAR temporary writer already committed"))?
+                .write(buffer)?
+        } else {
+            buffer.len()
+        };
+        let written = written as u64;
+        self.decoded_total.fetch_add(written, Ordering::AcqRel);
+        if let Some(selected_total) = &self.selected_total {
+            selected_total.fetch_add(written, Ordering::AcqRel);
+        }
+        if let Some(progress) = &self.progress {
+            progress.advance_bytes(written);
+        }
+        Ok(written as usize)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if let Some(temporary) = &self.temporary {
+            let mut guard = temporary
+                .lock()
+                .map_err(|_| io::Error::other("RAR temporary writer lock poisoned"))?;
+            guard
+                .as_mut()
+                .ok_or_else(|| io::Error::other("RAR temporary writer already committed"))?
+                .flush()
+        } else {
+            Ok(())
+        }
+    }
+}
+
+fn extract_rar(
+    path: &Path,
+    destination: &Path,
+    options: &ExtractOptions,
+    info: &ArchiveInfo,
+) -> ZiFileResult<OperationSummary> {
+    let archive = read_rar(path, options.password.as_deref(), options.limits)?;
+    reject_rar_special_entries(&archive)?;
+    for member in archive.members() {
+        reject_rar_member_link(&member)?;
+    }
+
+    let mut claimed = HashSet::new();
+    let mut outputs = HashMap::<String, Option<PathBuf>>::new();
+    let mut directories = Vec::new();
+    let mut summary = OperationSummary::default();
+    for entry in &info.entries {
+        if !is_selected(&entry.path, options) {
+            continue;
+        }
+        let output = prepare_output(
+            destination,
+            &entry.path,
+            entry.is_directory,
+            options.conflict,
+            &mut claimed,
+        )?;
+        if output.is_none() {
+            summary.skipped += 1;
+        } else if entry.is_directory {
+            directories.push(output.clone().expect("checked Some"));
+        }
+        outputs.insert(archive_name(&entry.path).to_ascii_lowercase(), output);
+    }
+
+    let decoded_total = Arc::new(AtomicU64::new(0));
+    let selected_total = Arc::new(AtomicU64::new(0));
+    let limit_exceeded = Arc::new(AtomicBool::new(false));
+    let mut pending = Vec::<PendingRarFile>::new();
+    let mut setup_error = None;
+    let result = archive.extract_to_with_options(
+        rar_read_options(options.password.as_deref(), options.limits),
+        |meta| {
+            let relative = match safe_relative_path(
+                &String::from_utf8_lossy(&meta.name),
+                options.limits.max_path_depth,
+            ) {
+                Ok(relative) => relative,
+                Err(error) => {
+                    setup_error = Some(error);
+                    return Err(rars::Error::from(io::Error::other(
+                        "RAR output path failed safety validation",
+                    )));
+                }
+            };
+            let key = archive_name(&relative).to_ascii_lowercase();
+            let Some(Some(output)) = outputs.get(&key) else {
+                return Ok(Box::new(RarGuardedWriter::discard(
+                    Arc::clone(&decoded_total),
+                    options.limits.max_expanded_bytes,
+                    Arc::clone(&limit_exceeded),
+                    Some(options.cancellation.clone()),
+                )) as Box<dyn Write>);
+            };
+            if meta.is_directory {
+                return Ok(Box::new(io::sink()) as Box<dyn Write>);
+            }
+
+            let parent = output.parent().unwrap_or_else(|| Path::new("."));
+            let temporary =
+                match fs::create_dir_all(parent).and_then(|()| NamedTempFile::new_in(parent)) {
+                    Ok(temporary) => Arc::new(Mutex::new(Some(temporary))),
+                    Err(error) => {
+                        setup_error = Some(ZiFileError::Io(error));
+                        return Err(rars::Error::from(io::Error::other(
+                            "RAR temporary output creation failed",
+                        )));
+                    }
+                };
+            pending.push(PendingRarFile {
+                temporary: Arc::clone(&temporary),
+                destination: output.clone(),
+            });
+            Ok(Box::new(RarGuardedWriter::file(
+                temporary,
+                Arc::clone(&decoded_total),
+                Arc::clone(&selected_total),
+                options.limits.max_expanded_bytes,
+                Arc::clone(&limit_exceeded),
+                options.cancellation.clone(),
+                options.progress.clone(),
+            )) as Box<dyn Write>)
+        },
+    );
+
+    if let Some(error) = setup_error {
+        return Err(error);
+    }
+    if options.cancellation.is_cancelled() {
+        return Err(ZiFileError::Cancelled);
+    }
+    if limit_exceeded.load(Ordering::Acquire) {
+        return Err(ZiFileError::LimitExceeded(format!(
+            "expanded data exceeds {} bytes",
+            options.limits.max_expanded_bytes
+        )));
+    }
+    result.map_err(map_rar_error)?;
+
+    for directory in &directories {
+        fs::create_dir_all(directory)?;
+    }
+    summary.directories = directories.len() as u64;
+    summary.files = pending.len() as u64;
+    summary.bytes = selected_total.load(Ordering::Acquire);
+    for pending_file in pending {
+        persist_rar_output(pending_file)?;
+        options.progress.advance_entry();
+    }
+    Ok(summary)
+}
+
+fn persist_rar_output(pending: PendingRarFile) -> ZiFileResult<()> {
+    let mutex = Arc::try_unwrap(pending.temporary)
+        .map_err(|_| ZiFileError::Backend("RAR output writer remained active".to_owned()))?;
+    let mut temporary = mutex
+        .into_inner()
+        .map_err(|_| ZiFileError::Backend("RAR output writer lock poisoned".to_owned()))?
+        .ok_or_else(|| ZiFileError::Backend("RAR output was already committed".to_owned()))?;
+    temporary.as_file_mut().sync_all()?;
+    if pending.destination.exists() {
+        if pending.destination.is_dir() {
+            return Err(ZiFileError::DestinationExists(pending.destination));
+        }
+        fs::remove_file(&pending.destination)?;
+    }
+    temporary
+        .persist(&pending.destination)
+        .map_err(|error| ZiFileError::Io(error.error))?;
+    Ok(())
 }
 
 fn list_zip(

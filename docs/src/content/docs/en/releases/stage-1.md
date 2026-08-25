@@ -58,3 +58,9 @@ The corrected [CI run 32836336921](https://github.com/ax2/zifile/actions/runs/32
 A trusted-signed MSIX lifecycle script now audits baseline and upgrade packages, refuses to overwrite an existing installation, checks install, packaged CLI, upgrade and Reset, and guarantees uninstall cleanup plus JSON evidence. No formally signed packages are available yet, so the mutating lifecycle has not been run; Reset and data-preserving Repair remain distinct claims.
 
 The trusted-signature precondition was exercised with a structurally current unsigned x64 development MSIX. Audit rejected `NotSigned`, and the `ZiCode.ZiFile.Dev` installed-package count remained zero before and after, proving that package registration was untouched.
+
+## 2026-08-25 — Pure-Rust read-only RAR beta
+
+The earlier RAR hold was revisited after `rars` 0.9.3 provided a pure-Rust, `unsafe`-forbidden MIT OR Apache-2.0 implementation covering RAR 1.3 through RAR 7. ZiFile now reports browse/test/extract and encrypted-read capabilities while continuing to reject RAR creation.
+
+Core integration covers every archive version exposed by the provider, solid selective extraction, Unicode names, encrypted headers, wrong/missing passwords, strict limits, cancellation, temporary-file commit semantics, links, reparse attributes and RAR 5+ redirections. The parser fuzz selector now includes RAR and MSIX associates `.rar`. Six pinned external corpus files pass local ZiFile integrity checks; the new 7-Zip cross-reader and three-fixture rejection gate is committed but awaits its first cloud result, so interoperability is not yet recorded as passed.

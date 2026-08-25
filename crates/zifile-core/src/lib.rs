@@ -63,7 +63,7 @@ impl ArchiveFormat {
 
     pub const fn capabilities(self) -> FormatCapabilities {
         match self {
-            Self::Rar => FormatCapabilities::unsupported(ReleaseStage::PostV1),
+            Self::Rar => FormatCapabilities::read_only(true, ReleaseStage::Beta),
             Self::SevenZip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
             Self::Zip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
             Self::Tar | Self::TarGzip | Self::TarZstd | Self::TarXz | Self::TarBzip2 => {
@@ -145,22 +145,22 @@ pub struct FormatCapabilities {
 }
 
 impl FormatCapabilities {
+    const fn read_only(encryption: bool, stage: ReleaseStage) -> Self {
+        Self {
+            list: true,
+            extract: true,
+            create: false,
+            encryption,
+            stage,
+        }
+    }
+
     const fn read_write(encryption: bool, stage: ReleaseStage) -> Self {
         Self {
             list: true,
             extract: true,
             create: true,
             encryption,
-            stage,
-        }
-    }
-
-    const fn unsupported(stage: ReleaseStage) -> Self {
-        Self {
-            list: false,
-            extract: false,
-            create: false,
-            encryption: false,
             stage,
         }
     }
@@ -243,7 +243,7 @@ pub fn detect_format(path: impl AsRef<Path>) -> ZiFileResult<ArchiveFormat> {
         Some(ArchiveFormat::Zip)
     } else if bytes.starts_with(b"7z\xBC\xAF\x27\x1C") {
         Some(ArchiveFormat::SevenZip)
-    } else if bytes.starts_with(b"Rar!\x1A\x07") {
+    } else if bytes.starts_with(b"Rar!\x1A\x07") || bytes.starts_with(b"RE~^") {
         Some(ArchiveFormat::Rar)
     } else if bytes.starts_with(b"\x1F\x8B") {
         Some(if extension_hint == Some(ArchiveFormat::TarGzip) {
@@ -361,12 +361,13 @@ mod tests {
     }
 
     #[test]
-    fn rar_is_explicitly_unavailable_and_post_v1() {
+    fn rar_is_read_only_beta() {
         let capabilities = ArchiveFormat::Rar.capabilities();
-        assert!(!capabilities.list);
-        assert!(!capabilities.extract);
+        assert!(capabilities.list);
+        assert!(capabilities.extract);
         assert!(!capabilities.create);
-        assert_eq!(capabilities.stage, ReleaseStage::PostV1);
+        assert!(capabilities.encryption);
+        assert_eq!(capabilities.stage, ReleaseStage::Beta);
     }
 
     #[test]

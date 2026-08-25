@@ -48,7 +48,7 @@ Leave “What's new in this version” blank for the first submission. Use `MIT 
 - Website: `https://ax2.github.io/zifile/`
 - Privacy: `https://ax2.github.io/zifile/en/product/privacy/`
 
-Certification notes should explain that the app processes only user-selected local files; an isolated Worker included in the package performs long operations; the Explorer extension only initiates archive creation; passwords are passed transiently through in-memory IPC or standard input; RAR is unsupported; and the MSIX does not declare the Internet client capability.
+Certification notes should explain that the app processes only user-selected local files; an isolated Worker included in the package performs long operations; the Explorer extension only initiates archive creation; passwords are passed transiently through in-memory IPC or standard input; RAR is read-only and RAR creation is unsupported; and the MSIX does not declare the Internet client capability.
 
 ## Asset status
 

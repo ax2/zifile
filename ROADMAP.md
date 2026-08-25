@@ -29,6 +29,7 @@ Goal: safely open, list, create, and extract common archives.
 
 - [x] ZIP read/write, including ZIP64 and AES-encrypted entries.
 - [x] 7z read/write with optional AES encryption.
+- [x] Beta read-only RAR 1.3–7 browse/test/selective extraction with password support; creation stays disabled.
 - [x] TAR and gzip/zstd/xz/bzip2 stream composition; lz4/brotli are available as single streams.
 - [x] Signature-based format detection.
 - [x] Archive browser, selected extraction, destination and conflict policies.
@@ -102,7 +103,7 @@ Goal: stable public release.
 
 ## Post-1.0
 
-- RAR read-only compatibility after a license and implementation review.
+- Broader RAR multivolume and recovery-record compatibility after the beta read-only provider stabilizes.
 - Checksums, duplicate analysis, batch rename, and file preview.
 - Optional stronger worker isolation with AppContainer.
 - ARM64 performance tuning and expanded enterprise deployment guidance.

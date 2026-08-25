@@ -19,6 +19,49 @@ fn fixture() -> (TempDir, PathBuf) {
     (temp, source)
 }
 
+fn rar_fixture(path: &Path, password: Option<&str>) {
+    let mut builder = rars::Builder::new(rars::ArchiveVersion::Rar50)
+        .solid(true)
+        .compression_level(Some(3));
+    if let Some(password) = password {
+        builder = builder
+            .password(Some(password.as_bytes().to_vec()))
+            .header_encryption(true);
+    }
+    builder
+        .add_bytes(
+            b"hello.txt".to_vec(),
+            b"hello from RAR\n".to_vec(),
+            None,
+            None,
+        )
+        .unwrap();
+    builder
+        .add_bytes(
+            "nested/中文.txt".as_bytes().to_vec(),
+            "RAR 安全归档\n".as_bytes().to_vec(),
+            None,
+            None,
+        )
+        .unwrap();
+    builder.write_to_path(path, None).unwrap();
+}
+
+fn rar_version_fixture(path: &Path, version: rars::ArchiveVersion) {
+    let mut builder = rars::Builder::new(version)
+        .solid(false)
+        .compression_level(Some(0));
+    builder
+        .add_bytes(
+            b"version.txt".to_vec(),
+            format!("{version}\n").into_bytes(),
+            None,
+            None,
+        )
+        .unwrap();
+    builder.write_to_path(path, None).unwrap();
+}
+
 fn assert_round_trip(format: ArchiveFormat) {
     let (temp, source) = fixture();
     let archive = temp
@@ -149,6 +192,141 @@ fn encrypted_zip_round_trip_requires_password() {
         Err(ZiFileError::PasswordRequired)
     ));
     test_archive(&archive, Some("correct horse")).unwrap();
+}
+
+#[test]
+fn rar_is_read_only_and_supports_solid_selected_extraction() {
+    let temp = tempfile::tempdir().unwrap();
+    let archive = temp.path().join("fixture.rar");
+    rar_fixture(&archive, None);
+
+    let capabilities = ArchiveFormat::Rar.capabilities();
+    assert!(capabilities.list);
+    assert!(capabilities.extract);
+    assert!(capabilities.encryption);
+    assert!(!capabilities.create);
+
+    let info = list_archive(&archive, None).unwrap();
+    assert_eq!(info.format, ArchiveFormat::Rar);
+    assert_eq!(info.entries.len(), 2);
+    assert_eq!(info.total_size, 32);
+    test_archive(&archive, None).unwrap();
+
+    let output = temp.path().join("rar-selected");
+    let selected = HashSet::from([PathBuf::from("nested/中文.txt")]);
+    let summary = extract_archive(
+        &archive,
+        &output,
+        &ExtractOptions {
+            selected_paths: Some(selected),
+            ..ExtractOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(summary.files, 1);
+    assert_eq!(summary.bytes, 17);
+    assert!(!output.join("hello.txt").exists());
+    assert_eq!(
+        fs::read_to_string(output.join("nested/中文.txt")).unwrap(),
+        "RAR 安全归档\n"
+    );
+
+    let source = temp.path().join("source.txt");
+    fs::write(&source, "RAR creation remains disabled").unwrap();
+    assert!(matches!(
+        create_archive(
+            &[source],
+            temp.path().join("not-created.rar"),
+            ArchiveFormat::Rar,
+            &CreateOptions::default(),
+        ),
+        Err(ZiFileError::UnsupportedOperation(ArchiveFormat::Rar))
+    ));
+}
+
+#[test]
+fn rar_reader_covers_every_supported_archive_version() {
+    let temp = tempfile::tempdir().unwrap();
+    for version in rars::ArchiveVersion::ALL {
+        let archive = temp.path().join(format!("{version}.rar"));
+        rar_version_fixture(&archive, version);
+        let info = list_archive(&archive, None).unwrap();
+        assert_eq!(info.entries.len(), 1, "failed to list {version}");
+        test_archive(&archive, None).unwrap();
+        let output = temp.path().join(format!("extract-{version}"));
+        extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
+        assert_eq!(
+            fs::read_to_string(output.join("version.txt")).unwrap(),
+            format!("{version}\n"),
+            "failed to extract {version}"
+        );
+    }
+}
+
+#[test]
+fn encrypted_rar_headers_require_the_correct_password() {
+    let temp = tempfile::tempdir().unwrap();
+    let archive = temp.path().join("encrypted.rar");
+    rar_fixture(&archive, Some("correct horse"));
+
+    assert!(matches!(
+        list_archive(&archive, None),
+        Err(ZiFileError::PasswordRequired)
+    ));
+    assert!(list_archive(&archive, Some("wrong password")).is_err());
+    test_archive(&archive, Some("correct horse")).unwrap();
+
+    let output = temp.path().join("rar-encrypted");
+    let summary = extract_archive(
+        &archive,
+        &output,
+        &ExtractOptions {
+            password: Some("correct horse".to_owned()),
+            ..ExtractOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(summary.files, 2);
+    assert_eq!(
+        fs::read_to_string(output.join("hello.txt")).unwrap(),
+        "hello from RAR\n"
+    );
+}
+
+#[test]
+fn rar_limits_and_cancellation_leave_no_output_file() {
+    let temp = tempfile::tempdir().unwrap();
+    let archive = temp.path().join("bounded.rar");
+    rar_fixture(&archive, None);
+
+    let limited_output = temp.path().join("rar-limited");
+    let limited = extract_archive(
+        &archive,
+        &limited_output,
+        &ExtractOptions {
+            limits: SafetyLimits {
+                max_expanded_bytes: 8,
+                ..SafetyLimits::default()
+            },
+            ..ExtractOptions::default()
+        },
+    );
+    assert!(matches!(limited, Err(ZiFileError::LimitExceeded(_))));
+    assert!(!limited_output.join("hello.txt").exists());
+
+    let cancellation = CancellationToken::default();
+    cancellation.cancel();
+    let cancelled_output = temp.path().join("rar-cancelled");
+    let cancelled = extract_archive(
+        &archive,
+        &cancelled_output,
+        &ExtractOptions {
+            cancellation,
+            ..ExtractOptions::default()
+        },
+    );
+    assert!(matches!(cancelled, Err(ZiFileError::Cancelled)));
+    assert!(!cancelled_output.join("hello.txt").exists());
 }
 
 #[test]

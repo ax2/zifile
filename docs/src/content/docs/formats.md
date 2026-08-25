@@ -12,6 +12,6 @@ description: ZiFile 当前已验证和计划中的压缩与归档格式能力矩
 | TAR | 是 | 是 | 是 | 否 | 已实现 |
 | TAR + gzip/zstd/xz/bzip2 | 是 | 是 | 是 | 否 | 已实现 |
 | 单流 gzip/zstd/xz/bzip2/lz4/brotli | 单条目 | 是 | 是 | 否 | 已实现 |
-| RAR | 否 | 否 | 否 | 待评估 | 评审后决定 |
+| RAR 1.3–7 | 是 | 是 | 否 | 读取 | Beta |
 
-RAR 创建不在计划内。RAR 只读能力必须通过许可证和安全评审，且不能改变主项目的 MIT 许可边界。
+RAR 创建不在计划内。只读浏览、完整性测试和选择性解压使用纯 Rust 的 `rars` Provider（MIT OR Apache-2.0）。ZiFile 会拒绝不安全路径、链接和 RAR 5+ 重定向，执行声明大小与实际解码大小限制，先写临时文件，并在隔离 Worker 中处理归档。密码保护的 RAR 可以读取，密码不会持久化。

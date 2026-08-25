@@ -6,8 +6,9 @@ $packageBuild = Join-Path $repoRoot 'packaging\msix\Build-Package.ps1'
 $packageLifecycle = Join-Path $repoRoot 'tests\smoke\msix-lifecycle.ps1'
 $repairHelper = Join-Path $repoRoot 'tests\helpers\msix-repair\Program.cs'
 $repairProject = Join-Path $repoRoot 'tests\helpers\msix-repair\MsixRepair.csproj'
+$rarCorpus = Join-Path $repoRoot 'tests\interoperability\rar-corpus.ps1'
 
-foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle)) {
+foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $rarCorpus)) {
     $tokens = $null
     $errors = $null
     [System.Management.Automation.Language.Parser]::ParseFile(
@@ -99,6 +100,9 @@ foreach ($requiredShellToken in @(
         throw "The MSIX manifest does not include shell extension token: $requiredShellToken"
     }
 }
+if ($manifestSource -notmatch [Regex]::Escape('<uap:FileType>.rar</uap:FileType>')) {
+    throw 'The MSIX manifest does not associate supported RAR archives.'
+}
 if ($buildSource -notmatch [Regex]::Escape('zifile_shell.dll')) {
     throw 'Build-Package.ps1 does not stage the architecture-matched shell DLL.'
 }
@@ -153,10 +157,28 @@ if ($repairProjectSource -notmatch [Regex]::Escape('Microsoft.WindowsAppSDK') -o
     $repairProjectSource -notmatch [Regex]::Escape('1.8.260804001')) {
     throw 'The MSIX Repair helper does not pin its Windows App SDK dependency.'
 }
+$rarCorpusSource = Get-Content -Raw -LiteralPath $rarCorpus
+$ciSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\ci.yml')
+foreach ($requiredRarToken in @(
+    '7d8f9386ef777a2415da34fe1db193d8471ff7d0',
+    'winrar721_header_encrypted_quickopen.rar',
+    'rar50/wild/symlink.rar',
+    'expected_rejection',
+    'Assert-TreesMatch'
+)) {
+    if ($rarCorpusSource -notmatch [Regex]::Escape($requiredRarToken)) {
+        throw "The RAR corpus gate omits required token: $requiredRarToken"
+    }
+}
+foreach ($requiredCiToken in @('rar-corpus.ps1', 'target/rar-corpus.json')) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredCiToken)) {
+        throw "CI does not publish the RAR corpus gate or evidence: $requiredCiToken"
+    }
+}
 
 [pscustomobject]@{
     schema_version = 1
-    parser_checks = 4
+    parser_checks = 5
     missing_inputs_rejected = $true
     development_identity_rejected = $true
     unsigned_publisher_rejected = $true
@@ -167,4 +189,6 @@ if ($repairProjectSource -notmatch [Regex]::Escape('Microsoft.WindowsAppSDK') -o
     lifecycle_gate_wired = $true
     lifecycle_workflow_wired = $true
     repair_helper_wired = $true
+    rar_association_wired = $true
+    rar_corpus_wired = $true
 } | ConvertTo-Json
