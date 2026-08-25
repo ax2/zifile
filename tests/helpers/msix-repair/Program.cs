@@ -66,7 +66,7 @@ if (args.Length == 1 && (args[0] == "--probe" || args[0] == "--probe-timeout-fix
     {
         try
         {
-            child.Kill(entireProcessTree: true);
+            child.Kill();
         }
         catch (InvalidOperationException)
         {

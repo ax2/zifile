@@ -149,7 +149,7 @@ foreach ($requiredRepairToken in @(
     'probeTimeoutSeconds',
     'probe_completed',
     '--probe-timeout-fixture',
-    'entireProcessTree: true',
+    'child.Kill()',
     '--package-full-name',
     'preserve_application_data'
 )) {
