@@ -6,7 +6,10 @@ export default defineConfig({
   base: '/zifile',
   integrations: [
     starlight({
-      title: 'ZiFile 文档',
+      title: {
+        'zh-CN': 'ZiFile 文档',
+        en: 'ZiFile Documentation',
+      },
       description: 'ZiFile 产品、架构、安全、开发与发布文档',
       social: [
         {
