@@ -36,11 +36,30 @@ fn archive_throughput(criterion: &mut Criterion) {
         &CreateOptions::default(),
     )
     .unwrap();
+    let rar_archive = temp.path().join("verify.rar");
+    let mut rar_payload = payload.clone();
+    let mut noise = 0x9E37_79B9_u32;
+    for byte in rar_payload.iter_mut().step_by(64) {
+        noise ^= noise << 13;
+        noise ^= noise >> 17;
+        noise ^= noise << 5;
+        *byte = noise as u8;
+    }
+    let mut rar_builder = rars::Builder::new(rars::ArchiveVersion::Rar50)
+        .solid(false)
+        .compression_level(Some(3));
+    rar_builder
+        .add_bytes(b"payload.bin".to_vec(), rar_payload, None, None)
+        .unwrap();
+    rar_builder.write_to_path(&rar_archive, None).unwrap();
     let mut read_group = criterion.benchmark_group("verify archive");
     read_group.throughput(Throughput::Bytes(payload.len() as u64));
     read_group.sample_size(10);
     read_group.bench_function("zip deflate 8 MiB", |bencher| {
         bencher.iter(|| test_archive(&archive, None).unwrap());
+    });
+    read_group.bench_function("rar5 method 3 8 MiB", |bencher| {
+        bencher.iter(|| test_archive(&rar_archive, None).unwrap());
     });
     read_group.finish();
 }
