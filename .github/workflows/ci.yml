@@ -29,6 +29,9 @@ jobs:
       - name: Foundation smoke test
         shell: pwsh
         run: ./tests/smoke/foundation.ps1 -SkipDesktopLaunch
+      - name: Reproducibility diagnostics smoke test
+        shell: pwsh
+        run: ./tests/smoke/reproducibility-diagnostics.ps1
       - name: Packaging policy smoke test
         shell: pwsh
         run: ./tests/smoke/packaging-policy.ps1

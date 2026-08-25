@@ -21,13 +21,23 @@ ZiFile 将“同一源码可以再次编译”与“产物逐字节相同”分�
 - `zifile-worker.exe`
 - `zifile_shell.dll`
 
-结果写入 `target/reproducibility-x64.json`，包含提交 SHA、工作区是否有未提交修改、编译器版本、目标三元组、精确命令和两组哈希。任何文件不同都会令脚本失败；临时构建目录无论成功或失败都会在安全路径检查后删除。
+结果写入 `target/reproducibility-x64.json`，包含提交 SHA、工作区是否有未提交修改、编译器版本、目标三元组、精确命令和两组哈希。schema v2 还会为不同的 PE 记录文件大小、首个差异偏移，并逐项比较 headers、各 section 与 overlay 的范围和 SHA-256；这些诊断足以区分链接布局、代码、只读数据、资源和尾部数据差异，而不必保留两份大型构建目录。任何文件不同都会令脚本失败；临时构建目录无论成功或失败都会在安全路径检查后删除。
+
+已有 PE 可用诊断模式直接比较，不执行 Cargo 构建：
+
+```powershell
+./tests/reproducibility/windows-build.ps1 `
+  -ComparePeFirstPath first\zifile-desktop.exe `
+  -ComparePeSecondPath second\zifile-desktop.exe
+```
 
 ARM64 使用同一脚本和 `-Architecture arm64`。每月计划任务、手动运行以及影响工具链/构建门禁的 Pull Request 会分别复测 x64 与 ARM64，并保留结构化 JSON 30 天；无关 PR 不承担这项长时构建成本。
 
 ## 当前证据
 
-2026-08-24 基于 Rust 1.88.0 的本地 Windows x64 完整双构建中，可访问候选、CLI、Worker 与 Explorer DLL 的两组 SHA-256 完全相同；默认 `zifile-desktop.exe` 不同。云端运行 `32707399686` 随后在干净 PR 合并提交上复现了相同结论：x64 与 ARM64 都是 4/5 匹配，只有默认 Iced EXE 不同，因此两项总体结果均为 `reproducible=false`，路线图保持未完成。此前的小范围调查确认 `/Brepro` 能消除 PE 时间戳/调试标识差异，单作业能让 CLI 稳定复现；Iced/WGPU 默认桌面路径仍有额外非确定性，需要继续定位。2026-08-25 为采用已修复解析器后端把固定工具链升级到 Rust 1.93.0；旧哈希只作为历史证据，新工具链的双架构结果必须重新建立。
+2026-08-24 基于 Rust 1.88.0 的本地 Windows x64 完整双构建中，可访问候选、CLI、Worker 与 Explorer DLL 的两组 SHA-256 完全相同；默认 `zifile-desktop.exe` 不同。云端运行 `32707399686` 随后在干净 PR 合并提交上复现了相同结论：x64 与 ARM64 都是 4/5 匹配，只有默认 Iced EXE 不同，因此两项总体结果均为 `reproducible=false`，路线图保持未完成。此前的小范围调查确认 `/Brepro` 能消除 PE 时间戳/调试标识差异，单作业能让 CLI 稳定复现；Iced/WGPU 默认桌面路径仍有额外非确定性，需要继续定位。
+
+2026-08-25 为采用已修复解析器后端把固定工具链升级到 Rust 1.93.0。云端运行 `32813453959` 在干净 PR 合并提交上重新建立证据：x64 与 ARM64 仍各有 4/5 PE 匹配，只有默认 Iced EXE 不同；两份失败 JSON 已下载并核对，不能把工具链升级描述为修复了可复现缺口。该运行仍使用 schema v1；随后加入的 schema v2 section 诊断将在下一轮提供更细的根因证据。
 
 ## 已知边界
 
