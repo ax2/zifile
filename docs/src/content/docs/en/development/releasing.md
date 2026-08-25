@@ -5,6 +5,8 @@ description: One versioned release flow for GitHub, WinGet, and Microsoft Store.
 
 ## Artifacts and channels
 
+The signing boundary is defined by [ADR-0006](/zifile/en/architecture/adr-0006-release-signing/): the Store applies the final Store-channel signature, while GitHub/WinGet use publicly trusted cloud-HSM signing. Production private keys are never exported into GitHub secrets. The current PFX path is pipeline scaffolding and cannot clear the 1.0 release gate.
+
 Releases contain x64 and ARM64 desktop/CLI programs, MSIX packages, standalone executables, SHA-256 files, per-package audit JSON, CycloneDX JSON SBOMs, GitHub build provenance, release notes, and a matching documentation snapshot. GitHub Release is the first public channel. WinGet uses planned ID `ZiCode.ZiFile`; Microsoft Store uses MSIX.
 
 A `v*` tag builds both architectures and WinGet 1.12 multi-file manifest candidates. Tag publishing requires the official Identity, Publisher, PFX, and password secrets. Missing inputs, `.Dev` identities, or Microsoft's unsigned-package OID are rejected before build. Without official credentials, only manual unsigned development artifacts may be produced and they must not be submitted to WinGet or Store.

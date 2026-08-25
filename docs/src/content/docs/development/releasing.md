@@ -19,7 +19,7 @@ GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID 
 
 文档当前发布到 `ax2.github.io/zifile`；完成 DNS 配置后迁移到计划域名 `zifile.zicode.com`。
 
-Partner Center 需要先手动预留名称并完成首个提交；之后可以接入 Store Submission API。签名密钥只保存在 GitHub Secrets 或云签名服务中，工作流把临时证书写到 Runner 临时目录并在打包后删除。
+Partner Center 需要先手动预留名称并完成首个提交；之后可以接入 Store Submission API。签名策略见 [ADR-0006](/zifile/architecture/adr-0006-release-signing/)：Store 完成商店通道最终签名，GitHub/WinGet 使用云 HSM 托管的公开受信任签名，生产私钥不得导出到 GitHub Secret。现有 PFX 路径仅为管线脚手架，不能解除 1.0 发布门禁。
 
 推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE，生成校验和、结构化包审计、CycloneDX SBOM、来源证明和 WinGet 1.12 多文件清单候选，然后发布 GitHub Release。标签流程要求正式 Identity、Publisher、PFX 和密码四项 Secret 全部存在；缺一项、使用 `.Dev` Identity 或未签名 OID Publisher 都会在构建前失败，避免公开不可安装的开发包。没有正式凭据时只能手动生成开发用途的未签名包，不得提交 WinGet 或 Store。未签名 `.Dev` 包使用微软固定 OID Publisher 并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
 
