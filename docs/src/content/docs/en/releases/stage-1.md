@@ -11,7 +11,7 @@ Safely browse, create, test, and extract common archives through one Rust core, 
 
 ### Findings and implementation
 
-Provider review selected replaceable permissive backends for ZIP, 7z, TAR, gzip, zstd, xz, bzip2, lz4, and Brotli. RAR stayed outside 1.0 pending licensing and hostile-input review. Archive parsing was recognized as an untrusted-input boundary requiring process isolation rather than only background threads.
+Provider review selected replaceable permissive backends for ZIP, 7z, TAR, gzip, zstd, xz, bzip2, lz4, and Brotli. The initial review held RAR outside 1.0 pending licensing and hostile-input evidence; the 2026-08-25 RAR beta section below records the later evidence-backed reversal. Archive parsing was recognized as an untrusted-input boundary requiring process isolation rather than only background threads.
 
 The core gained signature detection, capability reporting, list/test/create/extract, ZIP64 and AES ZIP, 7z and AES 7z, TAR compositions, single streams, path/link/device-name/collision defenses, safety limits, conflict policies, progress, temporary writes, and cooperative cancellation. Desktop and CLI share the same behavior.
 
@@ -33,7 +33,7 @@ WinGet 1.12 candidate manifests generated from real Release hashes passed local 
 - Signed install/upgrade/repair/uninstall and WACK in suitable interactive environments.
 - Complete archive/extract keyboard traversal, Narrator, Accessibility Insights, visible focus, high contrast, Chinese IME, per-monitor DPI, real drop, and physical ARM64 execution.
 - Partner Center identity/name, production signing, Store submission, and WinGet PR.
-- Full byte-for-byte Windows reproducibility; four of five raw PE outputs match on each architecture, while the default Iced executable remains under diagnosis.
+- Signed-package reproducibility and cross-machine/toolchain evidence remain separate gates. Raw PE reproducibility was completed later in this log: run `32826187552` produced 5/5 on both x64 and ARM64, with later clean-merge runs preserving 5/5.
 
 ## 2026-08-24 — Parser-boundary hardening
 
