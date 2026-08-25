@@ -100,7 +100,7 @@ Goal: distribution, accessibility, localization, and hardening.
 
 Goal: stable public release.
 
-- [ ] Freeze public CLI and provider contracts ([#19](https://github.com/ax2/zifile/issues/19)).
+- [ ] Freeze public CLI and provider contracts ([#19](https://github.com/ax2/zifile/issues/19)); candidate command/value/exit-code and provider compatibility boundaries are documented and machine-tested, with final freeze reserved for the 1.0 release commit.
 - [ ] Resolve release-blocking compatibility and accessibility issues ([#19](https://github.com/ax2/zifile/issues/19)).
 - [ ] Complete user, security, contributor, and release documentation ([#19](https://github.com/ax2/zifile/issues/19)).
 - [ ] Publish GitHub, WinGet, and Microsoft Store releases from one version source ([#19](https://github.com/ax2/zifile/issues/19)).
