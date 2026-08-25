@@ -90,12 +90,16 @@ jobs:
       - name: Probe Repair capability without changing package state
         timeout-minutes: 2
         shell: pwsh
-        run: ./tests/helpers/msix-repair/bin/Release/net8.0-windows10.0.19041.0/win-x64/MsixRepair.exe --probe
+        run: |
+          ./tests/helpers/msix-repair/Invoke-Probe.ps1 `
+            -HelperPath ./tests/helpers/msix-repair/bin/Release/net8.0-windows10.0.19041.0/win-x64/MsixRepair.exe
       - name: Prove Repair probe hard timeout
         timeout-minutes: 1
         shell: pwsh
         run: |
-          $result = ./tests/helpers/msix-repair/bin/Release/net8.0-windows10.0.19041.0/win-x64/MsixRepair.exe --probe-timeout-fixture | ConvertFrom-Json
+          $result = ./tests/helpers/msix-repair/Invoke-Probe.ps1 `
+            -HelperPath ./tests/helpers/msix-repair/bin/Release/net8.0-windows10.0.19041.0/win-x64/MsixRepair.exe `
+            -TimeoutFixture | ConvertFrom-Json
           if ($result.probe_completed -or -not $result.probe_timed_out -or $result.repair_supported) {
             throw 'The isolated Repair probe did not produce the required timeout evidence.'
           }

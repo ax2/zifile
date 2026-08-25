@@ -6,9 +6,10 @@ $packageBuild = Join-Path $repoRoot 'packaging\msix\Build-Package.ps1'
 $packageLifecycle = Join-Path $repoRoot 'tests\smoke\msix-lifecycle.ps1'
 $repairHelper = Join-Path $repoRoot 'tests\helpers\msix-repair\Program.cs'
 $repairProject = Join-Path $repoRoot 'tests\helpers\msix-repair\MsixRepair.csproj'
+$repairProbe = Join-Path $repoRoot 'tests\helpers\msix-repair\Invoke-Probe.ps1'
 $rarCorpus = Join-Path $repoRoot 'tests\interoperability\rar-corpus.ps1'
 
-foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $rarCorpus)) {
+foreach ($script in @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus)) {
     $tokens = $null
     $errors = $null
     [System.Management.Automation.Language.Parser]::ParseFile(
@@ -134,6 +135,7 @@ foreach ($requiredWorkflowToken in @(
     'msix-lifecycle-x64',
     'WindowsAppSDKSelfContained=true',
     'msix-repair-helper',
+    'Invoke-Probe.ps1',
     '-RepairHelper'
 )) {
     if ($lifecycleWorkflowSource -notmatch [Regex]::Escape($requiredWorkflowToken)) {
@@ -146,15 +148,24 @@ foreach ($requiredRepairToken in @(
     'PackageDeploymentManager.IsPackageDeploymentFeatureSupported',
     'PackageDeploymentFeature.RepairPackage',
     'RepairPackageAsync',
-    'probeTimeoutSeconds',
     'probe_completed',
-    '--probe-timeout-fixture',
-    'child.Kill()',
     '--package-full-name',
     'preserve_application_data'
 )) {
     if ($repairHelperSource -notmatch [Regex]::Escape($requiredRepairToken)) {
         throw "The MSIX Repair helper omits required token: $requiredRepairToken"
+    }
+}
+$repairProbeSource = Get-Content -Raw -LiteralPath $repairProbe
+foreach ($requiredProbeToken in @(
+    'TimeoutSeconds = 15',
+    'WaitForExit',
+    '$process.Kill()',
+    'probe_timed_out',
+    'TimeoutFixture'
+)) {
+    if ($repairProbeSource -notmatch [Regex]::Escape($requiredProbeToken)) {
+        throw "The external MSIX Repair probe omits required token: $requiredProbeToken"
     }
 }
 $ciSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\ci.yml')
@@ -191,7 +202,7 @@ foreach ($requiredCiToken in @('rar-corpus.ps1', 'target/rar-corpus.json')) {
 
 [pscustomobject]@{
     schema_version = 1
-    parser_checks = 5
+    parser_checks = 6
     missing_inputs_rejected = $true
     development_identity_rejected = $true
     unsigned_publisher_rejected = $true

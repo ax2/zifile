@@ -138,10 +138,8 @@ try {
     $events.Add([ordered]@{ step = 'upgrade'; version = $UpgradeVersion; passed = $true })
 
     if ($null -ne $repairHelperPath) {
-        $probeJson = & $repairHelperPath --probe
-        if ($LASTEXITCODE -ne 0) {
-            throw "MSIX Repair helper probe failed with exit code $LASTEXITCODE."
-        }
+        $probeScript = Join-Path $PSScriptRoot '..\helpers\msix-repair\Invoke-Probe.ps1'
+        $probeJson = & $probeScript -HelperPath $repairHelperPath
         $probe = $probeJson | ConvertFrom-Json
         if ($probe.schema_version -ne 1 -or $probe.operation -cne 'probe') {
             throw 'MSIX Repair helper returned an unexpected probe schema.'
