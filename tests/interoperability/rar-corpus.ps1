@@ -74,17 +74,23 @@ function Receive-RarFixture {
     if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
         $headers.Authorization = "Bearer $env:GITHUB_TOKEN"
     }
-    $response = Invoke-RestMethod -Uri "$sourceRoot/$RelativePath`?ref=$sourceCommit" -Headers $headers
-    if ($response.type -cne 'file' -or $response.encoding -cne 'base64') {
-        throw "GitHub did not return an inline base64 RAR fixture: $RelativePath"
+    $metadata = Invoke-RestMethod -Uri "$sourceRoot/$RelativePath`?ref=$sourceCommit" -Headers $headers
+    if ($metadata.type -cne 'file' -or
+        $metadata.sha -notmatch '^[0-9a-f]{40}$' -or
+        [string]::IsNullOrWhiteSpace($metadata.git_url)) {
+        throw "GitHub did not return pinned blob metadata for RAR fixture: $RelativePath"
+    }
+    $blob = Invoke-RestMethod -Uri $metadata.git_url -Headers $headers
+    if ($blob.encoding -cne 'base64' -or $blob.sha -cne $metadata.sha -or $blob.size -ne $metadata.size) {
+        throw "GitHub returned inconsistent blob data for RAR fixture: $RelativePath"
     }
     [IO.File]::WriteAllBytes(
         $Destination,
-        [Convert]::FromBase64String(($response.content -replace '\s', ''))
+        [Convert]::FromBase64String(($blob.content -replace '\s', ''))
     )
 }
 $cases = @(
-    [ordered]@{ name = 'rar13-compressed'; path = 'rar13/README.RAR'; sha256 = 'E5692692645C18BE15326273997FBEE0FB95CCCAF13A93F7557BB8469D44C23A'; password = $null },
+    [ordered]@{ name = 'rar13-compressed'; path = 'rar13/README.RAR'; sha256 = 'E5692692645C18BE15326273997FBEE0FB95CCCAF13A93F7557BB8469D44C23A'; password = $null; golden_path = 'rar13/README'; golden_sha256 = 'E70E00C521EE53176D194CFC66D2C284E340D50C07667776071B220ED956570E' },
     [ordered]@{ name = 'rar154-multifile'; path = 'rar15_40/rar154/doc_154_best.rar'; sha256 = 'FAA2B922D3AC7AE5BB4D7660E2B7DA5169AB79295574F1BA63BD72B59D2C407A'; password = $null },
     [ordered]@{ name = 'rar3-ppmd'; path = 'rar15_40/ppmd/ppmd_lorem_rar300.rar'; sha256 = '2C263BF552DE74D0A4D36142AE83FE44563A6FC18D1910B0FFCCE3958AA24574'; password = $null },
     [ordered]@{ name = 'rar5-default'; path = 'rar50/m3_default.rar'; sha256 = '3029E7D1A03E9AFAF9D5384CAA929CF1FE10165E8B15E38A6E509364A300AD59'; password = $null },
@@ -134,15 +140,30 @@ try {
         }
         if ($LASTEXITCODE -ne 0) { throw "ZiFile could not extract RAR case $($case.name)." }
 
-        $sevenZipOutput = Join-Path $testRoot ($case.name + '-7zip')
-        $sevenZipArguments = @('x', $archive, "-o$sevenZipOutput", '-y')
-        if ($null -ne $case.password) { $sevenZipArguments += "-p$($case.password)" }
-        & $sevenZip @sevenZipArguments | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "7-Zip could not extract RAR case $($case.name)." }
-        $count = Assert-TreesMatch -ExpectedRoot $sevenZipOutput -ActualRoot $zifileOutput
+        if ($case.Contains('golden_path')) {
+            $goldenOutput = Join-Path $testRoot ($case.name + '-golden')
+            New-Item -ItemType Directory -Path $goldenOutput -Force | Out-Null
+            $goldenFile = Join-Path $goldenOutput 'README'
+            Receive-RarFixture -RelativePath $case.golden_path -Destination $goldenFile
+            $actualGoldenHash = (Get-FileHash -LiteralPath $goldenFile -Algorithm SHA256).Hash
+            if ($actualGoldenHash -cne $case.golden_sha256) {
+                throw "RAR golden fixture hash mismatch: $($case.name)"
+            }
+            $count = Assert-TreesMatch -ExpectedRoot $goldenOutput -ActualRoot $zifileOutput
+            $referenceTool = 'pinned-rars-golden'
+        } else {
+            $sevenZipOutput = Join-Path $testRoot ($case.name + '-7zip')
+            $sevenZipArguments = @('x', $archive, "-o$sevenZipOutput", '-y')
+            if ($null -ne $case.password) { $sevenZipArguments += "-p$($case.password)" }
+            & $sevenZip @sevenZipArguments | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "7-Zip could not extract RAR case $($case.name)." }
+            $count = Assert-TreesMatch -ExpectedRoot $sevenZipOutput -ActualRoot $zifileOutput
+            $referenceTool = '7-Zip'
+        }
         $results += [ordered]@{
             name = $case.name
             source_path = $case.path
+            reference_tool = $referenceTool
             encrypted = $null -ne $case.password
             files = $count
             archive_bytes = (Get-Item -LiteralPath $archive).Length
