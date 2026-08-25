@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $validator = Join-Path $repoRoot 'packaging\store\Test-Listings.ps1'
 $screenshotValidator = Join-Path $repoRoot 'packaging\store\Test-Screenshots.ps1'
+$screenshotImporter = Join-Path $repoRoot 'packaging\store\Import-Screenshots.ps1'
 $sourceDirectory = Join-Path $repoRoot 'packaging\store'
 $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
 $testDirectory = Join-Path $tempRoot "zifile-store-listing-$([Guid]::NewGuid().ToString('N'))"
@@ -20,6 +21,10 @@ $tokens = $null
 $errors = $null
 [System.Management.Automation.Language.Parser]::ParseFile($screenshotValidator, [ref]$tokens, [ref]$errors) | Out-Null
 if ($errors.Count -gt 0) { throw "PowerShell parser rejected Test-Screenshots.ps1: $($errors -join '; ')" }
+$tokens = $null
+$errors = $null
+[System.Management.Automation.Language.Parser]::ParseFile($screenshotImporter, [ref]$tokens, [ref]$errors) | Out-Null
+if ($errors.Count -gt 0) { throw "PowerShell parser rejected Import-Screenshots.ps1: $($errors -join '; ')" }
 
 function Get-ExpectedFailure {
     param(
@@ -138,12 +143,68 @@ try {
         status = 'complete'
         source_commit = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
         requirements_source = 'https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/screenshots-and-images'
+        capture = $null
         locales = $localeSets
+    }
+    $screenshotManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $screenshotManifestPath -Encoding utf8
+    Get-ExpectedFailure -Pattern 'capture metadata' -Action {
+        & $screenshotValidator -ManifestPath $screenshotManifestPath -RequireComplete
+    }
+    $screenshotManifest.capture = [ordered]@{
+        app_version = '0.1.0-alpha.18'
+        windows_build = '10.0.26200'
+        theme = 'dark'
+        scale_percent = 100
+        captured_at_utc = '2026-08-25T15:00:00Z'
+        candidate_kind = 'signed-msix'
     }
     $screenshotManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $screenshotManifestPath -Encoding utf8
     $completeScreenshots = & $screenshotValidator -ManifestPath $screenshotManifestPath -RequireComplete | ConvertFrom-Json
     if (-not $completeScreenshots.complete -or $completeScreenshots.screenshots -ne 8) {
         throw 'A complete bilingual eight-screenshot manifest did not pass validation.'
+    }
+
+    $captureDirectory = Join-Path $testDirectory 'capture-input'
+    $importDirectory = Join-Path $testDirectory 'import-output'
+    New-Item -ItemType Directory -Path $captureDirectory,$importDirectory | Out-Null
+    Copy-Item -LiteralPath (Join-Path $sourceDirectory 'screenshots.json') -Destination $importDirectory
+    foreach ($localeSet in $screenshotManifest.locales) {
+        $captureLocale = Join-Path $captureDirectory $localeSet.locale
+        New-Item -ItemType Directory -Path $captureLocale | Out-Null
+        foreach ($shot in $localeSet.screenshots) {
+            $sourceShot = Join-Path $testDirectory ($shot.path -replace '/', [IO.Path]::DirectorySeparatorChar)
+            $captureName = '{0:D2}-{1}.png' -f $shot.order, $shot.scenario
+            Copy-Item -LiteralPath $sourceShot -Destination (Join-Path $captureLocale $captureName)
+        }
+    }
+    $imported = & $screenshotImporter `
+        -SourceDirectory $captureDirectory `
+        -SourceCommit 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' `
+        -AppVersion '0.1.0-alpha.18' `
+        -WindowsBuild '10.0.26200' `
+        -Theme dark `
+        -ScalePercent 100 `
+        -CapturedAtUtc ([DateTimeOffset]'2026-08-25T15:00:00Z') `
+        -DestinationRoot $importDirectory | ConvertFrom-Json
+    if (-not $imported.imported -or $imported.screenshots -ne 8) {
+        throw 'The atomic Store screenshot importer did not report eight imported images.'
+    }
+    $importValidation = & $screenshotValidator `
+        -ManifestPath (Join-Path $importDirectory 'screenshots.json') `
+        -RequireComplete | ConvertFrom-Json
+    if (-not $importValidation.complete -or $importValidation.screenshots -ne 8) {
+        throw 'Imported Store screenshot assets did not pass final validation.'
+    }
+    Get-ExpectedFailure -Pattern 'refusing to overwrite' -Action {
+        & $screenshotImporter `
+            -SourceDirectory $captureDirectory `
+            -SourceCommit 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' `
+            -AppVersion '0.1.0-alpha.18' `
+            -WindowsBuild '10.0.26200' `
+            -Theme dark `
+            -ScalePercent 100 `
+            -CapturedAtUtc ([DateTimeOffset]'2026-08-25T15:00:00Z') `
+            -DestinationRoot $importDirectory
     }
 
     $first = $screenshotManifest.locales[0].screenshots[0]
@@ -196,6 +257,9 @@ try {
         screenshot_draft_validated = $true
         incomplete_screenshots_rejected_for_release = $true
         complete_bilingual_screenshots_accepted = $true
+        incomplete_capture_metadata_rejected = $true
+        atomic_screenshot_import_accepted = $true
+        existing_screenshot_assets_preserved = $true
         undersized_screenshot_rejected = $true
         duplicate_screenshot_rejected = $true
     } | ConvertTo-Json

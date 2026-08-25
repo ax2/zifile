@@ -43,6 +43,38 @@ if ($RequireComplete -and $manifest.status -cne 'complete') { throw 'Store scree
 if ($manifest.status -ceq 'complete' -and $manifest.source_commit -notmatch '^[0-9a-f]{40}$') {
     throw 'Complete Store screenshots require a 40-character source_commit.'
 }
+if ($manifest.status -ceq 'complete') {
+    if ($null -eq $manifest.capture) { throw 'Complete Store screenshots require capture metadata.' }
+    if ($manifest.capture.app_version -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
+        throw 'Screenshot capture metadata requires a semantic app_version.'
+    }
+    if ($manifest.capture.windows_build -notmatch '^\d+\.\d+\.\d+$') {
+        throw 'Screenshot capture metadata requires a three-part Windows build.'
+    }
+    if ($manifest.capture.theme -notin @('light', 'dark')) { throw 'Screenshot capture theme must be light or dark.' }
+    if ($manifest.capture.scale_percent -lt 100 -or $manifest.capture.scale_percent -gt 500) {
+        throw 'Screenshot capture scale_percent must be between 100 and 500.'
+    }
+    $capturedValue = $manifest.capture.captured_at_utc
+    $captured = [DateTimeOffset]::MinValue
+    $validCapturedAt = if ($capturedValue -is [DateTime]) {
+        $capturedValue.Kind -eq [DateTimeKind]::Utc
+    }
+    else {
+        [DateTimeOffset]::TryParseExact(
+            [string]$capturedValue,
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::AssumeUniversal,
+            [ref]$captured)
+    }
+    if (-not $validCapturedAt) {
+        throw 'Screenshot capture captured_at_utc must use yyyy-MM-ddTHH:mm:ssZ.'
+    }
+    if ($manifest.capture.candidate_kind -notin @('signed-msix', 'store-signed-msix')) {
+        throw 'Screenshot capture candidate_kind must identify a signed candidate.'
+    }
+}
 if ($manifest.requirements_source -cne 'https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/screenshots-and-images') {
     throw 'Screenshot manifest requirements_source must reference the pinned Microsoft Store guidance page.'
 }
