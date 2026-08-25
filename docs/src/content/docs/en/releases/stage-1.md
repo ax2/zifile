@@ -49,9 +49,9 @@ Double-build run `32813453959` remained 4/5 identical on both x64 and ARM64. Sch
 
 The CLI removed plaintext `--password <value>` process arguments in favor of explicit `--password-stdin`. Three unit tests and the foundation smoke cover non-empty single-line input, space preservation, the help-surface policy, and real AES 7z create/test/extract operations.
 
-An official 7-Zip bidirectional corpus gate now defines seven reference-created codec/filter/encryption cases and two ZiFile-created cases, with complete file-set and SHA-256 comparison plus uploaded JSON evidence. The local machine has no `7z.exe`, so this item remains pending its first real GitHub Windows Runner result and is not yet recorded as passed.
+An official 7-Zip bidirectional corpus gate defines seven reference-created codec/filter/encryption cases and two ZiFile-created cases, with complete file-set and SHA-256 comparison plus uploaded JSON evidence. The local machine has no `7z.exe`; GitHub Windows CI supplies the independent reference tool.
 
-The first cloud run, `32835391711`, reached the Deflate case and exposed that the optional `sevenz-rust2` Deflate decoder feature was not enabled by its defaults. ZiFile now enables that feature explicitly; the corpus remains pending a complete rerun.
+The first cloud run, `32835391711`, reached the Deflate case and exposed that the optional `sevenz-rust2` Deflate decoder feature was not enabled by its defaults. ZiFile now enables that feature explicitly; corrected run `32836336921` completed all nine cases.
 
 The corrected [CI run 32836336921](https://github.com/ax2/zifile/actions/runs/32836336921) passed all four jobs. Seven reference-created and two ZiFile-created cases passed complete file-set and SHA-256 comparison with 7-Zip 26.02. The evidence JSON SHA-256 is `06278BB8B96AB683A3C117BA5E30F1B4AB1CF89F1BBF01E72BAC0CC26B49DB14`.
 
@@ -63,4 +63,4 @@ The trusted-signature precondition was exercised with a structurally current uns
 
 The earlier RAR hold was revisited after `rars` 0.9.3 provided a pure-Rust, `unsafe`-forbidden MIT OR Apache-2.0 implementation covering RAR 1.3 through RAR 7. ZiFile now reports browse/test/extract and encrypted-read capabilities while continuing to reject RAR creation.
 
-Core integration covers every archive version exposed by the provider, solid selective extraction, Unicode names, encrypted headers, wrong/missing passwords, strict limits, cancellation, temporary-file commit semantics, links, reparse attributes and RAR 5+ redirections. The parser fuzz selector now includes RAR and MSIX associates `.rar`. Six pinned external corpus files pass local ZiFile integrity checks; the new 7-Zip cross-reader and three-fixture rejection gate is committed but awaits its first cloud result, so interoperability is not yet recorded as passed.
+Core integration covers every archive version exposed by the provider, solid selective extraction, Unicode names, encrypted headers, wrong/missing passwords, strict limits, cancellation, temporary-file commit semantics, links, reparse attributes and RAR 5+ redirections. The parser fuzz selector includes RAR and MSIX associates `.rar`. CI `32853686537` passed six valid pinned external fixtures and three unsafe-link/redirection rejection cases. RAR 1.3 is compared with the known-good tree from the pinned upstream commit because current 7-Zip no longer reads that legacy version; the other five valid cases are cross-checked against 7-Zip 26.02. The evidence JSON SHA-256 is `4C52D0240B911609C7DDB0CACB2E484F56C8F886E216347603B228261C4EE8EF`.
