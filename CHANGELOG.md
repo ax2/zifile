@@ -49,6 +49,9 @@ All notable changes to ZiFile are documented here. The format follows
 - Hierarchical archive folder navigation in both desktop UIs, including synthesized
   implicit directories, root-to-current breadcrumbs, and archive-wide search that
   retains full paths while folder pages remain bounded to 500 rows.
+- Recursive folder selection in both archive browsers, with one-pass descendant
+  aggregation, bilingual selected/total feedback, accessible mixed state in the
+  Dioxus candidate, and deterministic handling of file/folder path conflicts.
 - Desktop shortcuts for opening (`Ctrl+O`), creating (`Ctrl+N`), selecting all (`Ctrl+A`)
   and canceling an active operation (`Escape`).
 - Bidirectional 7z interoperability against Windows bsdtar/libarchive.

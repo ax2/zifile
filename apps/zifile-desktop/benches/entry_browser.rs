@@ -1,11 +1,12 @@
+use std::collections::HashSet;
 use std::hint::black_box;
 use std::path::{Path, PathBuf};
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use zifile_core::{ArchiveEntryInfo, ArchiveFormat, ArchiveInfo};
 use zifile_desktop::entry_view::{
-    EntrySort, SortDirection, browser_entry_page, filtered_entry_count, filtered_entry_page,
-    sorted_filtered_entry_page,
+    EntrySort, SortDirection, browser_entry_page, child_directory_selections, filtered_entry_count,
+    filtered_entry_page, sorted_filtered_entry_page,
 };
 
 fn archive_with_100k_entries() -> ArchiveInfo {
@@ -29,6 +30,12 @@ fn archive_with_100k_entries() -> ArchiveInfo {
 
 fn entry_browser(criterion: &mut Criterion) {
     let archive = archive_with_100k_entries();
+    let selected = archive
+        .entries
+        .iter()
+        .step_by(2)
+        .map(|entry| entry.path.clone())
+        .collect::<HashSet<_>>();
     let mut group = criterion.benchmark_group("entry browser 100k");
     group.throughput(Throughput::Elements(archive.entries.len() as u64));
     group.sample_size(20);
@@ -87,6 +94,18 @@ fn entry_browser(criterion: &mut Criterion) {
             assert_eq!(page.len(), 500);
             assert!(page[0].path.ends_with("file-099999.txt"));
             black_box(page);
+        });
+    });
+    group.bench_function("aggregate root folder selection", |bencher| {
+        bencher.iter(|| {
+            let counts = child_directory_selections(
+                black_box(&archive),
+                black_box(Path::new("")),
+                black_box(&selected),
+            );
+            assert_eq!(counts[Path::new("folder")].selected, 50_000);
+            assert_eq!(counts[Path::new("folder")].total, 100_000);
+            black_box(counts);
         });
     });
     group.finish();

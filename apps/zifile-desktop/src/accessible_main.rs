@@ -24,8 +24,9 @@ use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
 use zifile_desktop::entry_view::{
-    BrowserEntry, ENTRIES_PER_PAGE, EntrySort, SortDirection, browser_entry_count,
-    browser_entry_page, directory_breadcrumbs, next_sort,
+    BrowserEntry, DirectorySelection, ENTRIES_PER_PAGE, EntrySort, SortDirection,
+    browser_entry_count, browser_entry_page, child_directory_selections, descendant_file_paths,
+    directory_breadcrumbs, next_sort,
 };
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
@@ -355,6 +356,11 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
     .into_iter()
     .map(BrowserEntry::into_owned)
     .collect::<Vec<_>>();
+    let directory_selections = if view.entry_filter.is_empty() {
+        child_directory_selections(&archive, &view.entry_directory, &view.selected)
+    } else {
+        Default::default()
+    };
     let all_files = archive
         .entries
         .iter()
@@ -438,7 +444,9 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                         button { class: "sort-header", onclick: move |_| set_entry_sort(state, EntrySort::Modified), {sort_header_label(locale.text(Text::Modified), EntrySort::Modified, view.entry_sort, view.entry_sort_direction)} } }
                     th { scope: "col", {locale.text(Text::Flags)} }
                 } }
-                tbody { for entry in rows { ArchiveRow { key: "{entry.path.display()}", state, entry, locale, show_full_path: !view.entry_filter.is_empty() } } }
+                tbody { for (index, entry) in rows.into_iter().enumerate() {
+                    ArchiveRow { key: "{current_page}-{index}-{entry.path.display()}", state, directory_selection: directory_selections.get(entry.path.as_ref()).copied().unwrap_or_default(), entry, locale, show_full_path: !view.entry_filter.is_empty() }
+                } }
             }
             if count == 0 { p { class: "empty-filter", {archive_no_matches(locale, &view.entry_filter)} } }
         }
@@ -496,12 +504,14 @@ fn sort_header_label(
 fn ArchiveRow(
     mut state: Signal<UiState>,
     entry: BrowserEntry<'static>,
+    directory_selection: DirectorySelection,
     locale: Locale,
     show_full_path: bool,
 ) -> Element {
     let selected = state.read().selected.contains(entry.path.as_ref());
     let path = entry.path.as_ref().to_path_buf();
     let selection_path = path.clone();
+    let directory_selection_path = path.clone();
     let path_display = if show_full_path {
         entry.path.to_string_lossy().into_owned()
     } else {
@@ -512,14 +522,27 @@ fn ArchiveRow(
             .to_string_lossy()
             .into_owned()
     };
-    let selection_label = format!("{} {path_display}", choose(locale, "Select", "选择"));
+    let selection_label = if entry.is_directory {
+        directory_selection_label(locale, &path_display, directory_selection)
+    } else {
+        format!("{} {path_display}", choose(locale, "Select", "选择"))
+    };
     let open_folder_label = format!(
         "{} {path_display}",
         choose(locale, "Open folder", "打开文件夹")
     );
     rsx! { tr {
-        td { input { r#type: "checkbox", checked: selected, disabled: entry.is_directory, "aria-label": selection_label,
-            onchange: move |event| update_archive_selection(state, selection_path.clone(), event.checked()) } }
+        td {
+            if entry.is_directory {
+                input { r#type: "checkbox", checked: directory_selection.all_selected(), disabled: directory_selection.total == 0,
+                    "aria-checked": if directory_selection.partially_selected() { "mixed" } else if directory_selection.all_selected() { "true" } else { "false" },
+                    "aria-label": selection_label,
+                    onchange: move |event| toggle_archive_directory(state, directory_selection_path.clone(), event.checked()) }
+            } else {
+                input { r#type: "checkbox", checked: selected, "aria-label": selection_label,
+                    onchange: move |event| update_archive_selection(state, selection_path.clone(), event.checked()) }
+            }
+        }
         td { class: "path-cell",
             if entry.is_directory {
                 button { class: "folder-link", "aria-label": open_folder_label, onclick: move |_| navigate_archive_directory(state, path.clone()), "▸ {path_display}" }
@@ -528,7 +551,7 @@ fn ArchiveRow(
             }
         } td { {format_bytes(entry.size)} } td { {format_bytes(entry.compressed_size)} }
         td { {format_archive_modified(locale, entry.modified.as_ref())} }
-        td { if entry.encrypted { {locale.text(Text::Locked)} } else if entry.is_directory { {choose(locale, "Folder", "文件夹")} } else { "—" } }
+        td { if entry.encrypted { {locale.text(Text::Locked)} } else if entry.is_directory { {folder_selection_summary(locale, directory_selection)} } else { "—" } }
     } }
 }
 
@@ -1100,6 +1123,71 @@ fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected:
     value.set_status(status);
 }
 
+fn toggle_archive_directory(mut state: Signal<UiState>, directory: PathBuf, selected: bool) {
+    let descendants = state
+        .read()
+        .archive
+        .as_ref()
+        .map_or_else(Vec::new, |archive| {
+            descendant_file_paths(archive, &directory)
+        });
+    let mut value = state.write();
+    if selected {
+        value.selected.extend(descendants.iter().cloned());
+    } else {
+        for path in &descendants {
+            value.selected.remove(path);
+        }
+    }
+    let status = match value.locale {
+        Locale::En => format!(
+            "{} {} files in {}",
+            if selected { "Selected" } else { "Cleared" },
+            descendants.len(),
+            directory.display()
+        ),
+        Locale::ZhCn => format!(
+            "{} {} 中的 {} 个文件",
+            if selected { "已选择" } else { "已清除" },
+            directory.display(),
+            descendants.len()
+        ),
+    };
+    value.set_status(status);
+}
+
+fn directory_selection_label(locale: Locale, path: &str, selection: DirectorySelection) -> String {
+    match locale {
+        Locale::En => format!(
+            "{} folder {path}; {} of {} files selected",
+            if selection.all_selected() {
+                "Clear"
+            } else {
+                "Select"
+            },
+            selection.selected,
+            selection.total
+        ),
+        Locale::ZhCn => format!(
+            "{}文件夹 {path}；已选择 {}/{} 个文件",
+            if selection.all_selected() {
+                "清除"
+            } else {
+                "选择"
+            },
+            selection.selected,
+            selection.total
+        ),
+    }
+}
+
+fn folder_selection_summary(locale: Locale, selection: DirectorySelection) -> String {
+    match locale {
+        Locale::En => format!("{}/{} selected", selection.selected, selection.total),
+        Locale::ZhCn => format!("已选 {}/{}", selection.selected, selection.total),
+    }
+}
+
 fn announce_archive_filter(mut state: Signal<UiState>) {
     let value = state.read();
     let Some(archive) = value.archive.as_ref() else {
@@ -1582,6 +1670,37 @@ mod tests {
         assert!(source.contains("class: \"folder-link\""));
         assert!(STYLES.contains(".breadcrumbs"));
         assert!(STYLES.contains(".folder-link"));
+    }
+
+    #[test]
+    fn folder_selection_exposes_mixed_state_and_bilingual_counts() {
+        let partial = DirectorySelection {
+            selected: 2,
+            total: 5,
+        };
+        assert_eq!(
+            directory_selection_label(Locale::En, "docs", partial),
+            "Select folder docs; 2 of 5 files selected"
+        );
+        assert_eq!(
+            directory_selection_label(
+                Locale::ZhCn,
+                "文档",
+                DirectorySelection {
+                    selected: 5,
+                    total: 5
+                }
+            ),
+            "清除文件夹 文档；已选择 5/5 个文件"
+        );
+        assert_eq!(
+            folder_selection_summary(Locale::En, partial),
+            "2/5 selected"
+        );
+        let source = include_str!("accessible_main.rs");
+        assert!(source.contains("\"aria-checked\""));
+        assert!(source.contains("\"mixed\""));
+        assert!(source.contains("{current_page}-{index}-{entry.path.display()}"));
     }
 
     #[test]

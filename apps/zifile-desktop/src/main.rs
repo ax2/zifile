@@ -25,8 +25,9 @@ use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
 use zifile_desktop::entry_view::{
-    ENTRIES_PER_PAGE, EntrySort, SortDirection, browser_entry_count, browser_entry_page,
-    directory_breadcrumbs, next_sort,
+    DirectorySelection, ENTRIES_PER_PAGE, EntrySort, SortDirection, browser_entry_count,
+    browser_entry_page, child_directory_selections, descendant_file_paths, directory_breadcrumbs,
+    next_sort,
 };
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
@@ -144,6 +145,7 @@ enum Message {
     PasswordChanged(String),
     ReloadArchive,
     ToggleEntry(PathBuf, bool),
+    ToggleDirectory(PathBuf, bool),
     SelectAll(bool),
     NavigateArchiveDirectory(PathBuf),
     EntryFilterChanged(String),
@@ -338,6 +340,18 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 state.selected.insert(path);
             } else {
                 state.selected.remove(&path);
+            }
+        }
+        Message::ToggleDirectory(directory, selected) => {
+            if let Some(archive) = &state.archive {
+                let descendants = descendant_file_paths(archive, &directory);
+                if selected {
+                    state.selected.extend(descendants);
+                } else {
+                    for path in descendants {
+                        state.selected.remove(&path);
+                    }
+                }
             }
         }
         Message::SelectAll(selected) => {
@@ -987,6 +1001,13 @@ fn sort_header_label(
     format!("{label} {arrow}")
 }
 
+fn folder_selection_summary(locale: Locale, selection: DirectorySelection) -> String {
+    match locale {
+        Locale::En => format!("{}/{} selected", selection.selected, selection.total),
+        Locale::ZhCn => format!("已选 {}/{}", selection.selected, selection.total),
+    }
+}
+
 fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     let Some(archive) = &state.archive else {
         let pending = state.pending_archive.as_ref();
@@ -1179,12 +1200,17 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             .style(button::text)
             .on_press(Message::SortEntries(EntrySort::Modified))
             .width(220),
-            text(state.locale.text(Text::Flags)).width(90),
+            text(state.locale.text(Text::Flags)).width(150),
         ]
         .spacing(10),
         rule::horizontal(1),
     ]
     .spacing(4);
+    let directory_selections = if state.entry_filter.is_empty() {
+        child_directory_selections(archive, &state.entry_directory, &state.selected)
+    } else {
+        Default::default()
+    };
     for entry in browser_entry_page(
         archive,
         &state.entry_directory,
@@ -1196,15 +1222,28 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         let path = entry.path.as_ref().to_path_buf();
         let selected = state.selected.contains(&path);
         let selection_path = path.clone();
+        let directory_selection = directory_selections.get(&path).copied().unwrap_or_default();
+        let directory_selection_path = path.clone();
         let display_path = if state.entry_filter.is_empty() {
             entry.path.file_name().unwrap_or_default().to_string_lossy()
         } else {
             entry.path.to_string_lossy()
         };
+        let flags = if entry.encrypted {
+            state.locale.text(Text::Locked).to_owned()
+        } else if entry.is_directory {
+            folder_selection_summary(state.locale, directory_selection)
+        } else {
+            "—".to_owned()
+        };
         entries = entries.push(
             row![
                 if entry.is_directory {
-                    checkbox(false)
+                    checkbox(directory_selection.all_selected()).on_toggle_maybe(
+                        (directory_selection.total > 0).then_some(move |value| {
+                            Message::ToggleDirectory(directory_selection_path.clone(), value)
+                        }),
+                    )
                 } else {
                     checkbox(selected)
                         .on_toggle(move |value| Message::ToggleEntry(selection_path.clone(), value))
@@ -1227,12 +1266,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                     entry.modified.as_ref()
                 ))
                 .width(220),
-                text(if entry.encrypted {
-                    state.locale.text(Text::Locked)
-                } else {
-                    "—"
-                })
-                .width(90),
+                text(flags).width(150),
             ]
             .spacing(10)
             .align_y(iced::Alignment::Center)
@@ -1543,5 +1577,60 @@ mod tests {
         assert_eq!(state.entry_directory, PathBuf::from("docs/reference"));
         assert!(state.entry_filter.is_empty());
         assert_eq!(state.entry_page, 0);
+    }
+
+    #[test]
+    fn directory_toggle_selects_and_clears_only_descendant_files() {
+        let archive = ArchiveInfo {
+            path: PathBuf::from("folders.zip"),
+            format: ArchiveFormat::Zip,
+            entries: vec![
+                ArchiveEntryInfo {
+                    path: PathBuf::from("docs/a.txt"),
+                    size: 1,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    modified: None,
+                },
+                ArchiveEntryInfo {
+                    path: PathBuf::from("other.txt"),
+                    size: 1,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    modified: None,
+                },
+            ],
+            total_size: 2,
+            compressed_size: 2,
+        };
+        let mut state = ZiFile {
+            archive: Some(archive),
+            selected: HashSet::from([PathBuf::from("other.txt")]),
+            ..ZiFile::default()
+        };
+        drop(update(
+            &mut state,
+            Message::ToggleDirectory(PathBuf::from("docs"), true),
+        ));
+        assert!(state.selected.contains(Path::new("docs/a.txt")));
+        assert!(state.selected.contains(Path::new("other.txt")));
+        drop(update(
+            &mut state,
+            Message::ToggleDirectory(PathBuf::from("docs"), false),
+        ));
+        assert!(!state.selected.contains(Path::new("docs/a.txt")));
+        assert!(state.selected.contains(Path::new("other.txt")));
+        assert_eq!(
+            folder_selection_summary(
+                Locale::ZhCn,
+                DirectorySelection {
+                    selected: 1,
+                    total: 3
+                }
+            ),
+            "已选 1/3"
+        );
     }
 }

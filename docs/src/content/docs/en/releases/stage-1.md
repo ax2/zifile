@@ -59,6 +59,8 @@ The same shared 100,000-entry view model now sorts by name, original size, packe
 
 Both desktop UIs now use a shared hierarchical folder view. It synthesizes navigable folders when an archive omits explicit directory entries, exposes root-to-current breadcrumbs, and shows only direct children when search is empty. Search remains archive-wide and displays full paths, while folder and search pages remain capped at 500 rows.
 
+Folder checkboxes recursively select or clear all real descendant files while the folder name remains the navigation control. One archive scan aggregates selected/total counts for every direct child folder, and the Dioxus candidate reports partial selection as `aria-checked="mixed"`. If a malicious archive uses one path as both a file and an implicit directory, the hierarchical view keeps the navigable directory instead of emitting duplicate rows.
+
 ## 2026-08-24 — Parser-boundary hardening
 
 Extraction originally listed with global defaults before applying caller limits, so strict caller entry/depth limits did not constrain early parser work. Limit-aware list/test APIs now apply extraction limits before destination creation. Integration tests cover strict ZIP/7z/TAR limits and malformed ZIP/7z/tar/tgz inputs.
