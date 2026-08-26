@@ -6,7 +6,13 @@ policy gate before publishing:
 ```powershell
 ./packaging/store/Test-Listings.ps1
 ./packaging/store/Test-Screenshots.ps1
+./packaging/store/Test-PublicPrivacy.ps1 -DocumentationOutput ./docs/dist
 ```
+
+The two listing privacy URLs are fixed to the localized GitHub Pages routes.
+Normal CI verifies their generated `index.html` files and privacy markers; the
+Pages workflow repeats the check against the deployed HTTPS pages after publish.
+The live check may retry propagation, but requires HTTP 200 and real policy copy.
 
 Formal screenshot capture input must contain exactly these files:
 

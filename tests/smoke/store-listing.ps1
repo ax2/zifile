@@ -3,6 +3,7 @@ $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $validator = Join-Path $repoRoot 'packaging\store\Test-Listings.ps1'
 $screenshotValidator = Join-Path $repoRoot 'packaging\store\Test-Screenshots.ps1'
 $screenshotImporter = Join-Path $repoRoot 'packaging\store\Import-Screenshots.ps1'
+$privacyValidator = Join-Path $repoRoot 'packaging\store\Test-PublicPrivacy.ps1'
 $sourceDirectory = Join-Path $repoRoot 'packaging\store'
 $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
 $testDirectory = Join-Path $tempRoot "zifile-store-listing-$([Guid]::NewGuid().ToString('N'))"
@@ -25,6 +26,10 @@ $tokens = $null
 $errors = $null
 [System.Management.Automation.Language.Parser]::ParseFile($screenshotImporter, [ref]$tokens, [ref]$errors) | Out-Null
 if ($errors.Count -gt 0) { throw "PowerShell parser rejected Import-Screenshots.ps1: $($errors -join '; ')" }
+$tokens = $null
+$errors = $null
+[System.Management.Automation.Language.Parser]::ParseFile($privacyValidator, [ref]$tokens, [ref]$errors) | Out-Null
+if ($errors.Count -gt 0) { throw "PowerShell parser rejected Test-PublicPrivacy.ps1: $($errors -join '; ')" }
 
 function Get-ExpectedFailure {
     param(
@@ -247,6 +252,15 @@ try {
         & $validator -StoreDirectory $testDirectory
     }
 
+    Copy-Item -LiteralPath (Join-Path $sourceDirectory 'listing.en-US.json') -Destination $testDirectory -Force
+    Write-TestListing -Locale 'en-US' -Mutation {
+        param($listing)
+        $listing.privacy_policy_url = 'https://ax2.github.io/zifile/privacy/'
+    }
+    Get-ExpectedFailure -Pattern 'deployed ZiFile privacy policy route' -Action {
+        & $validator -StoreDirectory $testDirectory
+    }
+
     [pscustomobject]@{
         schema_version = 1
         valid_listings_accepted = $true
@@ -254,6 +268,7 @@ try {
         oversized_feature_rejected = $true
         excess_keywords_rejected = $true
         description_url_rejected = $true
+        incorrect_privacy_route_rejected = $true
         screenshot_draft_validated = $true
         incomplete_screenshots_rejected_for_release = $true
         complete_bilingual_screenshots_accepted = $true
