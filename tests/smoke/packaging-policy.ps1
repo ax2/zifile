@@ -11,6 +11,7 @@ $rarCorpus = Join-Path $repoRoot 'tests\interoperability\rar-corpus.ps1'
 $cabInteroperability = Join-Path $repoRoot 'tests\interoperability\cab-windows.ps1'
 $zipMethodCorpus = Join-Path $repoRoot 'tests\interoperability\zip-method-corpus.ps1'
 $zipLegacyCorpus = Join-Path $repoRoot 'tests\interoperability\zip-legacy-corpus.ps1'
+$zipZstdCorpus = Join-Path $repoRoot 'tests\interoperability\zip-zstd-corpus.ps1'
 $wackReadiness = Join-Path $repoRoot 'packaging\msix\Test-WackReadiness.ps1'
 $versionConsistency = Join-Path $repoRoot 'scripts\Test-VersionConsistency.ps1'
 $releaseNotes = Join-Path $repoRoot 'scripts\Test-ReleaseNotes.ps1'
@@ -28,7 +29,7 @@ $wingetClientInstaller = Join-Path $repoRoot 'packaging\winget\Install-Validatio
 $wingetSmoke = Join-Path $repoRoot 'tests\smoke\winget-manifest.ps1'
 $userDocs = Join-Path $repoRoot 'scripts\Test-UserDocs.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -540,6 +541,22 @@ if ($manifestSource -notmatch [Regex]::Escape('<uap:FileType>.rar</uap:FileType>
 if ($manifestSource -notmatch [Regex]::Escape('<uap:FileType>.cab</uap:FileType>')) {
     throw 'The MSIX manifest does not associate supported CAB archives.'
 }
+if ($manifestSource -notmatch [Regex]::Escape('<uap:FileType>.zipx</uap:FileType>')) {
+    throw 'The MSIX manifest does not associate supported ZIPX archives.'
+}
+$packageAuditSource = Get-Content -Raw -LiteralPath $packageAudit
+if ($packageAuditSource -notmatch [Regex]::Escape("@('.zip', '.zipx', '.7z'")) {
+    throw 'The package audit does not require the ZIPX file association.'
+}
+foreach ($desktopSourcePath in @(
+    (Join-Path $repoRoot 'apps\zifile-desktop\src\main.rs'),
+    (Join-Path $repoRoot 'apps\zifile-desktop\src\accessible_main.rs')
+)) {
+    $desktopSource = Get-Content -Raw -LiteralPath $desktopSourcePath
+    if ($desktopSource -notmatch [Regex]::Escape('"zip", "zipx"')) {
+        throw "The desktop archive dialog omits ZIPX: $desktopSourcePath"
+    }
+}
 if ($buildSource -notmatch [Regex]::Escape('zifile_shell.dll')) {
     throw 'Build-Package.ps1 does not stage the architecture-matched shell DLL.'
 }
@@ -786,6 +803,30 @@ foreach ($requiredZipLegacyCiToken in @(
         throw "CI does not publish the ZIP legacy corpus gate or evidence: $requiredZipLegacyCiToken"
     }
 }
+$zipZstdCorpusSource = Get-Content -Raw -LiteralPath $zipZstdCorpus
+foreach ($requiredZipZstdToken in @(
+    'ee079b86fbd3817c53fe245bea4effaaaf1d97f7',
+    'test_read_format_zip_zstd.zipx.uu',
+    'test_read_format_zip_zstd_multi.zipx.uu',
+    'ConvertFrom-UuBytes',
+    'MaximumDecodedBytes = 16777216',
+    'Get-Sha256Bytes',
+    'Assert-ExtractedFiles',
+    'target\zip-zstd-corpus.json'
+)) {
+    if ($zipZstdCorpusSource -notmatch [Regex]::Escape($requiredZipZstdToken)) {
+        throw "The ZIP Zstandard corpus gate omits required token: $requiredZipZstdToken"
+    }
+}
+foreach ($requiredZipZstdCiToken in @(
+    'zip-zstd-corpus.ps1 -SkipBuild',
+    'Upload ZIP Zstandard interoperability evidence',
+    'target/zip-zstd-corpus.json'
+)) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredZipZstdCiToken)) {
+        throw "CI does not publish the ZIP Zstandard corpus gate or evidence: $requiredZipZstdCiToken"
+    }
+}
 foreach ($requiredWackToken in @(
     'WACK readiness policy',
     './tests/smoke/wack-readiness.ps1'
@@ -833,9 +874,11 @@ foreach ($requiredLivePrivacyToken in @(
     rar_association_wired = $true
     rar_corpus_wired = $true
     cab_association_wired = $true
+    zipx_association_wired = $true
     cab_interoperability_wired = $true
     zip_method_corpus_wired = $true
     zip_legacy_corpus_wired = $true
+    zip_zstd_corpus_wired = $true
     wack_readiness_wired = $true
     version_consistency_wired = $true
     release_notes_wired = $true

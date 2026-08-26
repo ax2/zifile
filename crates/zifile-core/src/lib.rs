@@ -344,7 +344,7 @@ pub fn detect_format_from_path(path: impl AsRef<Path>) -> Option<ArchiveFormat> 
 
     let extension = Path::new(&name).extension()?.to_string_lossy();
     match extension.as_ref() {
-        "zip" | "cbz" | "epub" => Some(ArchiveFormat::Zip),
+        "zip" | "zipx" | "cbz" | "epub" => Some(ArchiveFormat::Zip),
         "7z" | "cb7" => Some(ArchiveFormat::SevenZip),
         "tar" | "cbt" => Some(ArchiveFormat::Tar),
         "gz" => Some(ArchiveFormat::Gzip),
@@ -379,6 +379,10 @@ mod tests {
     fn detects_aliases_case_insensitively() {
         assert_eq!(
             detect_format_from_path("comic.CBZ"),
+            Some(ArchiveFormat::Zip)
+        );
+        assert_eq!(
+            detect_format_from_path("extended.ZIPX"),
             Some(ArchiveFormat::Zip)
         );
         assert_eq!(

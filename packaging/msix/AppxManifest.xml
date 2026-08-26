@@ -40,6 +40,7 @@
             <uap:Logo>Assets\Square44x44Logo.png</uap:Logo>
             <uap:SupportedFileTypes>
               <uap:FileType>.zip</uap:FileType>
+              <uap:FileType>.zipx</uap:FileType>
               <uap:FileType>.7z</uap:FileType>
               <uap:FileType>.rar</uap:FileType>
               <uap:FileType>.cab</uap:FileType>

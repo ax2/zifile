@@ -15,7 +15,9 @@ description: ZiFile 当前已验证和计划中的压缩与归档格式能力矩
 | RAR 1.3–7 | 是 | 是 | 否 | 读取 | Beta |
 | Windows CAB | 是 | 是 | 否 | 否 | Beta |
 
-ZIP 读取支持 Store、Deflate、Deflate64、BZip2、LZMA、XZ、Zstandard 与 PPMd 方法，也可解密 AES 和传统 ZipCrypto 归档。创建使用兼容性良好的 Deflate，密码创建使用 AES-256；传统 ZipCrypto 仅用于读取旧归档，不作为新的加密选项。Store、Deflate、Deflate64、BZip2、LZMA、XZ、PPMd、AES-256 与 ZipCrypto 会在 Windows CI 中使用独立 7-Zip 参考语料验证；Zstandard 的 ZIP 解码暂由锁定后端测试覆盖，不宣称已有 7-Zip 语料证明。
+ZIP 读取支持 Store、Deflate、Deflate64、BZip2、LZMA、XZ、Zstandard 与 PPMd 方法，也可解密 AES 和传统 ZipCrypto 归档。创建使用兼容性良好的 Deflate，密码创建使用 AES-256；传统 ZipCrypto 仅用于读取旧归档，不作为新的加密选项。Store、Deflate、Deflate64、BZip2、LZMA、XZ、PPMd、AES-256 与 ZipCrypto 会在 Windows CI 中使用独立 7-Zip 参考语料验证；Zstandard 解码使用固定的 libarchive ZIPX 语料独立验证，并精确核对路径、大小与逐文件哈希。
+
+`.zipx` 会作为 ZIP 读取别名识别，并已加入两套桌面打开对话框和 Windows 安装包文件关联；ZiFile 默认仍创建普通 `.zip` 归档。
 
 历史 ZIP 的 Shrink、Reduce 1–4 与 Implode 方法也支持只读解码。固定上游语料用于校验 ZiFile 解压后的字节与已知内容完全一致，7-Zip 则独立识别归档所用方法；这些过时算法不会作为新归档的创建选项。
 
