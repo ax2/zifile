@@ -41,13 +41,13 @@ try {
         throw 'ZiFile preflight did not accept the deterministic WinGet candidate.'
     }
 
+    $wingetVersion = (& $winget.Source --version | Out-String).Trim()
     $validationOutput = & $winget.Source validate `
         --manifest $manifestDirectory `
         --disable-interactivity 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0 -or $validationOutput -notmatch 'Manifest validation succeeded') {
-        throw "Official winget validate rejected the generated candidate: $validationOutput"
+        throw "Official winget $wingetVersion validate rejected the generated candidate: $validationOutput"
     }
-    $wingetVersion = (& $winget.Source --version | Out-String).Trim()
 
     [pscustomobject]@{
         schema_version = 1

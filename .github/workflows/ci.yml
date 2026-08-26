@@ -30,6 +30,9 @@ jobs:
       - name: Packaging policy smoke test
         shell: pwsh
         run: ./tests/smoke/packaging-policy.ps1
+      - name: Install current WinGet validation client
+        shell: pwsh
+        run: ./packaging/winget/Install-ValidationClient.ps1
       - name: Official WinGet manifest validation
         shell: pwsh
         run: ./tests/smoke/winget-manifest.ps1
