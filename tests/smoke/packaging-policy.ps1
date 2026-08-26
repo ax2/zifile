@@ -10,6 +10,7 @@ $repairProbe = Join-Path $repoRoot 'tests\helpers\msix-repair\Invoke-Probe.ps1'
 $rarCorpus = Join-Path $repoRoot 'tests\interoperability\rar-corpus.ps1'
 $cabInteroperability = Join-Path $repoRoot 'tests\interoperability\cab-windows.ps1'
 $zipMethodCorpus = Join-Path $repoRoot 'tests\interoperability\zip-method-corpus.ps1'
+$zipLegacyCorpus = Join-Path $repoRoot 'tests\interoperability\zip-legacy-corpus.ps1'
 $wackReadiness = Join-Path $repoRoot 'packaging\msix\Test-WackReadiness.ps1'
 $versionConsistency = Join-Path $repoRoot 'scripts\Test-VersionConsistency.ps1'
 $releaseNotes = Join-Path $repoRoot 'scripts\Test-ReleaseNotes.ps1'
@@ -27,7 +28,7 @@ $wingetClientInstaller = Join-Path $repoRoot 'packaging\winget\Install-Validatio
 $wingetSmoke = Join-Path $repoRoot 'tests\smoke\winget-manifest.ps1'
 $userDocs = Join-Path $repoRoot 'scripts\Test-UserDocs.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -757,6 +758,34 @@ foreach ($requiredZipMethodCiToken in @(
         throw "CI does not publish the ZIP method corpus gate or evidence: $requiredZipMethodCiToken"
     }
 }
+$workspaceManifestSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'Cargo.toml')
+if ($workspaceManifestSource -notmatch 'zip\s*=\s*\{[^}]*features\s*=\s*\["legacy-zip"\]') {
+    throw 'The workspace ZIP backend does not enable legacy-zip decoding.'
+}
+$zipLegacyCorpusSource = Get-Content -Raw -LiteralPath $zipLegacyCorpus
+foreach ($requiredZipLegacyToken in @(
+    '771dfc534d2614158af5497ea3dff4d4208d7db1',
+    "name = 'shrink'",
+    "name = 'reduce'",
+    "name = 'implode'",
+    'GetByteArrayAsync',
+    'Get-Sha256',
+    'Assert-SingleGoldenFile',
+    'target\zip-legacy-corpus.json'
+)) {
+    if ($zipLegacyCorpusSource -notmatch [Regex]::Escape($requiredZipLegacyToken)) {
+        throw "The ZIP legacy corpus gate omits required token: $requiredZipLegacyToken"
+    }
+}
+foreach ($requiredZipLegacyCiToken in @(
+    'zip-legacy-corpus.ps1 -SkipBuild',
+    'Upload ZIP legacy interoperability evidence',
+    'target/zip-legacy-corpus.json'
+)) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredZipLegacyCiToken)) {
+        throw "CI does not publish the ZIP legacy corpus gate or evidence: $requiredZipLegacyCiToken"
+    }
+}
 foreach ($requiredWackToken in @(
     'WACK readiness policy',
     './tests/smoke/wack-readiness.ps1'
@@ -806,6 +835,7 @@ foreach ($requiredLivePrivacyToken in @(
     cab_association_wired = $true
     cab_interoperability_wired = $true
     zip_method_corpus_wired = $true
+    zip_legacy_corpus_wired = $true
     wack_readiness_wired = $true
     version_consistency_wired = $true
     release_notes_wired = $true

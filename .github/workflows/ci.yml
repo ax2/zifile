@@ -69,6 +69,7 @@ jobs:
           ./tests/interoperability/cab-windows.ps1 -SkipBuild
           ./tests/interoperability/sevenzip-corpus.ps1 -SkipBuild
           ./tests/interoperability/zip-method-corpus.ps1 -SkipBuild
+          ./tests/interoperability/zip-legacy-corpus.ps1 -SkipBuild
       - name: Upload CAB interoperability evidence
         uses: actions/upload-artifact@v6
         with:
@@ -86,6 +87,12 @@ jobs:
         with:
           name: zip-method-corpus
           path: target/zip-method-corpus.json
+          retention-days: 30
+      - name: Upload ZIP legacy interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: zip-legacy-corpus
+          path: target/zip-legacy-corpus.json
           retention-days: 30
 
   rar-interoperability:
