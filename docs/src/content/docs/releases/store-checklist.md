@@ -6,12 +6,12 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 ## 自动化已具备
 
 - x64 与 ARM64 的完整可运行目录、独立 EXE 和 MSIX 构建。
-- 可选 PFX 签名，证书只通过 GitHub Actions Secret 注入并在作业结束前删除。
+- Release 已移除 PFX，具备受保护的 DigiCert Binary Signing simple-signing、签后系统验签、时间戳检查和签后审计路径；真实账号演练仍待外部凭据。
 - SHA-256、CycloneDX JSON SBOM 和 GitHub 构建来源证明。
 - WinGet 1.12 多文件清单生成器，覆盖两个架构、文件关联和中英文元数据。
 - 真实 Release SHA-256 的候选清单已通过本机 `winget validate`；该结果不等于已提交或已获社区仓库接受。
 - 每个 MSIX 在构建后自动解包审计 Identity、Publisher、版本、最低系统版本、四枚 PE 架构（桌面、CLI、Worker 与 Explorer DLL）、主要文件关联、CLI alias、敏感文件和签名状态，并随包生成 `.audit.json`。
-- 标签发布缺少正式 Identity、Publisher、PFX 或密码时会在打包前失败；`.Dev` Identity 和未签名 OID Publisher 不能用于标签发布。
+- 标签发布固定进入 `production-signing` Environment，并且发布任务只消费通过签后门禁的 `signed-windows-*`；`.Dev` Identity、未签名 OID Publisher、缺失云签名输入或无效/无时间戳签名都会失败。
 - 简体中文和英文 Store 文案、隐私说明与认证备注已经结构化归档；CI 验证描述、功能、关键词、许可与 HTTPS URL 的 Partner Center 字段限制，并拒绝 JSON 与可读文档的描述段落或功能项漂移。
 - 双语 Desktop 截图清单具有显式 `draft/complete` 状态；门禁验证 PNG/IHDR、1366×768（或纵向等价）最低尺寸、50 MB 上限、SHA-256、路径边界、顺序、场景和 200 字符说明。标签发布必须达到每语言至少四张，否则在打包前失败。
 - Store 冒烟会动态生成中英文各四张真实 PNG，证明完整清单通过，并证明低分辨率和重复图片被拒绝；当前仓库清单仍明确为 0 张 `draft`，没有用测试图冒充正式素材。
@@ -30,8 +30,8 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 这些项目同时记录在机器可读的 [`release/readiness.json`](https://github.com/ax2/zifile/blob/main/release/readiness.json) 和 [1.0 发布就绪状态](/zifile/releases/release-readiness/) 中；稳定标签要求全部有证据并标记为 `passed`。
 
 1. 在 Partner Center 注册 Windows 开发者账号并预留 `ZiFile` 名称。
-2. 将 Partner Center 分配的 Package Identity Name 与 Publisher 写入 GitHub Secrets。
-3. 准备可信代码签名证书用于 GitHub/WinGet；Store 分发包由 Microsoft Store 签名。
+2. 将 Partner Center 分配的 Package Identity Name 与 Publisher 写入 GitHub Repository Variables。
+3. 完成 DigiCert 组织验证与代码签名证书配置，在受保护 Environment 配置 Host、Keypair Alias、API Key 和客户端认证材料，执行双架构手动签名演练；Store 分发包由 Microsoft Store 签名。
 4. 用正式 Identity 重建 x64 与 ARM64 包，分别验证安装、启动、文件关联、升级和卸载。
 5. 在当前用户的管理员交互式会话中运行 Windows App Certification Kit，并完成键盘、讲述人、高对比度、DPI 与中文输入法检查。
 6. 复核已准备的双语商店说明、隐私说明和认证备注，部署公开隐私页，采集正式候选包的双语桌面截图，并填写年龄分级与市场。

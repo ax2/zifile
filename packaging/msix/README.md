@@ -2,7 +2,9 @@
 
 MSIX is the primary Microsoft Store package target. `Build-Package.ps1` creates
 both a complete runnable Windows directory and an MSIX without making a ZIP
-archive. The package is unsigned unless a PFX and secure password are supplied.
+archive. The builder is unsigned by default. Its local PFX parameters remain
+only for isolated developer experiments; GitHub Release never consumes a PFX
+and signs staged artifacts through a cloud-HSM provider.
 
 ```powershell
 ./packaging/msix/Build-Package.ps1 -Version 0.1.0.0 -Architecture x64
@@ -21,9 +23,8 @@ package. Windows only supports this unsigned executable-package path on Windows
 test machine still rejected the OID publisher with deployment error `0x80080204`,
 so local unsigned installation is not yet a passed gate. Signed and
 Store packages retain the manifest's Windows 10 build 19041 minimum. A Store
-build must pass the Partner Center identity name and
-publisher to the script. Direct distribution may additionally pass a PFX path
-and secure password; credentials and certificates must never be committed.
+build must pass the Partner Center identity name and publisher to the script.
+Credentials and certificates must never be committed.
 
 When `CertificatePath` is supplied, `Publisher` must be the exact certificate
 subject and must not contain the unsigned OID. An unsigned non-development Store
@@ -49,10 +50,13 @@ Implemented packaging features:
 The desktop executable requires its matching Worker. GitHub release staging therefore publishes
 both architecture-suffixed files; complete runnable directories retain the canonical sibling name.
 
-Tagged GitHub releases fail before packaging unless all four formal publishing secrets are present:
-`ZIFILE_MSIX_IDENTITY`, `ZIFILE_MSIX_PUBLISHER`, `ZIFILE_PFX_BASE64`, and
-`ZIFILE_PFX_PASSWORD`. Development identities and the unsigned OID publisher are rejected for tags.
-Manual workflow runs may continue to build unsigned development packages for validation.
+Tagged GitHub releases build with formal `ZIFILE_MSIX_IDENTITY` and
+`ZIFILE_MSIX_PUBLISHER` environment variables, then enter the protected
+`production-signing` Environment. DigiCert Binary Signing signs the staged EXEs,
+DLL, and MSIX with the cloud-held key. `Test-SignedReleaseArtifacts.ps1` requires
+valid signatures, one exact Publisher, and timestamps before regenerating audits
+and checksums; publishing downloads only `signed-windows-*`. Manual workflow runs
+may select `none` for unsigned validation or `digicert-stm` for a protected rehearsal.
 
 The MSIX also registers `zifile.exe` as an App Execution Alias. Users can disable aliases in
 Windows Settings, so automation must not assume that the alias is always enabled. The packaged

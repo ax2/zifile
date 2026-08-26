@@ -18,7 +18,7 @@ documentation system, and engineering gates.
 - [x] Add the first keyboard workflow: Ctrl+O, Ctrl+N, Ctrl+A and Escape.
 - [ ] Verify Chinese IME, full keyboard navigation, screen readers, per-monitor DPI and high contrast ([#14](https://github.com/ax2/zifile/issues/14)).
 - [ ] Reserve `ZiFile` in Microsoft Partner Center ([#8](https://github.com/ax2/zifile/issues/8)).
-- [ ] Decide signing provider for direct GitHub and WinGet releases ([#9](https://github.com/ax2/zifile/issues/9)).
+- [x] Select DigiCert Binary Signing as the executable cloud-HSM baseline and wire protected post-signing verification; account procurement and real trusted-signature evidence remain in [#9](https://github.com/ax2/zifile/issues/9).
 
 Exit criteria: the workspace and docs build from a clean checkout; the UI spike
 records an evidence-backed keep/replace decision and migration path; open
