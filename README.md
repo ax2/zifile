@@ -7,7 +7,8 @@ under MIT.
 The project is currently in **Stage 1 — Alpha development**. ZIP, encrypted
 ZIP, 7z, TAR compositions and common compression streams have working create,
 list, integrity-test and safe-extraction paths shared by the CLI and Iced
-desktop application.
+desktop application. RAR 1.3–7 and Windows CAB are available as pure-Rust,
+read-only beta providers.
 
 The desktop UI is available in Simplified Chinese and English, follows the
 system language on first launch, and persists only the selected language and
@@ -74,7 +75,7 @@ pnpm --dir docs build
 | Core model | Real create/list/test/extract operations with shared safety policy |
 | Desktop | Bilingual modern browser/creator, isolated archive worker and Windows taskbar progress |
 | CLI | `formats`, `detect`, `list`, `test`, `extract`, and `create` |
-| Archive providers | ZIP/ZIP64/AES, 7z/AES, read-only RAR 1.3 through RAR 7 with encryption, TAR compositions, and common streams |
+| Archive providers | ZIP/ZIP64/AES, 7z/AES, read-only RAR 1.3 through RAR 7 with encryption, read-only Windows CAB, TAR compositions, and common streams |
 | Packaging | Real x64/ARM64 runnable directory, EXE, MSIX, CLI alias and audited Rust shell DLL |
 | Distribution | Tag workflow produces checksums, SBOM, provenance and WinGet manifest candidates |
 

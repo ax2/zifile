@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use bzip2::read::BzDecoder;
 use bzip2::write::BzEncoder;
+use cab::Cabinet;
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -233,6 +234,7 @@ pub fn list_archive_with_limits(
         ArchiveFormat::Rar => {
             guard_archive_backend(format, "listing", || list_rar(path, password, limits))?
         }
+        ArchiveFormat::Cab => guard_archive_backend(format, "listing", || list_cab(path, limits))?,
     };
 
     let total_size = entries.iter().try_fold(0_u64, |total, entry| {
@@ -294,6 +296,9 @@ pub fn test_archive_with_limits(
         ArchiveFormat::Rar => {
             guard_archive_backend(info.format, "testing", || test_rar(path, password, limits))?
         }
+        ArchiveFormat::Cab => {
+            guard_archive_backend(info.format, "testing", || test_cab(path, limits))?
+        }
     }
     Ok(info)
 }
@@ -343,6 +348,9 @@ pub fn extract_archive(
         ArchiveFormat::Rar => guard_archive_backend(info.format, "extracting", || {
             extract_rar(archive, destination, options, &info)
         }),
+        ArchiveFormat::Cab => guard_archive_backend(info.format, "extracting", || {
+            extract_cab(archive, destination, options)
+        }),
     }
 }
 
@@ -378,8 +386,106 @@ pub fn create_archive(
         | ArchiveFormat::Bzip2
         | ArchiveFormat::Lz4
         | ArchiveFormat::Brotli => create_stream(sources, destination, format, options),
-        ArchiveFormat::Rar => Err(ZiFileError::UnsupportedOperation(format)),
+        ArchiveFormat::Rar | ArchiveFormat::Cab => Err(ZiFileError::UnsupportedOperation(format)),
     }
+}
+
+fn open_cab(path: &Path) -> ZiFileResult<Cabinet<BufReader<File>>> {
+    Cabinet::new(BufReader::new(File::open(path)?)).map_err(ZiFileError::Io)
+}
+
+fn cab_file_names(cabinet: &Cabinet<BufReader<File>>) -> Vec<String> {
+    cabinet
+        .folder_entries()
+        .flat_map(|folder| folder.file_entries().map(|entry| entry.name().to_owned()))
+        .collect()
+}
+
+fn list_cab(path: &Path, limits: SafetyLimits) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    let cabinet = open_cab(path)?;
+    let mut entries = Vec::new();
+    for folder in cabinet.folder_entries() {
+        for entry in folder.file_entries() {
+            if entries.len() as u64 >= limits.max_entries {
+                return Err(ZiFileError::LimitExceeded(format!(
+                    "entry count exceeds {}",
+                    limits.max_entries
+                )));
+            }
+            let safe = safe_relative_path(entry.name(), limits.max_path_depth)?;
+            entries.push(ArchiveEntryInfo {
+                path: safe,
+                size: u64::from(entry.uncompressed_size()),
+                compressed_size: 0,
+                is_directory: false,
+                encrypted: false,
+            });
+        }
+    }
+    validate_entry_names(&entries, limits)?;
+    Ok(entries)
+}
+
+fn test_cab(path: &Path, limits: SafetyLimits) -> ZiFileResult<()> {
+    let mut cabinet = open_cab(path)?;
+    let names = cab_file_names(&cabinet);
+    let mut total = 0_u64;
+    for name in names {
+        let mut reader = cabinet.read_file(&name).map_err(ZiFileError::Io)?;
+        copy_limited(
+            &mut reader,
+            &mut io::sink(),
+            &mut total,
+            limits.max_expanded_bytes,
+            None,
+            None,
+        )?;
+    }
+    Ok(())
+}
+
+fn extract_cab(
+    path: &Path,
+    destination: &Path,
+    options: &ExtractOptions,
+) -> ZiFileResult<OperationSummary> {
+    let mut cabinet = open_cab(path)?;
+    let names = cab_file_names(&cabinet);
+    let mut summary = OperationSummary::default();
+    let mut claimed = HashSet::new();
+    for name in names {
+        options.cancellation.check()?;
+        let relative = safe_relative_path(&name, options.limits.max_path_depth)?;
+        if !is_selected(&relative, options) {
+            continue;
+        }
+        let Some(output) = prepare_output(
+            destination,
+            &relative,
+            false,
+            options.conflict,
+            &mut claimed,
+        )?
+        else {
+            summary.skipped += 1;
+            continue;
+        };
+        let mut reader = cabinet.read_file(&name).map_err(ZiFileError::Io)?;
+        write_atomic(&output, |writer| {
+            copy_limited(
+                &mut reader,
+                writer,
+                &mut summary.bytes,
+                options.limits.max_expanded_bytes,
+                Some(&options.cancellation),
+                Some(&options.progress),
+            )?;
+            Ok(())
+        })?;
+        summary.files += 1;
+        options.progress.advance_entry();
+    }
+    Ok(summary)
 }
 
 const RAR_BUFFERED_DECODE_LIMIT: u64 = 256 * 1024 * 1024;

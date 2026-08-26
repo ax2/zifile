@@ -13,13 +13,13 @@ Category: Utilities & tools
 
 Pricing: Free; no ads, in-app purchases, or subscriptions
 
-Short description: A modern open-source archive utility for Windows 10 and 11. Browse and safely extract RAR, ZIP, 7z, and TAR; create open formats; use encryption, drag-and-drop, and the command line.
+Short description: A modern open-source archive utility for Windows 10 and 11. Browse and safely extract RAR, CAB, ZIP, 7z, and TAR; create open formats; use encryption and the command line.
 
 ## Full description
 
 ZiFile is a modern open-source archive utility for Windows with clear workflows and cautious security defaults.
 
-Browse archive contents, extract only selected entries, or create ZIP, 7z, TAR, and common compressed streams from files and folders. RAR 1.3 through RAR 7 archives can be browsed, tested, and extracted but not created. ZIP and 7z support AES encryption, and passwords are never written to logs or settings.
+Browse archive contents, extract only selected entries, or create ZIP, 7z, TAR, and common compressed streams from files and folders. RAR 1.3 through RAR 7 and Windows CAB archives can be browsed, tested, and extracted but not created. ZIP and 7z support AES encryption, and passwords are never written to logs or settings.
 
 ZiFile blocks path traversal, link escapes, reserved Windows names, unsafe overwrites, and excessive archive expansion. Long-running work executes in an isolated background process with visible progress and cancellation.
 
@@ -31,14 +31,14 @@ ZiFile is open source under the MIT License and supports x64 and ARM64 Windows d
 
 Partner Center adds feature bullets automatically. Paste each line without a bullet marker.
 
-1. Browse and extract RAR, ZIP, 7z, TAR, and common compressed streams
+1. Browse and extract RAR, CAB, ZIP, 7z, TAR, and common compressed streams
 2. AES encryption for ZIP and 7z without saving passwords to logs or settings
 3. Protection from path traversal, link escapes, unsafe overwrites, and archive bombs
 4. Isolated background operations with visible progress and cancellation
 5. Drag-and-drop, file associations, and a command-line tool
 6. English and Simplified Chinese interfaces on x64 and ARM64
 
-Keywords: archive, compression, extract, ZIP, 7z, TAR, file utility.
+Keywords: archive, compression, extract, ZIP, 7z, CAB, file utility.
 
 Leave “What's new in this version” blank for the first submission. Use `MIT License` for applicable license terms and `ZiCode` for Developed by.
 

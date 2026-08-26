@@ -1286,7 +1286,7 @@ fn archive_dialog(locale: Locale) -> FileDialog {
         .add_filter(
             locale.text(Text::SupportedArchives),
             &[
-                "zip", "7z", "rar", "tar", "gz", "tgz", "zst", "xz", "bz2", "lz4", "br",
+                "zip", "7z", "rar", "cab", "tar", "gz", "tgz", "zst", "xz", "bz2", "lz4", "br",
             ],
         )
         .add_filter(locale.text(Text::AllFiles), &["*"])

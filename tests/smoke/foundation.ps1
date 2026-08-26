@@ -13,7 +13,7 @@ try {
     }
 
     $formats = (cargo run --quiet -p zifile-cli -- formats) -join "`n"
-    if ($LASTEXITCODE -ne 0 -or $formats -notmatch 'ZIP' -or $formats -notmatch '7z') {
+    if ($LASTEXITCODE -ne 0 -or $formats -notmatch 'ZIP' -or $formats -notmatch '7z' -or $formats -notmatch 'CAB') {
         throw 'CLI format registry smoke test failed.'
     }
     $createHelp = (cargo run --quiet -p zifile-cli -- create --help) -join "`n"

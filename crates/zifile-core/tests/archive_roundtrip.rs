@@ -62,6 +62,50 @@ fn rar_version_fixture(path: &Path, version: rars::ArchiveVersion) {
     builder.write_to_path(path, None).unwrap();
 }
 
+fn cab_fixture(path: &Path, entries: &[(&str, &[u8])]) {
+    cab_fixture_with_compression(path, entries, cab::CompressionType::MsZip);
+}
+
+fn cab_fixture_with_compression(
+    path: &Path,
+    entries: &[(&str, &[u8])],
+    compression: cab::CompressionType,
+) {
+    let mut builder = cab::CabinetBuilder::new();
+    let folder = builder.add_folder(compression);
+    for (name, _) in entries {
+        folder.add_file(*name);
+    }
+    let mut writer = builder.build(fs::File::create(path).unwrap()).unwrap();
+    while let Some(mut file) = writer.next_file().unwrap() {
+        let (_, contents) = entries
+            .iter()
+            .find(|(name, _)| *name == file.file_name())
+            .unwrap();
+        file.write_all(contents).unwrap();
+    }
+    writer.finish().unwrap();
+}
+
+#[test]
+fn cab_uncompressed_content_is_supported() {
+    let temp = tempfile::tempdir().unwrap();
+    let archive = temp.path().join("uncompressed.cab");
+    cab_fixture_with_compression(
+        &archive,
+        &[("plain.txt", b"uncompressed cabinet")],
+        cab::CompressionType::None,
+    );
+    test_archive(&archive, None).unwrap();
+    let output = temp.path().join("cab-none");
+    let summary = extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
+    assert_eq!(summary.files, 1);
+    assert_eq!(
+        fs::read_to_string(output.join("plain.txt")).unwrap(),
+        "uncompressed cabinet"
+    );
+}
+
 fn assert_round_trip(format: ArchiveFormat) {
     let (temp, source) = fixture();
     let archive = temp
@@ -284,6 +328,85 @@ fn rar_is_read_only_and_supports_solid_selected_extraction() {
             &CreateOptions::default(),
         ),
         Err(ZiFileError::UnsupportedOperation(ArchiveFormat::Rar))
+    ));
+}
+
+#[test]
+fn cab_is_read_only_and_supports_safe_selected_extraction() {
+    let temp = tempfile::tempdir().unwrap();
+    let archive = temp.path().join("fixture.cab");
+    cab_fixture(
+        &archive,
+        &[
+            ("hello.txt", b"hello from CAB\n"),
+            ("nested\\unicode.txt", b"safe cabinet\n"),
+        ],
+    );
+
+    let capabilities = ArchiveFormat::Cab.capabilities();
+    assert!(capabilities.list);
+    assert!(capabilities.extract);
+    assert!(!capabilities.create);
+    assert!(!capabilities.encryption);
+    assert_eq!(detect_format(&archive).unwrap(), ArchiveFormat::Cab);
+
+    let info = list_archive(&archive, None).unwrap();
+    assert_eq!(info.format, ArchiveFormat::Cab);
+    assert_eq!(info.entries.len(), 2);
+    assert_eq!(info.total_size, 28);
+    test_archive(&archive, None).unwrap();
+
+    let output = temp.path().join("cab-selected");
+    let selected = HashSet::from([PathBuf::from("nested/unicode.txt")]);
+    let summary = extract_archive(
+        &archive,
+        &output,
+        &ExtractOptions {
+            selected_paths: Some(selected),
+            ..ExtractOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(summary.files, 1);
+    assert_eq!(summary.bytes, 13);
+    assert!(!output.join("hello.txt").exists());
+    assert_eq!(
+        fs::read_to_string(output.join("nested/unicode.txt")).unwrap(),
+        "safe cabinet\n"
+    );
+
+    let source = temp.path().join("source.txt");
+    fs::write(&source, "CAB creation remains disabled").unwrap();
+    assert!(matches!(
+        create_archive(
+            &[source],
+            temp.path().join("not-created.cab"),
+            ArchiveFormat::Cab,
+            &CreateOptions::default(),
+        ),
+        Err(ZiFileError::UnsupportedOperation(ArchiveFormat::Cab))
+    ));
+}
+
+#[test]
+fn cab_rejects_unsafe_paths_and_declared_limits() {
+    let temp = tempfile::tempdir().unwrap();
+    let unsafe_archive = temp.path().join("unsafe.cab");
+    cab_fixture(&unsafe_archive, &[("..\\escape.txt", b"escape")]);
+    assert!(matches!(
+        list_archive(&unsafe_archive, None),
+        Err(ZiFileError::UnsafePath(_))
+    ));
+
+    let archive = temp.path().join("limits.cab");
+    cab_fixture(&archive, &[("one.txt", b"1"), ("two.txt", b"2")]);
+    let limits = SafetyLimits {
+        max_entries: 1,
+        ..SafetyLimits::default()
+    };
+    assert!(matches!(
+        list_archive_with_limits(&archive, None, limits),
+        Err(ZiFileError::LimitExceeded(_))
     ));
 }
 

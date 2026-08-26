@@ -11,6 +11,7 @@ repository.workspace = true
 [dependencies]
 brotli.workspace = true
 bzip2.workspace = true
+cab.workspace = true
 flate2.workspace = true
 lz4_flex.workspace = true
 rars.workspace = true

@@ -8,6 +8,7 @@ $repairHelper = Join-Path $repoRoot 'tests\helpers\msix-repair\Program.cs'
 $repairProject = Join-Path $repoRoot 'tests\helpers\msix-repair\MsixRepair.csproj'
 $repairProbe = Join-Path $repoRoot 'tests\helpers\msix-repair\Invoke-Probe.ps1'
 $rarCorpus = Join-Path $repoRoot 'tests\interoperability\rar-corpus.ps1'
+$cabInteroperability = Join-Path $repoRoot 'tests\interoperability\cab-windows.ps1'
 $wackReadiness = Join-Path $repoRoot 'packaging\msix\Test-WackReadiness.ps1'
 $versionConsistency = Join-Path $repoRoot 'scripts\Test-VersionConsistency.ps1'
 $releaseNotes = Join-Path $repoRoot 'scripts\Test-ReleaseNotes.ps1'
@@ -25,7 +26,7 @@ $wingetClientInstaller = Join-Path $repoRoot 'packaging\winget\Install-Validatio
 $wingetSmoke = Join-Path $repoRoot 'tests\smoke\winget-manifest.ps1'
 $userDocs = Join-Path $repoRoot 'scripts\Test-UserDocs.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -534,6 +535,9 @@ foreach ($requiredShellToken in @(
 if ($manifestSource -notmatch [Regex]::Escape('<uap:FileType>.rar</uap:FileType>')) {
     throw 'The MSIX manifest does not associate supported RAR archives.'
 }
+if ($manifestSource -notmatch [Regex]::Escape('<uap:FileType>.cab</uap:FileType>')) {
+    throw 'The MSIX manifest does not associate supported CAB archives.'
+}
 if ($buildSource -notmatch [Regex]::Escape('zifile_shell.dll')) {
     throw 'Build-Package.ps1 does not stage the architecture-matched shell DLL.'
 }
@@ -704,6 +708,28 @@ foreach ($requiredCiToken in @(
         throw "CI does not publish the RAR corpus gate or evidence: $requiredCiToken"
     }
 }
+$cabInteroperabilitySource = Get-Content -Raw -LiteralPath $cabInteroperability
+foreach ($requiredCabToken in @(
+    'makecab.exe',
+    'expand.exe',
+    "type = 'MSZIP'",
+    "type = 'LZX'",
+    'target\cab-interoperability.json',
+    'matched = $true'
+)) {
+    if ($cabInteroperabilitySource -notmatch [Regex]::Escape($requiredCabToken)) {
+        throw "The CAB interoperability gate omits required token: $requiredCabToken"
+    }
+}
+foreach ($requiredCabCiToken in @(
+    'cab-windows.ps1 -SkipBuild',
+    'Upload CAB interoperability evidence',
+    'target/cab-interoperability.json'
+)) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredCabCiToken)) {
+        throw "CI does not publish the CAB interoperability gate or evidence: $requiredCabCiToken"
+    }
+}
 foreach ($requiredWackToken in @(
     'WACK readiness policy',
     './tests/smoke/wack-readiness.ps1'
@@ -750,6 +776,8 @@ foreach ($requiredLivePrivacyToken in @(
     repair_helper_wired = $true
     rar_association_wired = $true
     rar_corpus_wired = $true
+    cab_association_wired = $true
+    cab_interoperability_wired = $true
     wack_readiness_wired = $true
     version_consistency_wired = $true
     release_notes_wired = $true

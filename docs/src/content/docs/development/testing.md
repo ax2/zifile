@@ -44,7 +44,9 @@ Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.
 
 RAR 门禁从固定的 `rars` 源码提交 `7d8f9386ef777a2415da34fe1db193d8471ff7d0` 下载六个夹具，使用硬编码 SHA-256 验证来源后，逐文件比较 ZiFile 与 7-Zip 的解压树。覆盖 RAR 1.3、1.54 多文件、RAR 3 PPMd、RAR 5 压缩与 E8E9 过滤，以及 WinRAR 7.21 加密头/Quick Open；另有三个链接/重定向夹具必须在无输出的情况下拒绝。CI 32853686537 完成全部六个有效场景和三个拒绝场景，证据 JSON SHA-256 为 `4C52D0240B911609C7DDB0CACB2E484F56C8F886E216347603B228261C4EE8EF`。RAR 1.3 因现代 7-Zip 不再读取，改与同一固定上游提交中的已知正确解压树逐文件核对，其余五种有效归档继续与 7-Zip 26.02 交叉验证。
 
-每次 CI 会编译 libFuzzer 目标；每周定时工作流对路径策略、格式识别和归档解析器各运行 180 秒有界 fuzz，失败时保留崩溃产物 14 天。归档目标用带格式签名的变异输入覆盖 ZIP、7z、RAR、四种 TAR 组合和六种单流格式，限制输入为 256 KiB、RSS 为 2 GiB、单输入为 10 秒；目标内部还使用 256 条目、4 MiB 展开量、64 倍压缩比和 32 层路径的严格限制。Windows/MSVC 本地 `cargo-fuzz` 因 `sevenz-rust2` DLL 与 libFuzzer 入口点参数冲突无法链接，Rust 编译检查可通过；动态 campaign 以 Linux GNU 定时工作流为验收环境。损坏、截断、炸弹及更多 libarchive 变体仍需继续扩展。
+CAB 互操作门禁在 Windows Runner 使用系统 `makecab.exe` 生成 MSZIP 与 LZX Cabinet，再要求 ZiFile 完成签名识别、浏览、校验和解压，并与系统 `expand.exe` 的输出比较 SHA-256。None 压缩由 Rust 集成夹具覆盖；Quantum 与跨 Cabinet 集合明确不支持。每次 CI 上传不含用户数据的结构化 JSON 证据。
+
+每次 CI 会编译 libFuzzer 目标；每周定时工作流对路径策略、格式识别和归档解析器各运行 180 秒有界 fuzz，失败时保留崩溃产物 14 天。归档目标用带格式签名的变异输入覆盖 ZIP、7z、RAR、CAB、四种 TAR 组合和六种单流格式，限制输入为 256 KiB、RSS 为 2 GiB、单输入为 10 秒；目标内部还使用 256 条目、4 MiB 展开量、64 倍压缩比和 32 层路径的严格限制。Windows/MSVC 本地 `cargo-fuzz` 因 `sevenz-rust2` DLL 与 libFuzzer 入口点参数冲突无法链接，Rust 编译检查可通过；动态 campaign 以 Linux GNU 定时工作流为验收环境。损坏、截断、炸弹及更多 libarchive 变体仍需继续扩展。
 
 首轮归档解析器 campaign 32733658052 在约 569,000 次执行后发现 292 字节输入可令 `sevenz-rust2` 0.20.2 的文件数量分配触发 `capacity overflow`。第二轮 campaign 32803785688 又发现 173 字节输入可触发 ASan 超大内存分配；这类 OOM 不能由 `catch_unwind` 可靠隔离。两份输入均已转为永久集成测试和 fuzz 启动重放夹具。项目因此升级到 Rust 1.93.0 与带有元数据计数边界修复的 `sevenz-rust2` 0.22.0；Provider 的 panic 边界继续作为纵深防御。升级后的定向 campaign 32813469578 强制重放两份样本，并在 181 秒内继续执行 498,937 次、峰值 RSS 370 MiB，未产生新崩溃产物。
 
@@ -62,7 +64,7 @@ RAR 校验基准使用确定性的 8 MiB RAR 5 method-3 归档，并加入低频
 
 `tests/accessibility/keyboard-form.ps1` 从候选原生窗口根开始发送真实 Tab/Shift+Tab/Enter 和表单按键，并通过 UI Automation 读取 WebView2 内部焦点。它验证首页→归档→创建→主题→语言顺序、反向导航、归档/创建页激活、创建页 disabled 按钮不获得焦点、格式选择为 7z、压缩等级 `6→7→6`、密码键入后用 Ctrl+A/Backspace 清空，以及两个来源按钮可达。固定测试密码只在进程内使用，JSON 不记录其值。脚本在每次发送前要求前台原生句柄精确属于本次 ZiFile；用户切换到其他窗口时立即失败并在 `finally` 中关闭测试实例。`-ToggleLanguageBeforeTest` 可用 UIA 建立另一语言前置状态，并在成功或失败清理路径恢复原设置；英文与中文核心流程均已通过。双条目归档页流程的扩展正在实现，只有完成独立真实前台运行后才会加入通过证据。
 
-`tests/smoke/packaging-policy.ps1` 在每次 Windows CI 中动态解析当前十六个发行、语料与仓库政策 PowerShell 脚本，并验证缺失/部分 Partner Center Identity、非法 Name/X.500 Publisher、缺失云签名输入、非法 provider、开发 Identity、未签名 OID Publisher、无效签名产物和未完成的 1.0 就绪清单都会被拒绝，形式正确的输入及 11/11 带证据就绪夹具会被接受；它还要求签后审计、仅签后发布、最小权限、签名超时/并发控制、轮换/应急停止/吊销运维手册，以及版本、发布说明、贡献者、安全和发布就绪门禁均接入 CI。真实账号、云 HSM 签名和 x64/ARM64 包内容审计不能由策略冒烟替代。
+`tests/smoke/packaging-policy.ps1` 在每次 Windows CI 中动态解析当前二十三个发行、语料与仓库政策 PowerShell 脚本，并验证缺失/部分 Partner Center Identity、非法 Name/X.500 Publisher、缺失云签名输入、非法 provider、开发 Identity、未签名 OID Publisher、无效签名产物和未完成的 1.0 就绪清单都会被拒绝，形式正确的输入及 11/11 带证据就绪夹具会被接受；它还要求签后审计、仅签后发布、最小权限、签名超时/并发控制、轮换/应急停止/吊销运维手册，以及版本、发布说明、贡献者、安全和发布就绪门禁均接入 CI。真实账号、云 HSM 签名和 x64/ARM64 包内容审计不能由策略冒烟替代。
 
 `tests/smoke/store-listing.ps1` 验证简体中文和英文 Store JSON 都满足 Partner Center 的描述、短描述、功能、关键词、系统要求、许可与 HTTPS URL 限制，并要求两份可读文档逐段、逐功能包含结构化 JSON 的权威文案。负向样本证明超长功能、过多关键词及描述中的 URL 会被拒绝。该门禁验证文字材料，不替代截图、年龄分级、正式 Identity 或认证。
 

@@ -159,7 +159,7 @@ try {
         }
     }
 
-    $requiredExtensions = @('.zip', '.7z', '.rar', '.tar', '.gz', '.tgz', '.zst', '.xz', '.bz2', '.lz4', '.br')
+    $requiredExtensions = @('.zip', '.7z', '.rar', '.cab', '.tar', '.gz', '.tgz', '.zst', '.xz', '.bz2', '.lz4', '.br')
     $declaredExtensions = @(
         $manifest.SelectNodes('//uap:FileTypeAssociation/uap:SupportedFileTypes/uap:FileType', $namespace) |
             ForEach-Object { $_.InnerText }

@@ -363,6 +363,7 @@ mod tests {
         assert!(matrix.contains("gzip\tyes\tyes\tyes\tsingle-file\tno\tAlpha"));
         assert!(matrix.contains("ZIP\tyes\tyes\tyes\tfiles-or-directories\tyes\tAlpha"));
         assert!(matrix.contains("RAR\tyes\tyes\tno\tnone\tyes\tBeta"));
+        assert!(matrix.contains("CAB\tyes\tyes\tno\tnone\tno\tBeta"));
     }
 
     #[test]

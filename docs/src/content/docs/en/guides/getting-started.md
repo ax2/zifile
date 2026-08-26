@@ -8,7 +8,7 @@ ZiFile is still an Alpha candidate and has not shipped through Microsoft Store o
 ## Open and inspect an archive
 
 1. Start ZiFile and choose **Open archive**, or press `Ctrl+O`.
-2. Select a ZIP, 7z, RAR, TAR, or supported compression stream. A known archive can also be dropped onto the window.
+2. Select a ZIP, 7z, RAR, CAB, TAR, or supported compression stream. A known archive can also be dropped onto the window.
 3. Filter paths with search. Large archives are displayed in bounded pages of 500 rows.
 4. Run an integrity test before extraction when appropriate. If a 7z or RAR archive also encrypts its file list, the first failure retains the selected file and presents a password retry view. Passwords are never stored in settings and are cleared before another archive is opened.
 
@@ -26,7 +26,7 @@ Work runs in an isolated Worker. Pressing `Escape` or choosing **Cancel** reques
 2. Add files or folders, or drop sources onto the window.
 3. Choose a format, compression level, optional password, and output path.
 
-ZIP, 7z, and TAR compositions accept multiple files and folders. gzip, Zstandard, XZ, Bzip2, LZ4, and Brotli are single-file streams and require exactly one existing file; use the matching TAR composition for a directory. RAR is read-only and cannot be created.
+ZIP, 7z, and TAR compositions accept multiple files and folders. gzip, Zstandard, XZ, Bzip2, LZ4, and Brotli are single-file streams and require exactly one existing file; use the matching TAR composition for a directory. RAR and CAB are read-only and cannot be created.
 
 ## Queue and settings
 

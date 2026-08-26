@@ -40,6 +40,7 @@ xz2 = { version = "0.1.7", features = ["static"] }
 bzip2 = "0.6.1"
 lz4_flex = "0.14.0"
 brotli = "8.0.4"
+cab = "0.6.0"
 walkdir = "2.5.0"
 tempfile = "3.27.0"
 winresource = "0.1.31"

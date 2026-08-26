@@ -27,6 +27,7 @@ $sharedTokens = @(
     '32',
     '--password-stdin',
     'RAR',
+    'CAB',
     'Worker',
     'Microsoft Store',
     'WinGet',

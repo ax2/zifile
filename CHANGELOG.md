@@ -74,6 +74,8 @@ All notable changes to ZiFile are documented here. The format follows
   active cancellation, pending-work clearing, and non-persistent sensitive payloads.
 - A pure-Rust read-only RAR 1.3–7 beta provider with encrypted headers, solid archives,
   selected extraction, resource limits, cancellation, and link/redirection rejection.
+- A pure-Rust read-only Windows CAB beta provider with signature detection, browsing,
+  integrity testing, selective safe extraction, cancellation, and resource limits.
 - A Rust Windows 11 `IExplorerCommand` extension and shared `--create` startup protocol,
   packaged behind trusted-install and Explorer-activation release gates.
 - Store listing, privacy, screenshot-import, WACK-readiness, signed-package lifecycle,

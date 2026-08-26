@@ -8,7 +8,7 @@ The repository-root [`ROADMAP.md`](https://github.com/ax2/zifile/blob/main/ROADM
 | Stage | Goal | Key delivery |
 | --- | --- | --- |
 | Stage 0 | Validate the foundation | Rust workspace, Iced, CI, Starlight, ADRs, and bounded 100,000-entry list validation |
-| Stage 1 (active) | Alpha | ZIP/7z/TAR families and beta read-only RAR 1.3–7, safe extraction, bilingual UI, search and paging, progress, cancellation, all-format parser fuzzing, and cloud 7-Zip/RAR reference corpora are implemented; malformed/bomb campaigns continue |
+| Stage 1 (active) | Alpha | ZIP/7z/TAR families plus beta read-only RAR 1.3–7 and Windows CAB, safe extraction, bilingual UI, search and paging, progress, cancellation, all-format parser fuzzing, and 7-Zip/RAR/CAB reference corpora are implemented; malformed/bomb campaigns continue |
 | Stage 2 | Beta | Associations, taskbar progress, App Execution Alias, isolated Worker, dual-architecture packages, and 100,000-entry browse/cancel baselines are implemented; signed install/upgrade and Explorer commands remain |
 | Stage 3 | RC | The Dioxus/WebView2 semantic candidate covers the main Worker flows, CSP, core shortcuts, bilingual navigation/create-form keyboard regression, dual-architecture candidate packages, bilingual docs, machine-validated Store copy, atomic screenshot import, WACK readiness, and a protected PFX-free cloud-signing/post-signing audit path; visible focus, Narrator, Accessibility Insights, physical ARM64, real signing, formal screenshots, WinGet, and Store gates remain |
 | Stage 4 | 1.0 | Freeze APIs, finish documentation, and publish through all three channels |

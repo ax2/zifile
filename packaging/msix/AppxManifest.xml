@@ -42,6 +42,7 @@
               <uap:FileType>.zip</uap:FileType>
               <uap:FileType>.7z</uap:FileType>
               <uap:FileType>.rar</uap:FileType>
+              <uap:FileType>.cab</uap:FileType>
               <uap:FileType>.tar</uap:FileType>
               <uap:FileType>.gz</uap:FileType>
               <uap:FileType>.tgz</uap:FileType>

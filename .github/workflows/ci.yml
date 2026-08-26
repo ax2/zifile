@@ -66,7 +66,14 @@ jobs:
         shell: pwsh
         run: |
           ./tests/interoperability/windows-tools.ps1 -SkipBuild
+          ./tests/interoperability/cab-windows.ps1 -SkipBuild
           ./tests/interoperability/sevenzip-corpus.ps1 -SkipBuild
+      - name: Upload CAB interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: cab-interoperability
+          path: target/cab-interoperability.json
+          retention-days: 30
       - name: Upload 7-Zip interoperability evidence
         uses: actions/upload-artifact@v6
         with:

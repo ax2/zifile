@@ -40,11 +40,12 @@ pub enum ArchiveFormat {
     Lz4,
     Brotli,
     Rar,
+    Cab,
 }
 
 impl ArchiveFormat {
     /// Stable display order used by both CLI and desktop UI.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Zip,
         Self::SevenZip,
         Self::Tar,
@@ -59,11 +60,13 @@ impl ArchiveFormat {
         Self::Lz4,
         Self::Brotli,
         Self::Rar,
+        Self::Cab,
     ];
 
     pub const fn capabilities(self) -> FormatCapabilities {
         match self {
             Self::Rar => FormatCapabilities::read_only(true, ReleaseStage::Beta),
+            Self::Cab => FormatCapabilities::read_only(false, ReleaseStage::Beta),
             Self::SevenZip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
             Self::Zip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
             Self::Tar | Self::TarGzip | Self::TarZstd | Self::TarXz | Self::TarBzip2 => {
@@ -78,7 +81,7 @@ impl ArchiveFormat {
     /// Source shape accepted when creating this format.
     pub const fn create_input(self) -> Option<CreateInputKind> {
         match self {
-            Self::Rar => None,
+            Self::Rar | Self::Cab => None,
             Self::Gzip | Self::Zstandard | Self::Xz | Self::Bzip2 | Self::Lz4 | Self::Brotli => {
                 Some(CreateInputKind::SingleFile)
             }
@@ -108,6 +111,7 @@ impl ArchiveFormat {
             Self::Lz4 => "lz4",
             Self::Brotli => "br",
             Self::Rar => "rar",
+            Self::Cab => "cab",
         }
     }
 }
@@ -136,6 +140,7 @@ impl fmt::Display for ArchiveFormat {
             Self::Lz4 => "LZ4",
             Self::Brotli => "Brotli",
             Self::Rar => "RAR",
+            Self::Cab => "CAB",
         })
     }
 }
@@ -269,6 +274,8 @@ pub fn detect_format(path: impl AsRef<Path>) -> ZiFileResult<ArchiveFormat> {
         Some(ArchiveFormat::SevenZip)
     } else if bytes.starts_with(b"Rar!\x1A\x07") || bytes.starts_with(b"RE~^") {
         Some(ArchiveFormat::Rar)
+    } else if bytes.starts_with(b"MSCF") {
+        Some(ArchiveFormat::Cab)
     } else if bytes.starts_with(b"\x1F\x8B") {
         Some(if extension_hint == Some(ArchiveFormat::TarGzip) {
             ArchiveFormat::TarGzip
@@ -346,6 +353,7 @@ pub fn detect_format_from_path(path: impl AsRef<Path>) -> Option<ArchiveFormat> 
         "lz4" => Some(ArchiveFormat::Lz4),
         "br" => Some(ArchiveFormat::Brotli),
         "rar" | "cbr" => Some(ArchiveFormat::Rar),
+        "cab" => Some(ArchiveFormat::Cab),
         _ => None,
     }
 }
@@ -376,6 +384,10 @@ mod tests {
             detect_format_from_path("comic.cb7"),
             Some(ArchiveFormat::SevenZip)
         );
+        assert_eq!(
+            detect_format_from_path("driver.CAB"),
+            Some(ArchiveFormat::Cab)
+        );
     }
 
     #[test]
@@ -391,6 +403,16 @@ mod tests {
         assert!(capabilities.extract);
         assert!(!capabilities.create);
         assert!(capabilities.encryption);
+        assert_eq!(capabilities.stage, ReleaseStage::Beta);
+    }
+
+    #[test]
+    fn cab_is_unencrypted_read_only_beta() {
+        let capabilities = ArchiveFormat::Cab.capabilities();
+        assert!(capabilities.list);
+        assert!(capabilities.extract);
+        assert!(!capabilities.create);
+        assert!(!capabilities.encryption);
         assert_eq!(capabilities.stage, ReleaseStage::Beta);
     }
 
@@ -421,6 +443,7 @@ mod tests {
             assert_eq!(format.create_input(), Some(CreateInputKind::SingleFile));
         }
         assert_eq!(ArchiveFormat::Rar.create_input(), None);
+        assert_eq!(ArchiveFormat::Cab.create_input(), None);
     }
 
     #[test]
