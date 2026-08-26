@@ -1,4 +1,8 @@
 #![cfg(target_os = "windows")]
+#![cfg_attr(
+    not(test),
+    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+)]
 
 use std::ffi::c_void;
 use std::os::windows::ffi::OsStrExt;

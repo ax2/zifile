@@ -1,3 +1,8 @@
+#![cfg_attr(
+    not(test),
+    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+)]
+
 use std::collections::HashSet;
 use std::fmt;
 use std::path::{Path, PathBuf};

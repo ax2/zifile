@@ -1,3 +1,8 @@
+#![cfg_attr(
+    not(test),
+    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+)]
+
 //! Core domain model for ZiFile.
 //!
 //! This crate deliberately contains no UI or platform code. Archive backends
