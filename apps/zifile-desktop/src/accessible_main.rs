@@ -85,6 +85,7 @@ struct QueuedOperation {
     kind: OperationKind,
     request: WorkerRequest,
     status: String,
+    archive_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,6 +105,7 @@ enum StatusKind {
 struct UiState {
     page: Page,
     archive: Option<ArchiveInfo>,
+    pending_archive: Option<PathBuf>,
     selected: HashSet<PathBuf>,
     entry_filter: String,
     entry_page: usize,
@@ -130,6 +132,7 @@ impl Default for UiState {
         Self {
             page: Page::Home,
             archive: None,
+            pending_archive: None,
             selected: HashSet::new(),
             entry_filter: String::new(),
             entry_page: 0,
@@ -305,8 +308,30 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
     let view = state.read().clone();
     let locale = view.locale;
     let Some(archive) = view.archive.clone() else {
-        return rsx! { section { class: "empty-state", h2 { {locale.text(Text::NoArchive)} } p { {locale.text(Text::NoArchiveDescription)} }
-        button { class: "primary", onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} } } };
+        let pending = view.pending_archive.clone();
+        let heading = pending
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .map_or_else(
+                || locale.text(Text::NoArchive).to_owned(),
+                |name| name.to_string_lossy().into_owned(),
+            );
+        let description = if pending.is_some() {
+            locale.text(Text::EncryptedArchiveDescription)
+        } else {
+            locale.text(Text::NoArchiveDescription)
+        };
+        return rsx! { section { class: "empty-state", "aria-labelledby": "pending-archive-title",
+            h2 { id: "pending-archive-title", {heading} }
+            p { {description} }
+            label { span { {locale.text(Text::PasswordEncrypted)} }
+                input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() }
+            }
+            div { class: "button-row",
+                button { class: "primary", disabled: pending.is_none() || view.busy, onclick: move |_| reload_archive(state), {locale.text(Text::UnlockArchive)} }
+                button { onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} }
+            }
+        } };
     };
     let count = filtered_entry_count(&archive, &view.entry_filter);
     let last_page = count.saturating_sub(1) / ENTRIES_PER_PAGE;
@@ -448,9 +473,10 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
     } }
 }
 
-fn open_archive_dialog(state: Signal<UiState>) {
+fn open_archive_dialog(mut state: Signal<UiState>) {
     let locale = state.read().locale;
     if let Some(path) = archive_dialog(locale).pick_file() {
+        state.write().password.clear();
         begin_load(state, path);
     }
 }
@@ -489,6 +515,7 @@ fn handle_dropped_paths(mut state: Signal<UiState>, paths: Vec<PathBuf>) {
         && paths[0].is_file()
         && detect_format_from_path(&paths[0]).is_some_and(|format| format.capabilities().list)
     {
+        state.write().password.clear();
         begin_load(state, paths.into_iter().next().expect("one dropped path"));
         return;
     }
@@ -504,7 +531,11 @@ fn handle_dropped_paths(mut state: Signal<UiState>, paths: Vec<PathBuf>) {
 fn reload_archive(state: Signal<UiState>) {
     let path = {
         let value = state.read();
-        value.archive.as_ref().map(|archive| archive.path.clone())
+        value
+            .archive
+            .as_ref()
+            .map(|archive| archive.path.clone())
+            .or_else(|| value.pending_archive.clone())
     };
     if let Some(path) = path {
         begin_load(state, path);
@@ -718,10 +749,15 @@ fn launch_worker(
     kind: OperationKind,
     status: String,
 ) {
+    let archive_path = match &request {
+        WorkerRequest::List { archive, .. } => Some(archive.clone()),
+        _ => None,
+    };
     let operation = QueuedOperation {
         kind,
         request,
         status,
+        archive_path,
     };
     let operations = state.read().operations.clone();
     let submission = operations
@@ -757,11 +793,18 @@ fn start_worker(mut state: Signal<UiState>, job: Job<QueuedOperation>) {
         kind,
         request,
         status,
+        archive_path,
     } = payload;
     let progress = OperationProgress::default();
     let cancellation = CancellationToken::default();
     {
         let mut value = state.write();
+        if let Some(path) = archive_path {
+            value.archive = None;
+            value.pending_archive = Some(path);
+            value.selected.clear();
+            value.page = Page::Archive;
+        }
         value.busy = true;
         value.set_status(status);
         value.progress = Some(progress.clone());
@@ -807,6 +850,7 @@ fn finish_worker(
                 .collect();
             let mut value = state.write();
             value.archive = Some(archive);
+            value.pending_archive = None;
             value.selected = selected;
             value.entry_filter.clear();
             value.entry_page = 0;
