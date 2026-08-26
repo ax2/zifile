@@ -94,6 +94,8 @@ label > span { display: block; margin-bottom: 6px; color: var(--muted); font-siz
 table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
 th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.sort-header { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; }
+.sort-header:hover { background: transparent; color: var(--accent); }
 .path-cell { width: 100%; max-width: 520px; overflow: hidden; text-overflow: ellipsis; }
 .empty-filter { margin: 0; padding: 24px; color: var(--muted); text-align: center; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 14px; }

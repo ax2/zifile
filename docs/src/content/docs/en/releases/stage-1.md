@@ -49,6 +49,14 @@ The same batch expands the permanent malformed-header regression from ZIP, 7z, T
 
 CAB also gains a decode-stage corruption regression: metadata remains listable while the first compressed CFDATA byte is flipped. Integrity testing and extraction must fail, the atomic temporary file must not commit, and the destination remains empty. This moves fixed coverage beyond header parsing into actual compressed payload and persistence boundaries.
 
+## 2026-08-26 — Modification-time preservation and browsing
+
+ZIP creation now records source file and directory modification times. Safe extraction restores available modification times after atomic file commit for ZIP, 7z, all five TAR compositions, RAR, and CAB; directory times are deferred and applied deepest-first after children so later writes cannot overwrite parent metadata. Round trips cover two files and nested directories, while fixed RAR 5 and CAB fixtures prove the read-only providers restore independently authored timestamps.
+
+Archive listings expose a structured optional timestamp with calendar components, precision, and either UTC or unspecified-offset semantics. The Worker JSON field defaults when absent and is omitted when unknown, preserving protocol-v1 compatibility. Both Iced and Dioxus archive tables show a bilingual Modified column: Unix/NT times are marked UTC, while legacy ZIP/RAR/CAB DOS times explicitly show `no TZ` instead of inventing an offset. Traditional DOS fields remain limited to two-second precision and do not prove the creator's original time zone.
+
+The same shared 100,000-entry view model now sorts by name, original size, packed size, or modified time in either direction. Directories stay first, missing timestamps stay last, ties use a stable path order, and sorting resets to the first page while rendering remains capped at 500 rows. Dioxus table headers are native buttons with `aria-sort`; both UIs show an arrow on the active column. A full 100,000-entry descending-name sort plus bounded-page collection measured 13.96–15.32 ms on the local Windows x64 baseline.
+
 ## 2026-08-24 — Parser-boundary hardening
 
 Extraction originally listed with global defaults before applying caller limits, so strict caller entry/depth limits did not constrain early parser work. Limit-aware list/test APIs now apply extraction limits before destination creation. Integration tests cover strict ZIP/7z/TAR limits and malformed ZIP/7z/tar/tgz inputs.

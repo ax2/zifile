@@ -20,11 +20,14 @@ use zifile_core::{
 };
 use zifile_worker_protocol::WorkerRequest;
 
-use i18n::{Locale, Text};
+use i18n::{Locale, Text, format_archive_modified};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
-use zifile_desktop::entry_view::{ENTRIES_PER_PAGE, filtered_entry_count, filtered_entry_page};
+use zifile_desktop::entry_view::{
+    ENTRIES_PER_PAGE, EntrySort, SortDirection, filtered_entry_count, next_sort,
+    sorted_filtered_entry_page,
+};
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 
@@ -83,6 +86,8 @@ struct ZiFile {
     selected: HashSet<PathBuf>,
     entry_filter: String,
     entry_page: usize,
+    entry_sort: EntrySort,
+    entry_sort_direction: SortDirection,
     password: String,
     conflict: ConflictChoice,
     create_sources: Vec<PathBuf>,
@@ -108,6 +113,8 @@ impl Default for ZiFile {
             selected: HashSet::new(),
             entry_filter: String::new(),
             entry_page: 0,
+            entry_sort: EntrySort::default(),
+            entry_sort_direction: SortDirection::default(),
             password: String::new(),
             conflict: ConflictChoice::Rename,
             create_sources: Vec::new(),
@@ -137,6 +144,7 @@ enum Message {
     ToggleEntry(PathBuf, bool),
     SelectAll(bool),
     EntryFilterChanged(String),
+    SortEntries(EntrySort),
     PreviousEntryPage,
     NextEntryPage,
     ConflictChanged(ConflictChoice),
@@ -282,6 +290,8 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                         .collect();
                     state.entry_filter.clear();
                     state.entry_page = 0;
+                    state.entry_sort = EntrySort::Name;
+                    state.entry_sort_direction = SortDirection::Ascending;
                     state.status = if state.locale == Locale::ZhCn {
                         format!(
                             "已打开 {} 个项目 · 展开后 {}",
@@ -340,6 +350,11 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::EntryFilterChanged(filter) => {
             state.entry_filter = filter;
+            state.entry_page = 0;
+        }
+        Message::SortEntries(sort) => {
+            (state.entry_sort, state.entry_sort_direction) =
+                next_sort(state.entry_sort, state.entry_sort_direction, sort);
             state.entry_page = 0;
         }
         Message::PreviousEntryPage => {
@@ -946,6 +961,22 @@ fn home_view(state: &ZiFile) -> Element<'_, Message> {
     .into()
 }
 
+fn sort_header_label(
+    label: &str,
+    column: EntrySort,
+    active: EntrySort,
+    direction: SortDirection,
+) -> String {
+    if column != active {
+        return label.to_owned();
+    }
+    let arrow = match direction {
+        SortDirection::Ascending => "↑",
+        SortDirection::Descending => "↓",
+    };
+    format!("{label} {arrow}")
+}
+
 fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     let Some(archive) = &state.archive else {
         let pending = state.pending_archive.as_ref();
@@ -1087,16 +1118,55 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     let mut entries = column![
         row![
             text(" ").width(34),
-            text(state.locale.text(Text::Name)).width(Fill),
-            text(state.locale.text(Text::Original)).width(110),
-            text(state.locale.text(Text::Packed)).width(110),
+            button(text(sort_header_label(
+                state.locale.text(Text::Name),
+                EntrySort::Name,
+                state.entry_sort,
+                state.entry_sort_direction,
+            )))
+            .style(button::text)
+            .on_press(Message::SortEntries(EntrySort::Name))
+            .width(Fill),
+            button(text(sort_header_label(
+                state.locale.text(Text::Original),
+                EntrySort::Size,
+                state.entry_sort,
+                state.entry_sort_direction,
+            )))
+            .style(button::text)
+            .on_press(Message::SortEntries(EntrySort::Size))
+            .width(110),
+            button(text(sort_header_label(
+                state.locale.text(Text::Packed),
+                EntrySort::Packed,
+                state.entry_sort,
+                state.entry_sort_direction,
+            )))
+            .style(button::text)
+            .on_press(Message::SortEntries(EntrySort::Packed))
+            .width(110),
+            button(text(sort_header_label(
+                state.locale.text(Text::Modified),
+                EntrySort::Modified,
+                state.entry_sort,
+                state.entry_sort_direction,
+            )))
+            .style(button::text)
+            .on_press(Message::SortEntries(EntrySort::Modified))
+            .width(220),
             text(state.locale.text(Text::Flags)).width(90),
         ]
         .spacing(10),
         rule::horizontal(1),
     ]
     .spacing(4);
-    for entry in filtered_entry_page(archive, &state.entry_filter, current_page) {
+    for entry in sorted_filtered_entry_page(
+        archive,
+        &state.entry_filter,
+        current_page,
+        state.entry_sort,
+        state.entry_sort_direction,
+    ) {
         let path = entry.path.clone();
         let selected = state.selected.contains(&path);
         entries = entries.push(
@@ -1116,6 +1186,11 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                 .width(Fill),
                 text(format_bytes(entry.size)).width(110),
                 text(format_bytes(entry.compressed_size)).width(110),
+                text(format_archive_modified(
+                    state.locale,
+                    entry.modified.as_ref()
+                ))
+                .width(220),
                 text(if entry.encrypted {
                     state.locale.text(Text::Locked)
                 } else {
@@ -1372,6 +1447,7 @@ mod tests {
                 compressed_size: 1,
                 is_directory: false,
                 encrypted: false,
+                modified: None,
             })
             .collect();
         let archive = ArchiveInfo {
@@ -1382,7 +1458,36 @@ mod tests {
             compressed_size: 100_000,
         };
         assert_eq!(filtered_entry_count(&archive, "file-09"), 10_000);
-        let rendered = filtered_entry_page(&archive, "file-09", 0).len();
+        let rendered = sorted_filtered_entry_page(
+            &archive,
+            "file-09",
+            0,
+            EntrySort::Name,
+            SortDirection::Ascending,
+        )
+        .len();
         assert_eq!(rendered, ENTRIES_PER_PAGE);
+    }
+
+    #[test]
+    fn sort_header_identifies_the_active_direction() {
+        assert_eq!(
+            sort_header_label(
+                "Modified",
+                EntrySort::Modified,
+                EntrySort::Modified,
+                SortDirection::Descending,
+            ),
+            "Modified ↓"
+        );
+        assert_eq!(
+            sort_header_label(
+                "Packed",
+                EntrySort::Packed,
+                EntrySort::Name,
+                SortDirection::Ascending,
+            ),
+            "Packed"
+        );
     }
 }

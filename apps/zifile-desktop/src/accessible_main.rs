@@ -20,11 +20,14 @@ mod settings;
 mod taskbar;
 mod worker_client;
 
-use i18n::{Locale, Text};
+use i18n::{Locale, Text, format_archive_modified};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
-use zifile_desktop::entry_view::{ENTRIES_PER_PAGE, filtered_entry_count, filtered_entry_page};
+use zifile_desktop::entry_view::{
+    ENTRIES_PER_PAGE, EntrySort, SortDirection, filtered_entry_count, next_sort,
+    sorted_filtered_entry_page,
+};
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 
@@ -109,6 +112,8 @@ struct UiState {
     selected: HashSet<PathBuf>,
     entry_filter: String,
     entry_page: usize,
+    entry_sort: EntrySort,
+    entry_sort_direction: SortDirection,
     password: String,
     conflict: ConflictPolicy,
     create_sources: Vec<PathBuf>,
@@ -136,6 +141,8 @@ impl Default for UiState {
             selected: HashSet::new(),
             entry_filter: String::new(),
             entry_page: 0,
+            entry_sort: EntrySort::default(),
+            entry_sort_direction: SortDirection::default(),
             password: String::new(),
             conflict: ConflictPolicy::Rename,
             create_sources: Vec::new(),
@@ -336,10 +343,16 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
     let count = filtered_entry_count(&archive, &view.entry_filter);
     let last_page = count.saturating_sub(1) / ENTRIES_PER_PAGE;
     let current_page = view.entry_page.min(last_page);
-    let rows = filtered_entry_page(&archive, &view.entry_filter, current_page)
-        .into_iter()
-        .cloned()
-        .collect::<Vec<_>>();
+    let rows = sorted_filtered_entry_page(
+        &archive,
+        &view.entry_filter,
+        current_page,
+        view.entry_sort,
+        view.entry_sort_direction,
+    )
+    .into_iter()
+    .cloned()
+    .collect::<Vec<_>>();
     let all_files = archive
         .entries
         .iter()
@@ -406,9 +419,14 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 caption { class: "sr-only", {choose(locale, "Archive entry details and selection", "压缩文件项目详情与选择")} }
                 thead { tr {
                     th { scope: "col", span { class: "sr-only", {choose(locale, "Select", "选择")} } }
-                    th { scope: "col", {locale.text(Text::Name)} }
-                    th { scope: "col", {locale.text(Text::Original)} }
-                    th { scope: "col", {locale.text(Text::Packed)} }
+                    th { scope: "col", "aria-sort": sort_aria(EntrySort::Name, view.entry_sort, view.entry_sort_direction),
+                        button { class: "sort-header", onclick: move |_| set_entry_sort(state, EntrySort::Name), {sort_header_label(locale.text(Text::Name), EntrySort::Name, view.entry_sort, view.entry_sort_direction)} } }
+                    th { scope: "col", "aria-sort": sort_aria(EntrySort::Size, view.entry_sort, view.entry_sort_direction),
+                        button { class: "sort-header", onclick: move |_| set_entry_sort(state, EntrySort::Size), {sort_header_label(locale.text(Text::Original), EntrySort::Size, view.entry_sort, view.entry_sort_direction)} } }
+                    th { scope: "col", "aria-sort": sort_aria(EntrySort::Packed, view.entry_sort, view.entry_sort_direction),
+                        button { class: "sort-header", onclick: move |_| set_entry_sort(state, EntrySort::Packed), {sort_header_label(locale.text(Text::Packed), EntrySort::Packed, view.entry_sort, view.entry_sort_direction)} } }
+                    th { scope: "col", "aria-sort": sort_aria(EntrySort::Modified, view.entry_sort, view.entry_sort_direction),
+                        button { class: "sort-header", onclick: move |_| set_entry_sort(state, EntrySort::Modified), {sort_header_label(locale.text(Text::Modified), EntrySort::Modified, view.entry_sort, view.entry_sort_direction)} } }
                     th { scope: "col", {locale.text(Text::Flags)} }
                 } }
                 tbody { for entry in rows { ArchiveRow { key: "{entry.path.display()}", state, entry, locale } } }
@@ -425,6 +443,39 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
     } }
 }
 
+fn set_entry_sort(mut state: Signal<UiState>, sort: EntrySort) {
+    let mut value = state.write();
+    (value.entry_sort, value.entry_sort_direction) =
+        next_sort(value.entry_sort, value.entry_sort_direction, sort);
+    value.entry_page = 0;
+}
+
+fn sort_aria(column: EntrySort, active: EntrySort, direction: SortDirection) -> &'static str {
+    if column != active {
+        return "none";
+    }
+    match direction {
+        SortDirection::Ascending => "ascending",
+        SortDirection::Descending => "descending",
+    }
+}
+
+fn sort_header_label(
+    label: &str,
+    column: EntrySort,
+    active: EntrySort,
+    direction: SortDirection,
+) -> String {
+    if column != active {
+        return label.to_owned();
+    }
+    let arrow = match direction {
+        SortDirection::Ascending => "↑",
+        SortDirection::Descending => "↓",
+    };
+    format!("{label} {arrow}")
+}
+
 #[component]
 fn ArchiveRow(mut state: Signal<UiState>, entry: ArchiveEntryInfo, locale: Locale) -> Element {
     let selected = state.read().selected.contains(&entry.path);
@@ -435,6 +486,7 @@ fn ArchiveRow(mut state: Signal<UiState>, entry: ArchiveEntryInfo, locale: Local
         td { input { r#type: "checkbox", checked: selected, disabled: entry.is_directory, "aria-label": selection_label,
             onchange: move |event| update_archive_selection(state, path.clone(), event.checked()) } }
         td { class: "path-cell", {path_display} } td { {format_bytes(entry.size)} } td { {format_bytes(entry.compressed_size)} }
+        td { {format_archive_modified(locale, entry.modified.as_ref())} }
         td { if entry.encrypted { {locale.text(Text::Locked)} } else if entry.is_directory { {choose(locale, "Folder", "文件夹")} } else { "—" } }
     } }
 }
@@ -854,6 +906,8 @@ fn finish_worker(
             value.selected = selected;
             value.entry_filter.clear();
             value.entry_page = 0;
+            value.entry_sort = EntrySort::Name;
+            value.entry_sort_direction = SortDirection::Ascending;
             value.page = Page::Archive;
             (status, StatusKind::Informational)
         }
@@ -1514,5 +1568,34 @@ mod tests {
         assert!(is_select_all_shortcut("A", true));
         assert!(!is_select_all_shortcut("a", false));
         assert!(!is_select_all_shortcut("o", true));
+    }
+
+    #[test]
+    fn sortable_headers_expose_accessible_direction() {
+        assert_eq!(
+            sort_aria(
+                EntrySort::Modified,
+                EntrySort::Modified,
+                SortDirection::Ascending,
+            ),
+            "ascending"
+        );
+        assert_eq!(
+            sort_aria(
+                EntrySort::Packed,
+                EntrySort::Modified,
+                SortDirection::Descending,
+            ),
+            "none"
+        );
+        assert_eq!(
+            sort_header_label(
+                "修改时间",
+                EntrySort::Modified,
+                EntrySort::Modified,
+                SortDirection::Descending,
+            ),
+            "修改时间 ↓"
+        );
     }
 }

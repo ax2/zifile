@@ -305,6 +305,7 @@ mod tests {
                     compressed_size: 2,
                     is_directory: false,
                     encrypted: false,
+                    modified: None,
                 },
             },
             WorkerEvent::ArchiveEnd,

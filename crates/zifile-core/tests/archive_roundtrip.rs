@@ -6,10 +6,10 @@ use std::time::UNIX_EPOCH;
 
 use tempfile::TempDir;
 use zifile_core::{
-    ArchiveFormat, CancellationToken, ConflictPolicy, CreateOptions, ExtractOptions, ListOptions,
-    OperationProgress, SafetyLimits, TestOptions, ZiFileError, create_archive, detect_format,
-    extract_archive, list_archive, list_archive_with_limits, list_archive_with_options,
-    test_archive, test_archive_with_limits, test_archive_with_options,
+    ArchiveFormat, ArchiveTimestampOffset, CancellationToken, ConflictPolicy, CreateOptions,
+    ExtractOptions, ListOptions, OperationProgress, SafetyLimits, TestOptions, ZiFileError,
+    create_archive, detect_format, extract_archive, list_archive, list_archive_with_limits,
+    list_archive_with_options, test_archive, test_archive_with_limits, test_archive_with_options,
 };
 
 fn fixture() -> (TempDir, PathBuf) {
@@ -38,6 +38,25 @@ fn assert_mtime(path: &Path, expected: u64) {
         .unwrap()
         .as_secs();
     assert_eq!(actual, expected, "unexpected mtime for {}", path.display());
+}
+
+fn assert_listed_mtime(path: &Path, entry_name: &str, offset: ArchiveTimestampOffset) {
+    let info = list_archive(path, None).unwrap();
+    let modified = info
+        .entries
+        .iter()
+        .find(|entry| entry.path.ends_with(entry_name))
+        .and_then(|entry| entry.modified)
+        .unwrap();
+    assert_eq!(
+        (modified.year, modified.month, modified.day),
+        (2023, 11, 14)
+    );
+    assert_eq!(
+        (modified.hour, modified.minute, modified.second),
+        (22, 13, 20)
+    );
+    assert_eq!(modified.offset, offset);
 }
 
 fn rar_fixture(path: &Path, password: Option<&str>) {
@@ -191,6 +210,7 @@ fn readonly_archives_restore_file_modified_times() {
         .unwrap();
     rar_builder.write_to_path(&rar, None).unwrap();
     let rar_output = temp.path().join("rar-dated");
+    assert_listed_mtime(&rar, "dated.txt", ArchiveTimestampOffset::Unspecified);
     extract_archive(&rar, &rar_output, &ExtractOptions::default()).unwrap();
     assert_mtime(&rar_output.join("dated.txt"), EXPECTED);
 
@@ -214,6 +234,7 @@ fn readonly_archives_restore_file_modified_times() {
         .unwrap();
     cab_writer.finish().unwrap();
     let cab_output = temp.path().join("cab-dated");
+    assert_listed_mtime(&cab, "dated.txt", ArchiveTimestampOffset::Unspecified);
     extract_archive(&cab, &cab_output, &ExtractOptions::default()).unwrap();
     assert_mtime(&cab_output.join("dated.txt"), EXPECTED);
 }
@@ -244,6 +265,12 @@ fn assert_round_trip(format: ArchiveFormat) {
             .iter()
             .any(|entry| entry.path.ends_with("hello.txt"))
     );
+    let timestamp_offset = if format == ArchiveFormat::Zip {
+        ArchiveTimestampOffset::Unspecified
+    } else {
+        ArchiveTimestampOffset::Utc
+    };
+    assert_listed_mtime(&archive, "hello.txt", timestamp_offset);
     assert_test_progress(&archive, None);
 
     let output = temp.path().join("output");

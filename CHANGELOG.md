@@ -27,6 +27,8 @@ All notable changes to ZiFile are documented here. The format follows
 - CLI archive commands and a modern Iced archive browser/creator with background work.
 - Desktop drag-and-drop opens known archives or adds files and folders as creation sources.
 - Determinate byte/entry progress, cooperative cancellation, and bounded list-time decoding.
+- Source modification-time preservation for ZIP creation and ZIP/7z/TAR/RAR/CAB extraction,
+  plus a timezone-honest Modified column in both desktop archive browsers.
 - Deterministic Windows assets, x64/ARM64 MSIX packaging and archive file associations.
 - Tag-driven checksums, CycloneDX SBOM, provenance and WinGet 1.12 manifest generation.
 - A release-blocking WinGet candidate verifier that enforces the community-repository
@@ -42,6 +44,8 @@ All notable changes to ZiFile are documented here. The format follows
 - Simplified Chinese and English desktop UI with system-locale detection and persisted
   language/theme preferences; passwords are never included in settings.
 - Archive-path search and bounded 500-row pagination, with a 100,000-entry regression test.
+- Sortable archive columns for name, original size, packed size, and modified time,
+  with folder-first ordering, accessible direction state, and bounded 500-row pages.
 - Desktop shortcuts for opening (`Ctrl+O`), creating (`Ctrl+N`), selecting all (`Ctrl+A`)
   and canceling an active operation (`Escape`).
 - Bidirectional 7z interoperability against Windows bsdtar/libarchive.

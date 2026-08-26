@@ -1,3 +1,5 @@
+use zifile_core::{ArchiveTimestamp, ArchiveTimestampOffset, ArchiveTimestampPrecision};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Locale {
     En,
@@ -81,6 +83,7 @@ impl Locale {
             Text::Name => ("Name", "名称"),
             Text::Original => ("Original", "原始大小"),
             Text::Packed => ("Packed", "压缩大小"),
+            Text::Modified => ("Modified", "修改时间"),
             Text::Flags => ("Flags", "标记"),
             Text::Locked => ("Locked", "已加密"),
             Text::Search => ("Search paths", "搜索路径"),
@@ -137,6 +140,30 @@ impl Locale {
     }
 }
 
+pub fn format_archive_modified(locale: Locale, value: Option<&ArchiveTimestamp>) -> String {
+    let Some(value) = value else {
+        return "—".to_owned();
+    };
+    let mut formatted = format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        value.year, value.month, value.day, value.hour, value.minute, value.second
+    );
+    if value.precision == ArchiveTimestampPrecision::Subsecond && value.nanosecond != 0 {
+        let fraction = format!("{:09}", value.nanosecond);
+        formatted.push('.');
+        formatted.push_str(fraction.trim_end_matches('0'));
+    }
+    match value.offset {
+        ArchiveTimestampOffset::Utc => formatted.push_str(" UTC"),
+        ArchiveTimestampOffset::Unspecified => formatted.push_str(if locale == Locale::ZhCn {
+            " · 无时区"
+        } else {
+            " · no TZ"
+        }),
+    }
+    formatted
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Text {
     ArchiveStudio,
@@ -171,6 +198,7 @@ pub enum Text {
     Name,
     Original,
     Packed,
+    Modified,
     Flags,
     Locked,
     Search,
@@ -216,5 +244,26 @@ mod tests {
         assert_eq!(Locale::ZhCn.text(Text::Home), "首页");
         assert!(Locale::ZhCn.text(Text::PrivacyDescription).contains("本机"));
         assert_eq!(Locale::ZhCn.toggle(), Locale::En);
+    }
+
+    #[test]
+    fn archive_modified_time_exposes_timezone_semantics() {
+        let value = ArchiveTimestamp {
+            year: 2023,
+            month: 11,
+            day: 14,
+            hour: 22,
+            minute: 13,
+            second: 20,
+            nanosecond: 0,
+            offset: ArchiveTimestampOffset::Unspecified,
+            precision: ArchiveTimestampPrecision::TwoSeconds,
+        };
+        assert_eq!(
+            format_archive_modified(Locale::En, Some(&value)),
+            "2023-11-14 22:13:20 · no TZ"
+        );
+        assert!(format_archive_modified(Locale::ZhCn, Some(&value)).ends_with("无时区"));
+        assert_eq!(format_archive_modified(Locale::En, None), "—");
     }
 }

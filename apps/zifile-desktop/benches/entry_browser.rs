@@ -3,7 +3,9 @@ use std::path::PathBuf;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use zifile_core::{ArchiveEntryInfo, ArchiveFormat, ArchiveInfo};
-use zifile_desktop::entry_view::{filtered_entry_count, filtered_entry_page};
+use zifile_desktop::entry_view::{
+    EntrySort, SortDirection, filtered_entry_count, filtered_entry_page, sorted_filtered_entry_page,
+};
 
 fn archive_with_100k_entries() -> ArchiveInfo {
     ArchiveInfo {
@@ -16,6 +18,7 @@ fn archive_with_100k_entries() -> ArchiveInfo {
                 compressed_size: 1,
                 is_directory: false,
                 encrypted: false,
+                modified: None,
             })
             .collect(),
         total_size: 100_000,
@@ -38,6 +41,20 @@ fn entry_browser(criterion: &mut Criterion) {
         bencher.iter(|| {
             let page = filtered_entry_page(black_box(&archive), black_box("file-09"), 4);
             assert_eq!(page.len(), 500);
+            black_box(page);
+        });
+    });
+    group.bench_function("sort all name descending bounded page", |bencher| {
+        bencher.iter(|| {
+            let page = sorted_filtered_entry_page(
+                black_box(&archive),
+                black_box(""),
+                0,
+                EntrySort::Name,
+                SortDirection::Descending,
+            );
+            assert_eq!(page.len(), 500);
+            assert!(page[0].path.ends_with("file-099999.txt"));
             black_box(page);
         });
     });

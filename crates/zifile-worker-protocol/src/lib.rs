@@ -93,4 +93,33 @@ mod tests {
         });
         assert_eq!(envelope.version, PROTOCOL_VERSION);
     }
+
+    #[test]
+    fn archive_entry_modified_time_is_backward_compatible() {
+        let legacy = r#"{
+            "version": 1,
+            "payload": {
+                "event": "archive_entry",
+                "entry": {
+                    "path": "legacy.txt",
+                    "size": 1,
+                    "compressed_size": 1,
+                    "is_directory": false,
+                    "encrypted": false
+                }
+            }
+        }"#;
+        let decoded: Envelope<WorkerEvent> = serde_json::from_str(legacy).unwrap();
+        let Envelope {
+            payload: WorkerEvent::ArchiveEntry { entry },
+            ..
+        } = decoded
+        else {
+            panic!("legacy event decoded as the wrong variant");
+        };
+        assert_eq!(entry.modified, None);
+        let encoded =
+            serde_json::to_string(&Envelope::new(WorkerEvent::ArchiveEntry { entry })).unwrap();
+        assert!(!encoded.contains("modified"));
+    }
 }

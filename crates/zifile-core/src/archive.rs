@@ -39,6 +39,36 @@ pub struct ArchiveEntryInfo {
     pub compressed_size: u64,
     pub is_directory: bool,
     pub encrypted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modified: Option<ArchiveTimestamp>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArchiveTimestampOffset {
+    Utc,
+    Unspecified,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArchiveTimestampPrecision {
+    TwoSeconds,
+    Second,
+    Subsecond,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ArchiveTimestamp {
+    pub year: u16,
+    pub month: u8,
+    pub day: u8,
+    pub hour: u8,
+    pub minute: u8,
+    pub second: u8,
+    pub nanosecond: u32,
+    pub offset: ArchiveTimestampOffset,
+    pub precision: ArchiveTimestampPrecision,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -528,6 +558,13 @@ fn list_cab(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<ArchiveEntry
                 compressed_size: 0,
                 is_directory: false,
                 encrypted: false,
+                modified: entry.datetime().map(|value| {
+                    timestamp_from_primitive(
+                        value,
+                        ArchiveTimestampOffset::Unspecified,
+                        ArchiveTimestampPrecision::TwoSeconds,
+                    )
+                }),
             });
             options.progress.advance_entry();
         }
@@ -672,6 +709,7 @@ fn list_rar(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<ArchiveEntry
             compressed_size: member.meta.packed_size,
             is_directory: member.meta.is_directory,
             encrypted: member.meta.is_encrypted,
+            modified: member.meta.file_time.and_then(rar_archive_timestamp),
         });
         options.progress.advance_entry();
     }
@@ -1059,6 +1097,7 @@ fn list_zip(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<ArchiveEntry
             compressed_size: entry.compressed_size(),
             is_directory: entry.is_dir(),
             encrypted: entry.encrypted(),
+            modified: entry.last_modified().map(timestamp_from_zip_datetime),
         });
         options.progress.advance_entry();
     }
@@ -1246,6 +1285,11 @@ fn list_tar(
             compressed_size: 0,
             is_directory: entry_type.is_dir(),
             encrypted: false,
+            modified: entry
+                .header()
+                .mtime()
+                .ok()
+                .and_then(timestamp_from_unix_seconds),
         });
         options.progress.advance_entry();
     }
@@ -1489,6 +1533,12 @@ fn list_seven_zip(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<Archiv
             compressed_size: entry.compressed_size,
             is_directory: entry.is_directory(),
             encrypted: methods.contains(&sevenz_rust2::EncoderMethod::AES256_SHA256),
+            modified: entry.has_last_modified_date.then(|| {
+                timestamp_from_system_time(
+                    SystemTime::from(entry.last_modified_date()),
+                    ArchiveTimestampPrecision::Subsecond,
+                )
+            }),
         });
         options.progress.advance_entry();
     }
@@ -1686,6 +1736,7 @@ fn list_stream(
         compressed_size,
         is_directory: false,
         encrypted: false,
+        modified: None,
     }])
 }
 
@@ -2034,6 +2085,71 @@ fn unique_path(path: &Path) -> PathBuf {
         }
     }
     parent.join(format!("{stem} (copy)"))
+}
+
+fn timestamp_from_primitive(
+    value: time::PrimitiveDateTime,
+    offset: ArchiveTimestampOffset,
+    precision: ArchiveTimestampPrecision,
+) -> ArchiveTimestamp {
+    ArchiveTimestamp {
+        year: value.year().try_into().unwrap_or_default(),
+        month: value.month() as u8,
+        day: value.day(),
+        hour: value.hour(),
+        minute: value.minute(),
+        second: value.second(),
+        nanosecond: value.nanosecond(),
+        offset,
+        precision,
+    }
+}
+
+fn timestamp_from_system_time(
+    value: SystemTime,
+    precision: ArchiveTimestampPrecision,
+) -> ArchiveTimestamp {
+    let value = time::OffsetDateTime::from(value);
+    timestamp_from_primitive(
+        time::PrimitiveDateTime::new(value.date(), value.time()),
+        ArchiveTimestampOffset::Utc,
+        precision,
+    )
+}
+
+fn timestamp_from_unix_seconds(value: u64) -> Option<ArchiveTimestamp> {
+    let value = i64::try_from(value).ok()?;
+    let value = time::OffsetDateTime::from_unix_timestamp(value).ok()?;
+    Some(timestamp_from_primitive(
+        time::PrimitiveDateTime::new(value.date(), value.time()),
+        ArchiveTimestampOffset::Utc,
+        ArchiveTimestampPrecision::Second,
+    ))
+}
+
+fn timestamp_from_zip_datetime(value: zip::DateTime) -> ArchiveTimestamp {
+    ArchiveTimestamp {
+        year: value.year(),
+        month: value.month(),
+        day: value.day(),
+        hour: value.hour(),
+        minute: value.minute(),
+        second: value.second(),
+        nanosecond: 0,
+        offset: ArchiveTimestampOffset::Unspecified,
+        precision: ArchiveTimestampPrecision::TwoSeconds,
+    }
+}
+
+fn rar_archive_timestamp(value: u32) -> Option<ArchiveTimestamp> {
+    if value == 0 {
+        return None;
+    }
+    let date = (value >> 16) as u16;
+    let time = value as u16;
+    zip::DateTime::try_from((date, time))
+        .ok()
+        .map(timestamp_from_zip_datetime)
 }
 
 fn primitive_datetime_to_system_time(value: time::PrimitiveDateTime) -> SystemTime {

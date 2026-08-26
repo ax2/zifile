@@ -16,9 +16,10 @@ mod archive;
 mod path_policy;
 
 pub use archive::{
-    ArchiveEntryInfo, ArchiveInfo, CancellationToken, ConflictPolicy, CreateOptions,
-    ExtractOptions, ListOptions, OperationProgress, OperationSummary, ProgressSnapshot,
-    TestOptions, create_archive, extract_archive, list_archive, list_archive_with_limits,
+    ArchiveEntryInfo, ArchiveInfo, ArchiveTimestamp, ArchiveTimestampOffset,
+    ArchiveTimestampPrecision, CancellationToken, ConflictPolicy, CreateOptions, ExtractOptions,
+    ListOptions, OperationProgress, OperationSummary, ProgressSnapshot, TestOptions,
+    create_archive, extract_archive, list_archive, list_archive_with_limits,
     list_archive_with_options, test_archive, test_archive_with_limits, test_archive_with_options,
 };
 pub use path_policy::safe_relative_path;
