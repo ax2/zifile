@@ -27,6 +27,12 @@ jobs:
           ./scripts/Test-SecurityDocs.ps1
           ./scripts/Test-UserDocs.ps1
           ./scripts/Test-ReleaseReadiness.ps1
+      - name: Packaging policy smoke test
+        shell: pwsh
+        run: ./tests/smoke/packaging-policy.ps1
+      - name: Official WinGet manifest validation
+        shell: pwsh
+        run: ./tests/smoke/winget-manifest.ps1
       - uses: dtolnay/rust-toolchain@1.93.0
         with:
           components: clippy,rustfmt
@@ -45,12 +51,6 @@ jobs:
       - name: Reproducibility diagnostics smoke test
         shell: pwsh
         run: ./tests/smoke/reproducibility-diagnostics.ps1
-      - name: Packaging policy smoke test
-        shell: pwsh
-        run: ./tests/smoke/packaging-policy.ps1
-      - name: Official WinGet manifest validation
-        shell: pwsh
-        run: ./tests/smoke/winget-manifest.ps1
       - name: WACK readiness policy
         shell: pwsh
         run: ./tests/smoke/wack-readiness.ps1
