@@ -47,6 +47,9 @@ jobs:
       - name: Packaging policy smoke test
         shell: pwsh
         run: ./tests/smoke/packaging-policy.ps1
+      - name: Official WinGet manifest validation
+        shell: pwsh
+        run: ./tests/smoke/winget-manifest.ps1
       - name: WACK readiness policy
         shell: pwsh
         run: ./tests/smoke/wack-readiness.ps1

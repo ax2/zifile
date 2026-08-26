@@ -11,6 +11,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 - SHA-256、CycloneDX JSON SBOM 和 GitHub 构建来源证明。
 - WinGet 1.12 多文件清单生成器，覆盖两个架构、文件关联和中英文元数据，并直接生成社区仓库要求的 `manifests/z/ZiCode/ZiFile/<version>/` 目录。
 - 标签发布在上传前运行 `Test-Manifests.ps1`，要求四个 schema 类型、正式 GitHub Release HTTPS URL、x64/ARM64 一一对应，并把两个清单 SHA-256 与签后本地 MSIX 精确比较；篡改或错误版本路径会使发布失败。
+- Windows CI 还会生成确定性候选并运行系统 `winget validate`，防止自有预检与官方 schema 漂移；该夹具不下载公开包，因此不能作为 Release URL 可用或仓库接受证据。
 - 真实 Release SHA-256 的候选清单已通过本机 `winget validate`；该结果不等于已提交或已获社区仓库接受。
 - 每个 MSIX 在构建后自动解包审计 Identity、Publisher、版本、最低系统版本、四枚 PE 架构（桌面、CLI、Worker 与 Explorer DLL）、主要文件关联、CLI alias、敏感文件和签名状态，并随包生成 `.audit.json`。
 - 标签发布固定进入 `production-signing` Environment，并且发布任务只消费通过签后门禁的 `signed-windows-*`；`.Dev` Identity、未签名 OID Publisher、缺失云签名输入或无效/无时间戳签名都会失败。

@@ -20,8 +20,9 @@ $signingOperationsDocs = Join-Path $repoRoot 'scripts\Test-SigningOperationsDocs
 $partnerCenterIdentity = Join-Path $repoRoot 'packaging\store\Test-PartnerCenterIdentity.ps1'
 $wingetGenerator = Join-Path $repoRoot 'packaging\winget\Generate-Manifests.ps1'
 $wingetVerifier = Join-Path $repoRoot 'packaging\winget\Test-Manifests.ps1'
+$wingetSmoke = Join-Path $repoRoot 'tests\smoke\winget-manifest.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $wingetGenerator, $wingetVerifier)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $wingetGenerator, $wingetVerifier, $wingetSmoke)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -601,6 +602,14 @@ if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-SecurityDocs.ps1')) {
 if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ReleaseReadiness.ps1')) {
     throw 'CI does not validate the 1.0 release readiness manifest.'
 }
+foreach ($requiredWingetCiToken in @(
+    'Official WinGet manifest validation',
+    './tests/smoke/winget-manifest.ps1'
+)) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredWingetCiToken)) {
+        throw "CI does not run official WinGet manifest validation: $requiredWingetCiToken"
+    }
+}
 $releaseWorkflowSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\release.yml')
 foreach ($requiredWingetToken in @(
     './packaging/winget/Generate-Manifests.ps1',
@@ -705,4 +714,5 @@ foreach ($requiredWackToken in @(
     winget_local_hashes_verified = $true
     winget_invalid_release_url_rejected = $true
     winget_release_gate_wired = $true
+    official_winget_ci_validation_wired = $true
 } | ConvertTo-Json
