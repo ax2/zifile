@@ -27,6 +27,8 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 
 ## 首次上架前的外部门禁
 
+这些项目同时记录在机器可读的 [`release/readiness.json`](https://github.com/ax2/zifile/blob/main/release/readiness.json) 和 [1.0 发布就绪状态](/zifile/releases/release-readiness/) 中；稳定标签要求全部有证据并标记为 `passed`。
+
 1. 在 Partner Center 注册 Windows 开发者账号并预留 `ZiFile` 名称。
 2. 将 Partner Center 分配的 Package Identity Name 与 Publisher 写入 GitHub Secrets。
 3. 准备可信代码签名证书用于 GitHub/WinGet；Store 分发包由 Microsoft Store 签名。

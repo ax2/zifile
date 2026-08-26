@@ -13,8 +13,9 @@ $versionConsistency = Join-Path $repoRoot 'scripts\Test-VersionConsistency.ps1'
 $releaseNotes = Join-Path $repoRoot 'scripts\Test-ReleaseNotes.ps1'
 $contributorDocs = Join-Path $repoRoot 'scripts\Test-ContributorDocs.ps1'
 $securityDocs = Join-Path $repoRoot 'scripts\Test-SecurityDocs.ps1'
+$releaseReadiness = Join-Path $repoRoot 'scripts\Test-ReleaseReadiness.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -101,6 +102,53 @@ if (-not $contributorResult.synchronized -or $contributorResult.locale_guides -n
 $securityResult = & $securityDocs | ConvertFrom-Json
 if (-not $securityResult.synchronized -or $securityResult.locale_pages -ne 2) {
     throw 'Security documentation is not synchronized with repository policy.'
+}
+$readinessResult = & $releaseReadiness | ConvertFrom-Json
+if ($readinessResult.gates -ne 11 -or
+    ($readinessResult.passed + $readinessResult.pending) -ne 11 -or
+    $readinessResult.stable_release_allowed -ne ($readinessResult.pending -eq 0)) {
+    throw 'The current 1.0 release readiness boundary is invalid.'
+}
+$readinessFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
+    'zifile-release-readiness-{0}.json' -f [Guid]::NewGuid().ToString('N')
+)))
+$pendingReadinessFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
+    'zifile-release-readiness-pending-{0}.json' -f [Guid]::NewGuid().ToString('N')
+)))
+if (-not $readinessFixture.StartsWith($temporaryBase, [System.StringComparison]::OrdinalIgnoreCase) -or
+    -not $pendingReadinessFixture.StartsWith($temporaryBase, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Refusing to create the release-readiness fixture outside the system temporary directory.'
+}
+try {
+    $readyManifest = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'release\readiness.json') |
+        ConvertFrom-Json
+    $readyManifest.overall_status = 'ready'
+    foreach ($gate in $readyManifest.gates) {
+        $gate.status = 'passed'
+        $gate.evidence = @("https://github.com/ax2/zifile/issues/$($gate.issue)#issuecomment-1")
+    }
+    $readyManifest | ConvertTo-Json -Depth 10 |
+        Set-Content -LiteralPath $readinessFixture -Encoding utf8NoBOM
+    $acceptedReadiness = & $releaseReadiness -ReadinessPath $readinessFixture -RequireReleaseReady |
+        ConvertFrom-Json
+    if (-not $acceptedReadiness.stable_release_allowed -or $acceptedReadiness.passed -ne 11) {
+        throw 'A complete evidenced release-readiness manifest was not accepted.'
+    }
+    $readyManifest.overall_status = 'candidate'
+    $readyManifest.gates[0].status = 'pending'
+    $readyManifest.gates[0].evidence = @()
+    $readyManifest | ConvertTo-Json -Depth 10 |
+        Set-Content -LiteralPath $pendingReadinessFixture -Encoding utf8NoBOM
+    $null = Get-ExpectedFailure -Pattern 'not release-ready' -Action {
+        & $releaseReadiness -ReadinessPath $pendingReadinessFixture -RequireReleaseReady
+    }
+}
+finally {
+    foreach ($fixture in @($readinessFixture, $pendingReadinessFixture)) {
+        if (Test-Path -LiteralPath $fixture) {
+            Remove-Item -LiteralPath $fixture -Force
+        }
+    }
 }
 $null = Get-ExpectedFailure -Pattern 'does not contain release heading' -Action {
     & $releaseNotes -ExpectedVersion $versionResult.tag
@@ -216,6 +264,10 @@ if ($releaseSource -notmatch [Regex]::Escape('Test-VersionConsistency.ps1 @argum
 if ($releaseSource -notmatch [Regex]::Escape('Test-ReleaseNotes.ps1 @arguments')) {
     throw 'The release workflow does not enforce versioned release notes.'
 }
+if ($releaseSource -notmatch [Regex]::Escape('Test-ReleaseReadiness.ps1 @readinessArguments') -or
+    $releaseSource -notmatch [Regex]::Escape('$readinessArguments.RequireReleaseReady = $true')) {
+    throw 'The release workflow does not reject unresolved gates for stable tags.'
+}
 if ($releaseSource -match [Regex]::Escape('${{ inputs.version }}')) {
     throw 'The release workflow still accepts a second mutable version source.'
 }
@@ -316,6 +368,9 @@ if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ContributorDocs.ps1')) {
 if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-SecurityDocs.ps1')) {
     throw 'CI does not enforce security documentation consistency.'
 }
+if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ReleaseReadiness.ps1')) {
+    throw 'CI does not validate the 1.0 release readiness manifest.'
+}
 foreach ($requiredRepairWorkflowToken in @(
     'MSIX Repair helper',
     'timeout-minutes: 2',
@@ -389,4 +444,7 @@ foreach ($requiredWackToken in @(
     release_notes_wired = $true
     contributor_docs_wired = $true
     security_docs_wired = $true
+    release_readiness_wired = $true
+    stable_release_pending_rejected = $true
+    complete_release_readiness_accepted = $true
 } | ConvertTo-Json

@@ -26,6 +26,8 @@ The trusted lifecycle workflow also builds a self-contained test helper pinned t
 
 ## External gates before first submission
 
+These items are also tracked in machine-readable [`release/readiness.json`](https://github.com/ax2/zifile/blob/main/release/readiness.json) and [1.0 release readiness](/zifile/en/releases/release-readiness/). A stable tag requires evidence and `passed` status for every gate.
+
 1. Register a Partner Center developer account and reserve `ZiFile`.
 2. Store the assigned Package Identity Name and Publisher in GitHub Secrets.
 3. Obtain trusted signing for GitHub/WinGet; Store distribution is signed by Microsoft.

@@ -30,6 +30,7 @@ Also run the narrowest relevant interoperability, performance, accessibility, or
 - User-visible copy stays synchronized in Simplified Chinese and English. Starlight pages use matching locale paths.
 - CLI, core-provider, and IPC changes follow [Public contracts and version policy](/zifile/en/development/contracts/).
 - Notable feature or process changes update `CHANGELOG.md`; cut a dated version section only when preparing its matching tag.
+- Completing or adding a 1.0 blocker updates `release/readiness.json`; keep it `pending` without an authoritative evidence URL.
 - New architecture decisions add an ADR under `docs/src/content/docs/architecture/`.
 
 ## Security and evidence

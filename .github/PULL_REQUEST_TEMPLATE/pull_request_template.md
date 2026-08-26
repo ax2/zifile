@@ -12,6 +12,7 @@ Describe the user-visible outcome, compatibility impact, and evidence boundary.
 - [ ] `pnpm --dir docs build`
 - [ ] Documentation updated for behavior changes
 - [ ] `CHANGELOG.md` updated for notable changes
+- [ ] `release/readiness.json` updated when a 1.0 blocker or its evidence changed
 - [ ] Both Rust desktop UIs considered for shared behavior changes
 - [ ] Security and license impact considered
 - [ ] No external certification or release claim exceeds the attached evidence
