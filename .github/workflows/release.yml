@@ -40,6 +40,11 @@ jobs:
           }
           $version = ./scripts/Test-VersionConsistency.ps1 @arguments | ConvertFrom-Json
           ./scripts/Test-ReleaseNotes.ps1 @arguments
+          $readinessArguments = @{}
+          if ('${{ github.event_name }}' -ne 'workflow_dispatch' -and '${{ github.ref_name }}' -notmatch '-') {
+            $readinessArguments.RequireReleaseReady = $true
+          }
+          ./scripts/Test-ReleaseReadiness.ps1 @readinessArguments
           "semver=$($version.version)" >> $env:GITHUB_OUTPUT
           "msix=$($version.msix_version)" >> $env:GITHUB_OUTPUT
       - name: Test workspace

@@ -30,6 +30,7 @@ pnpm --dir docs build
 - 文案与文档：用户可见内容同步简体中文和英文；Starlight 页面按相同路径成对维护。
 - 公开接口：CLI、核心 Provider 与 IPC 遵循[公开契约与版本策略](/zifile/development/contracts/)。
 - 发布材料：显著功能或流程变化更新 `CHANGELOG.md`；只有准备对应标签时才切出带日期的版本章节。
+- 发布门禁：完成或新增 1.0 阻塞项时更新 `release/readiness.json`；没有权威证据 URL 时必须保持 `pending`。
 - 架构：新决策在 `docs/src/content/docs/architecture/` 增加 ADR。
 
 ## 安全与证据

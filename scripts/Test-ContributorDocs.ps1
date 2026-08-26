@@ -32,12 +32,12 @@ $commands = @(
     './tests/smoke/packaging-policy.ps1',
     'pnpm --dir docs build'
 )
-$policyTokens = @('CHANGELOG.md', 'SECURITY.md', 'Iced', 'Dioxus', 'ZIP')
+$policyTokens = @('CHANGELOG.md', 'SECURITY.md', 'release/readiness.json', 'Iced', 'Dioxus', 'ZIP')
 
 Assert-Tokens -Path $contributingPath -Tokens ($commands + $policyTokens)
-Assert-Tokens -Path $pullRequestTemplatePath -Tokens ($commands + @('CHANGELOG.md'))
-Assert-Tokens -Path $chineseGuidePath -Tokens ($commands + @('CHANGELOG.md', 'SECURITY.md'))
-Assert-Tokens -Path $englishGuidePath -Tokens ($commands + @('CHANGELOG.md', 'SECURITY.md'))
+Assert-Tokens -Path $pullRequestTemplatePath -Tokens ($commands + @('CHANGELOG.md', 'release/readiness.json'))
+Assert-Tokens -Path $chineseGuidePath -Tokens ($commands + @('CHANGELOG.md', 'SECURITY.md', 'release/readiness.json'))
+Assert-Tokens -Path $englishGuidePath -Tokens ($commands + @('CHANGELOG.md', 'SECURITY.md', 'release/readiness.json'))
 Assert-Tokens -Path $readmePath -Tokens @('CONTRIBUTING.md')
 
 [ordered]@{

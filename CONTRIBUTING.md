@@ -44,6 +44,8 @@ their foreground-window protection.
 - Public CLI/provider/IPC changes must follow the documented compatibility policy.
 - Notable behavior and release-process changes update `CHANGELOG.md`; do not cut
   a versioned section until preparing the corresponding tag.
+- Changes that complete or add a 1.0 blocker update `release/readiness.json`;
+  never mark a gate passed without an authoritative evidence URL.
 - Architecture decisions require an ADR under `docs/src/content/docs/architecture/`.
 - Never commit passwords, tokens, private keys, signing files, cookies, customer
   archives, or other credentials. Follow [SECURITY.md](SECURITY.md) for vulnerabilities.

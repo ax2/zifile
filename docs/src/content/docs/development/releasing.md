@@ -35,6 +35,8 @@ Windows Release 使用仓库固定的 Rust 1.93.0、锁文件、单作业 Cargo 
 
 普通 CI 还会检查 `CHANGELOG.md` 只有一个 `[Unreleased]` 章节。标签发布必须先把本次内容整理为 `## [<workspace-version>] - YYYY-MM-DD`，至少包含一个 Keep a Changelog 分类和一条非占位更新；版本标题缺失、日期无效、空章节或残留 `TODO`/`TBD` 都会在构建前失败。手动 Release 只验证 `[Unreleased]` 结构，便于发布前演练。
 
+仓库以 [`release/readiness.json`](https://github.com/ax2/zifile/blob/main/release/readiness.json) 跟踪 1.0 的 11 项发布阻塞门禁。普通 CI 与预发布演练检查结构和证据格式；无连字符的稳定标签必须通过 `Test-ReleaseReadiness.ps1 -RequireReleaseReady`，任一 `pending` 项都会在构建前拒绝发布。当前状态为 `candidate`，详见 [1.0 发布就绪状态](/zifile/releases/release-readiness/)。
+
 手动验证模式还会构建 `-accessible` 后缀的 Dioxus/WebView2 候选 MSIX 与完整可运行目录，并将候选桌面程序以规范的 `zifile-desktop.exe` 名称放入包内。正式标签仍只发布当前默认 UI；候选通过 Narrator、Accessibility Insights、IME、DPI 和双架构运行验证后才允许替换默认发行物。
 
 ## 发布门禁
