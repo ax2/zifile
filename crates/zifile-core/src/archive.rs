@@ -1197,17 +1197,18 @@ fn list_seven_zip(
             limits.max_entries
         )));
     }
-    let entries = reader
-        .archive()
-        .files
+    let files = reader.archive().files.clone();
+    let entries = files
         .iter()
         .map(|entry| {
+            let mut methods = Vec::new();
+            reader.file_compression_methods(entry.name(), &mut methods)?;
             Ok(ArchiveEntryInfo {
                 path: safe_relative_path(entry.name(), limits.max_path_depth)?,
                 size: entry.size(),
                 compressed_size: entry.compressed_size,
                 is_directory: entry.is_directory(),
-                encrypted: false,
+                encrypted: methods.contains(&sevenz_rust2::EncoderMethod::AES256_SHA256),
             })
         })
         .collect::<ZiFileResult<Vec<_>>>()?;

@@ -79,6 +79,7 @@ enum Page {
 struct ZiFile {
     page: Page,
     archive: Option<ArchiveInfo>,
+    pending_archive: Option<PathBuf>,
     selected: HashSet<PathBuf>,
     entry_filter: String,
     entry_page: usize,
@@ -103,6 +104,7 @@ impl Default for ZiFile {
         Self {
             page: Page::Home,
             archive: None,
+            pending_archive: None,
             selected: HashSet::new(),
             entry_filter: String::new(),
             entry_page: 0,
@@ -178,6 +180,7 @@ struct QueuedOperation {
     kind: OperationKind,
     request: WorkerRequest,
     status: String,
+    archive_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -261,6 +264,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::OpenArchiveDialog => {
             if let Some(path) = archive_dialog(state.locale).pick_file() {
+                state.password.clear();
                 return begin_load(state, path);
             }
         }
@@ -292,6 +296,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                         )
                     };
                     state.archive = Some(archive);
+                    state.pending_archive = None;
                     state.page = Page::Archive;
                 }
                 Err(error) => {
@@ -305,7 +310,12 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::PasswordChanged(password) => state.password = password,
         Message::ReloadArchive => {
-            if let Some(path) = state.archive.as_ref().map(|archive| archive.path.clone()) {
+            if let Some(path) = state
+                .archive
+                .as_ref()
+                .map(|archive| archive.path.clone())
+                .or_else(|| state.pending_archive.clone())
+            {
                 return begin_load(state, path);
             }
         }
@@ -389,6 +399,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     kind: OperationKind::Extract,
                     request,
                     status,
+                    archive_path: None,
                 },
             );
         }
@@ -437,6 +448,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     kind: OperationKind::Test,
                     request,
                     status,
+                    archive_path: None,
                 },
             );
         }
@@ -531,6 +543,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     kind: OperationKind::Create,
                     request,
                     status,
+                    archive_path: None,
                 },
             );
         }
@@ -579,6 +592,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             if path.is_file()
                 && detect_format_from_path(&path).is_some_and(|format| format.capabilities().list)
             {
+                state.password.clear();
                 return begin_load(state, path);
             } else if path.exists() {
                 append_unique(&mut state.create_sources, vec![path]);
@@ -661,6 +675,10 @@ fn save_settings(state: &ZiFile) {
 }
 
 fn begin_load(state: &mut ZiFile, path: PathBuf) -> Task<Message> {
+    state.archive = None;
+    state.pending_archive = Some(path.clone());
+    state.selected.clear();
+    state.page = Page::Archive;
     let password = non_empty(&state.password);
     let request = WorkerRequest::List {
         archive: path.clone(),
@@ -677,6 +695,7 @@ fn begin_load(state: &mut ZiFile, path: PathBuf) -> Task<Message> {
             kind: OperationKind::List,
             request,
             status,
+            archive_path: Some(path),
         },
     )
 }
@@ -709,7 +728,14 @@ fn start_operation(state: &mut ZiFile, job: Job<QueuedOperation>) -> Task<Messag
         kind,
         request,
         status,
+        archive_path,
     } = payload;
+    if let Some(path) = archive_path {
+        state.archive = None;
+        state.pending_archive = Some(path);
+        state.selected.clear();
+        state.page = Page::Archive;
+    }
     let cancellation = CancellationToken::default();
     let progress = OperationProgress::default();
     state.busy = true;
@@ -903,12 +929,31 @@ fn home_view(state: &ZiFile) -> Element<'_, Message> {
 
 fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     let Some(archive) = &state.archive else {
+        let pending = state.pending_archive.as_ref();
+        let heading = pending.and_then(|path| path.file_name()).map_or_else(
+            || state.locale.text(Text::NoArchive).to_owned(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        let description = if pending.is_some() {
+            state.locale.text(Text::EncryptedArchiveDescription)
+        } else {
+            state.locale.text(Text::NoArchiveDescription)
+        };
         return container(
             column![
-                text(state.locale.text(Text::NoArchive)).size(30),
-                text(state.locale.text(Text::NoArchiveDescription)),
-                button(state.locale.text(Text::OpenAction))
+                text(heading).size(30),
+                text(description),
+                text_input(state.locale.text(Text::PasswordEncrypted), &state.password)
+                    .secure(true)
+                    .on_input(Message::PasswordChanged)
+                    .width(280),
+                button(state.locale.text(Text::UnlockArchive))
                     .style(button::primary)
+                    .on_press_maybe(
+                        (pending.is_some() && !state.busy).then_some(Message::ReloadArchive)
+                    ),
+                button(state.locale.text(Text::OpenAction))
+                    .style(button::secondary)
                     .on_press(Message::OpenArchiveDialog),
             ]
             .spacing(16),

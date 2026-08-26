@@ -195,6 +195,49 @@ fn encrypted_zip_round_trip_requires_password() {
 }
 
 #[test]
+fn encrypted_seven_zip_round_trip_reports_encryption_and_requires_password() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("secret.txt");
+    fs::write(&source, "classified").unwrap();
+    let archive = temp.path().join("secret.7z");
+    create_archive(
+        &[source],
+        &archive,
+        ArchiveFormat::SevenZip,
+        &CreateOptions {
+            password: Some("correct horse".to_owned()),
+            ..CreateOptions::default()
+        },
+    )
+    .unwrap();
+
+    assert!(list_archive(&archive, None).is_err());
+    assert!(list_archive(&archive, Some("wrong password")).is_err());
+    let info = list_archive(&archive, Some("correct horse")).unwrap();
+    assert_eq!(info.entries.len(), 1);
+    assert!(info.entries[0].encrypted);
+    assert!(test_archive(&archive, None).is_err());
+    assert!(test_archive(&archive, Some("wrong password")).is_err());
+    test_archive(&archive, Some("correct horse")).unwrap();
+
+    let output = temp.path().join("sevenzip-encrypted");
+    let summary = extract_archive(
+        &archive,
+        &output,
+        &ExtractOptions {
+            password: Some("correct horse".to_owned()),
+            ..ExtractOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(summary.files, 1);
+    assert_eq!(
+        fs::read_to_string(output.join("secret.txt")).unwrap(),
+        "classified"
+    );
+}
+
+#[test]
 fn rar_is_read_only_and_supports_solid_selected_extraction() {
     let temp = tempfile::tempdir().unwrap();
     let archive = temp.path().join("fixture.rar");
