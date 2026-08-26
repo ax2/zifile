@@ -57,6 +57,8 @@ Archive listings expose a structured optional timestamp with calendar components
 
 The same shared 100,000-entry view model now sorts by name, original size, packed size, or modified time in either direction. Directories stay first, missing timestamps stay last, ties use a stable path order, and sorting resets to the first page while rendering remains capped at 500 rows. Dioxus table headers are native buttons with `aria-sort`; both UIs show an arrow on the active column. A full 100,000-entry descending-name sort plus bounded-page collection measured 13.96–15.32 ms on the local Windows x64 baseline.
 
+Both desktop UIs now use a shared hierarchical folder view. It synthesizes navigable folders when an archive omits explicit directory entries, exposes root-to-current breadcrumbs, and shows only direct children when search is empty. Search remains archive-wide and displays full paths, while folder and search pages remain capped at 500 rows.
+
 ## 2026-08-24 — Parser-boundary hardening
 
 Extraction originally listed with global defaults before applying caller limits, so strict caller entry/depth limits did not constrain early parser work. Limit-aware list/test APIs now apply extraction limits before destination creation. Integration tests cover strict ZIP/7z/TAR limits and malformed ZIP/7z/tar/tgz inputs.

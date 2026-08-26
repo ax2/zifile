@@ -25,8 +25,8 @@ use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
 use zifile_desktop::entry_view::{
-    ENTRIES_PER_PAGE, EntrySort, SortDirection, filtered_entry_count, next_sort,
-    sorted_filtered_entry_page,
+    ENTRIES_PER_PAGE, EntrySort, SortDirection, browser_entry_count, browser_entry_page,
+    directory_breadcrumbs, next_sort,
 };
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
@@ -84,6 +84,7 @@ struct ZiFile {
     archive: Option<ArchiveInfo>,
     pending_archive: Option<PathBuf>,
     selected: HashSet<PathBuf>,
+    entry_directory: PathBuf,
     entry_filter: String,
     entry_page: usize,
     entry_sort: EntrySort,
@@ -111,6 +112,7 @@ impl Default for ZiFile {
             archive: None,
             pending_archive: None,
             selected: HashSet::new(),
+            entry_directory: PathBuf::new(),
             entry_filter: String::new(),
             entry_page: 0,
             entry_sort: EntrySort::default(),
@@ -143,6 +145,7 @@ enum Message {
     ReloadArchive,
     ToggleEntry(PathBuf, bool),
     SelectAll(bool),
+    NavigateArchiveDirectory(PathBuf),
     EntryFilterChanged(String),
     SortEntries(EntrySort),
     PreviousEntryPage,
@@ -289,6 +292,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                         .map(|entry| entry.path.clone())
                         .collect();
                     state.entry_filter.clear();
+                    state.entry_directory.clear();
                     state.entry_page = 0;
                     state.entry_sort = EntrySort::Name;
                     state.entry_sort_direction = SortDirection::Ascending;
@@ -348,6 +352,11 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 );
             }
         }
+        Message::NavigateArchiveDirectory(directory) => {
+            state.entry_directory = directory;
+            state.entry_filter.clear();
+            state.entry_page = 0;
+        }
         Message::EntryFilterChanged(filter) => {
             state.entry_filter = filter;
             state.entry_page = 0;
@@ -362,7 +371,8 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::NextEntryPage => {
             if let Some(archive) = &state.archive {
-                let count = filtered_entry_count(archive, &state.entry_filter);
+                let count =
+                    browser_entry_count(archive, &state.entry_directory, &state.entry_filter);
                 let last_page = count.saturating_sub(1) / ENTRIES_PER_PAGE;
                 state.entry_page = (state.entry_page + 1).min(last_page);
             }
@@ -1091,7 +1101,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     .align_y(iced::Alignment::Center)
     .spacing(10);
 
-    let filtered_count = filtered_entry_count(archive, &state.entry_filter);
+    let filtered_count = browser_entry_count(archive, &state.entry_directory, &state.entry_filter);
     let last_page = filtered_count.saturating_sub(1) / ENTRIES_PER_PAGE;
     let current_page = state.entry_page.min(last_page);
     let browser_controls = row![
@@ -1114,6 +1124,21 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
+
+    let mut breadcrumbs = row![
+        button(choose(state.locale, "Archive root", "归档根目录"))
+            .style(button::text)
+            .on_press(Message::NavigateArchiveDirectory(PathBuf::new()))
+    ]
+    .spacing(4)
+    .align_y(iced::Alignment::Center);
+    for (label, path) in directory_breadcrumbs(&state.entry_directory) {
+        breadcrumbs = breadcrumbs.push(text("›")).push(
+            button(text(label))
+                .style(button::text)
+                .on_press(Message::NavigateArchiveDirectory(path)),
+        );
+    }
 
     let mut entries = column![
         row![
@@ -1160,30 +1185,41 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         rule::horizontal(1),
     ]
     .spacing(4);
-    for entry in sorted_filtered_entry_page(
+    for entry in browser_entry_page(
         archive,
+        &state.entry_directory,
         &state.entry_filter,
         current_page,
         state.entry_sort,
         state.entry_sort_direction,
     ) {
-        let path = entry.path.clone();
+        let path = entry.path.as_ref().to_path_buf();
         let selected = state.selected.contains(&path);
+        let selection_path = path.clone();
+        let display_path = if state.entry_filter.is_empty() {
+            entry.path.file_name().unwrap_or_default().to_string_lossy()
+        } else {
+            entry.path.to_string_lossy()
+        };
         entries = entries.push(
             row![
                 if entry.is_directory {
                     checkbox(false)
                 } else {
                     checkbox(selected)
-                        .on_toggle(move |value| Message::ToggleEntry(path.clone(), value))
+                        .on_toggle(move |value| Message::ToggleEntry(selection_path.clone(), value))
                 }
                 .width(34),
-                text(format!(
-                    "{} {}",
-                    if entry.is_directory { "▸" } else { "•" },
-                    entry.path.display()
-                ))
-                .width(Fill),
+                if entry.is_directory {
+                    button(text(format!("▸ {display_path}")))
+                        .style(button::text)
+                        .on_press(Message::NavigateArchiveDirectory(path.clone()))
+                        .width(Fill)
+                } else {
+                    button(text(format!("• {display_path}")))
+                        .style(button::text)
+                        .width(Fill)
+                },
                 text(format_bytes(entry.size)).width(110),
                 text(format_bytes(entry.compressed_size)).width(110),
                 text(format_archive_modified(
@@ -1207,6 +1243,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     column![
         header,
         controls,
+        breadcrumbs,
         browser_controls,
         container(scrollable(entries).height(Fill))
             .padding(12)
@@ -1424,6 +1461,7 @@ fn format_bytes(bytes: u64) -> String {
 mod tests {
     use super::*;
     use zifile_core::ArchiveEntryInfo;
+    use zifile_desktop::entry_view::{filtered_entry_count, sorted_filtered_entry_page};
 
     #[test]
     fn create_input_guidance_is_bilingual_and_matches_capabilities() {
@@ -1489,5 +1527,21 @@ mod tests {
             ),
             "Packed"
         );
+    }
+
+    #[test]
+    fn directory_navigation_resets_filter_and_page() {
+        let mut state = ZiFile {
+            entry_filter: "readme".to_owned(),
+            entry_page: 7,
+            ..ZiFile::default()
+        };
+        drop(update(
+            &mut state,
+            Message::NavigateArchiveDirectory(PathBuf::from("docs/reference")),
+        ));
+        assert_eq!(state.entry_directory, PathBuf::from("docs/reference"));
+        assert!(state.entry_filter.is_empty());
+        assert_eq!(state.entry_page, 0);
     }
 }

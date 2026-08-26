@@ -46,6 +46,9 @@ All notable changes to ZiFile are documented here. The format follows
 - Archive-path search and bounded 500-row pagination, with a 100,000-entry regression test.
 - Sortable archive columns for name, original size, packed size, and modified time,
   with folder-first ordering, accessible direction state, and bounded 500-row pages.
+- Hierarchical archive folder navigation in both desktop UIs, including synthesized
+  implicit directories, root-to-current breadcrumbs, and archive-wide search that
+  retains full paths while folder pages remain bounded to 500 rows.
 - Desktop shortcuts for opening (`Ctrl+O`), creating (`Ctrl+N`), selecting all (`Ctrl+A`)
   and canceling an active operation (`Escape`).
 - Bidirectional 7z interoperability against Windows bsdtar/libarchive.

@@ -90,6 +90,9 @@ label > span { display: block; margin-bottom: 6px; color: var(--muted); font-siz
 .selection-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .selection-bar > label { display: flex; align-items: center; gap: 7px; }
 .selection-bar select { min-width: 220px; }
+.breadcrumbs { display: flex; align-items: center; gap: 3px; min-height: 38px; margin-bottom: 10px; overflow-x: auto; color: var(--muted); }
+.breadcrumbs button, .folder-link { border: 0; background: transparent; color: var(--text); padding: 6px 8px; white-space: nowrap; }
+.breadcrumbs button:hover, .folder-link:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--accent); }
 .table-wrap { max-height: calc(100vh - 390px); min-height: 180px; overflow: auto; border: 1px solid var(--border); background: var(--surface); }
 table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
@@ -97,6 +100,7 @@ th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
 .sort-header { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; }
 .sort-header:hover { background: transparent; color: var(--accent); }
 .path-cell { width: 100%; max-width: 520px; overflow: hidden; text-overflow: ellipsis; }
+.path-cell .folder-link { max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-align: left; }
 .empty-filter { margin: 0; padding: 24px; color: var(--muted); text-align: center; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 14px; }
 .source-list { min-height: 170px; max-height: 310px; overflow: auto; background: var(--surface); border: 1px solid var(--border); padding: 18px; }

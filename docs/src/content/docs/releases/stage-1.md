@@ -28,6 +28,7 @@ description: ZiFile Alpha 阶段的真实归档核心、桌面流程和验证记
 - 建立 x64/ARM64 MSIX、独立 EXE、图标、文件关联、可选签名、SBOM、来源证明和 WinGet 1.12 清单链路。
 - 桌面端加入简体中文/英文切换、系统语言首启检测和主题/语言持久化；设置文件不包含密码。
 - 归档表格加入路径搜索和每页 500 项的有界分页，并加入 `Ctrl+O`、`Ctrl+N`、`Ctrl+A`、`Escape` 快捷键。
+- 两套桌面界面共用分层目录视图：即使归档没有显式目录项也会合成可进入的文件夹，提供根目录面包屑；空搜索仅显示当前层，搜索则跨整个归档保留完整路径，单页仍限制为 500 行。
 - 新增版本化 Worker 协议与 `zifile-worker.exe`；桌面列出、校验、解压、创建均跨进程执行。Windows Job Object 限制单进程、4 GiB 内存并启用 kill-on-close；创建和解压先协作取消，2 秒后由进程回收兜底。
 - Worker 进度映射到 Windows 任务栏，并在 MSIX 注册 `zifile.exe` App Execution Alias。
 - 新增 Rust `cdylib` 实现 Windows 11 `IExplorerCommand`。MSIX 以同一 CLSID 注册 `windows.comServer` 和 `windows.fileExplorerContextMenus`；命令只收集本地选择并用共享 `--create` 启动协议打开创建页，归档工作仍由桌面与隔离 Worker 执行。

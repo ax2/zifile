@@ -9,9 +9,8 @@ use dioxus::prelude::*;
 use dioxus_html::HasFileData;
 use rfd::FileDialog;
 use zifile_core::{
-    ArchiveEntryInfo, ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy,
-    CreateInputKind, OperationProgress, OperationSummary, ProgressSnapshot, SafetyLimits,
-    detect_format_from_path,
+    ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy, CreateInputKind,
+    OperationProgress, OperationSummary, ProgressSnapshot, SafetyLimits, detect_format_from_path,
 };
 use zifile_worker_protocol::WorkerRequest;
 
@@ -25,8 +24,8 @@ use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
 use zifile_desktop::entry_view::{
-    ENTRIES_PER_PAGE, EntrySort, SortDirection, filtered_entry_count, next_sort,
-    sorted_filtered_entry_page,
+    BrowserEntry, ENTRIES_PER_PAGE, EntrySort, SortDirection, browser_entry_count,
+    browser_entry_page, directory_breadcrumbs, next_sort,
 };
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
@@ -110,6 +109,7 @@ struct UiState {
     archive: Option<ArchiveInfo>,
     pending_archive: Option<PathBuf>,
     selected: HashSet<PathBuf>,
+    entry_directory: PathBuf,
     entry_filter: String,
     entry_page: usize,
     entry_sort: EntrySort,
@@ -139,6 +139,7 @@ impl Default for UiState {
             archive: None,
             pending_archive: None,
             selected: HashSet::new(),
+            entry_directory: PathBuf::new(),
             entry_filter: String::new(),
             entry_page: 0,
             entry_sort: EntrySort::default(),
@@ -340,18 +341,19 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
             }
         } };
     };
-    let count = filtered_entry_count(&archive, &view.entry_filter);
+    let count = browser_entry_count(&archive, &view.entry_directory, &view.entry_filter);
     let last_page = count.saturating_sub(1) / ENTRIES_PER_PAGE;
     let current_page = view.entry_page.min(last_page);
-    let rows = sorted_filtered_entry_page(
+    let rows = browser_entry_page(
         &archive,
+        &view.entry_directory,
         &view.entry_filter,
         current_page,
         view.entry_sort,
         view.entry_sort_direction,
     )
     .into_iter()
-    .cloned()
+    .map(BrowserEntry::into_owned)
     .collect::<Vec<_>>();
     let all_files = archive
         .entries
@@ -405,6 +407,13 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 button { class: "primary", disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
             }
         }
+        nav { class: "breadcrumbs", "aria-label": choose(locale, "Archive folder", "归档文件夹"),
+            button { "aria-current": if view.entry_directory.as_os_str().is_empty() { "page" } else { "false" }, onclick: move |_| navigate_archive_directory(state, PathBuf::new()), {choose(locale, "Archive root", "归档根目录")} }
+            for (label, path) in directory_breadcrumbs(&view.entry_directory) {
+                span { "›" }
+                button { "aria-current": if path == view.entry_directory { "page" } else { "false" }, onclick: move |_| navigate_archive_directory(state, path.clone()), {label} }
+            }
+        }
         div { class: "table-wrap", tabindex: "0", role: "region", "aria-label": choose(locale, "Archive entries", "压缩文件项目"), "aria-describedby": "archive-selection-summary archive-filter-summary", "aria-keyshortcuts": "Control+A",
             onkeydown: move |event: KeyboardEvent| {
                 let control = event.modifiers().contains(Modifiers::CONTROL);
@@ -429,7 +438,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                         button { class: "sort-header", onclick: move |_| set_entry_sort(state, EntrySort::Modified), {sort_header_label(locale.text(Text::Modified), EntrySort::Modified, view.entry_sort, view.entry_sort_direction)} } }
                     th { scope: "col", {locale.text(Text::Flags)} }
                 } }
-                tbody { for entry in rows { ArchiveRow { key: "{entry.path.display()}", state, entry, locale } } }
+                tbody { for entry in rows { ArchiveRow { key: "{entry.path.display()}", state, entry, locale, show_full_path: !view.entry_filter.is_empty() } } }
             }
             if count == 0 { p { class: "empty-filter", {archive_no_matches(locale, &view.entry_filter)} } }
         }
@@ -447,6 +456,13 @@ fn set_entry_sort(mut state: Signal<UiState>, sort: EntrySort) {
     let mut value = state.write();
     (value.entry_sort, value.entry_sort_direction) =
         next_sort(value.entry_sort, value.entry_sort_direction, sort);
+    value.entry_page = 0;
+}
+
+fn navigate_archive_directory(mut state: Signal<UiState>, directory: PathBuf) {
+    let mut value = state.write();
+    value.entry_directory = directory;
+    value.entry_filter.clear();
     value.entry_page = 0;
 }
 
@@ -477,15 +493,40 @@ fn sort_header_label(
 }
 
 #[component]
-fn ArchiveRow(mut state: Signal<UiState>, entry: ArchiveEntryInfo, locale: Locale) -> Element {
-    let selected = state.read().selected.contains(&entry.path);
-    let path = entry.path.clone();
-    let path_display = entry.path.to_string_lossy().to_string();
+fn ArchiveRow(
+    mut state: Signal<UiState>,
+    entry: BrowserEntry<'static>,
+    locale: Locale,
+    show_full_path: bool,
+) -> Element {
+    let selected = state.read().selected.contains(entry.path.as_ref());
+    let path = entry.path.as_ref().to_path_buf();
+    let selection_path = path.clone();
+    let path_display = if show_full_path {
+        entry.path.to_string_lossy().into_owned()
+    } else {
+        entry
+            .path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
+    };
     let selection_label = format!("{} {path_display}", choose(locale, "Select", "选择"));
+    let open_folder_label = format!(
+        "{} {path_display}",
+        choose(locale, "Open folder", "打开文件夹")
+    );
     rsx! { tr {
         td { input { r#type: "checkbox", checked: selected, disabled: entry.is_directory, "aria-label": selection_label,
-            onchange: move |event| update_archive_selection(state, path.clone(), event.checked()) } }
-        td { class: "path-cell", {path_display} } td { {format_bytes(entry.size)} } td { {format_bytes(entry.compressed_size)} }
+            onchange: move |event| update_archive_selection(state, selection_path.clone(), event.checked()) } }
+        td { class: "path-cell",
+            if entry.is_directory {
+                button { class: "folder-link", "aria-label": open_folder_label, onclick: move |_| navigate_archive_directory(state, path.clone()), "▸ {path_display}" }
+            } else {
+                "{path_display}"
+            }
+        } td { {format_bytes(entry.size)} } td { {format_bytes(entry.compressed_size)} }
         td { {format_archive_modified(locale, entry.modified.as_ref())} }
         td { if entry.encrypted { {locale.text(Text::Locked)} } else if entry.is_directory { {choose(locale, "Folder", "文件夹")} } else { "—" } }
     } }
@@ -905,6 +946,7 @@ fn finish_worker(
             value.pending_archive = None;
             value.selected = selected;
             value.entry_filter.clear();
+            value.entry_directory.clear();
             value.entry_page = 0;
             value.entry_sort = EntrySort::Name;
             value.entry_sort_direction = SortDirection::Ascending;
@@ -1066,7 +1108,7 @@ fn announce_archive_filter(mut state: Signal<UiState>) {
     let status = archive_filter_summary(
         value.locale,
         &value.entry_filter,
-        filtered_entry_count(archive, &value.entry_filter),
+        browser_entry_count(archive, &value.entry_directory, &value.entry_filter),
         archive.entries.len(),
     );
     drop(value);
@@ -1075,13 +1117,15 @@ fn announce_archive_filter(mut state: Signal<UiState>) {
 
 fn clear_archive_filter(mut state: Signal<UiState>) {
     let mut value = state.write();
-    let total = value
-        .archive
-        .as_ref()
-        .map_or(0, |archive| archive.entries.len());
     value.entry_filter.clear();
     value.entry_page = 0;
-    let status = archive_filter_summary(value.locale, "", total, total);
+    let (visible, total) = value.archive.as_ref().map_or((0, 0), |archive| {
+        (
+            browser_entry_count(archive, &value.entry_directory, ""),
+            archive.entries.len(),
+        )
+    });
+    let status = archive_filter_summary(value.locale, "", visible, total);
     value.set_status(status);
 }
 
@@ -1098,23 +1142,23 @@ fn archive_selection_summary(locale: Locale, selected: usize, total: usize) -> S
 fn archive_filter_summary(locale: Locale, filter: &str, matches: usize, total: usize) -> String {
     match locale {
         Locale::En if filter.is_empty() => format!(
-            "Showing all {total} {}",
-            if total == 1 { "entry" } else { "entries" }
+            "Showing {matches} {} in this folder",
+            if matches == 1 { "entry" } else { "entries" }
         ),
         Locale::En => format!(
             "Showing {matches} of {total} {} for “{filter}”",
             if total == 1 { "entry" } else { "entries" }
         ),
-        Locale::ZhCn if filter.is_empty() => format!("显示全部 {total} 个项目"),
+        Locale::ZhCn if filter.is_empty() => format!("此文件夹显示 {matches} 个项目"),
         Locale::ZhCn => format!("{total} 个项目中显示 {matches} 个匹配“{filter}”的结果"),
     }
 }
 
 fn archive_no_matches(locale: Locale, filter: &str) -> String {
     match locale {
-        Locale::En if filter.is_empty() => "This archive has no entries".to_owned(),
+        Locale::En if filter.is_empty() => "This folder has no entries".to_owned(),
         Locale::En => format!("No archive entries match “{filter}”"),
-        Locale::ZhCn if filter.is_empty() => "此压缩文件没有项目".to_owned(),
+        Locale::ZhCn if filter.is_empty() => "此文件夹没有项目".to_owned(),
         Locale::ZhCn => format!("没有压缩文件项目匹配“{filter}”"),
     }
 }
@@ -1447,7 +1491,7 @@ mod tests {
         assert_eq!(ARCHIVE_FILTER_LIVE, "off");
         assert_eq!(
             archive_filter_summary(Locale::En, "", 1, 1),
-            "Showing all 1 entry"
+            "Showing 1 entry in this folder"
         );
         assert_eq!(
             archive_filter_summary(Locale::En, "beta", 1, 2),
@@ -1458,10 +1502,14 @@ mod tests {
             "3 个项目中显示 0 个匹配“文档”的结果"
         );
         assert_eq!(
+            archive_filter_summary(Locale::ZhCn, "", 2, 30),
+            "此文件夹显示 2 个项目"
+        );
+        assert_eq!(
             archive_no_matches(Locale::En, "missing"),
             "No archive entries match “missing”"
         );
-        assert_eq!(archive_no_matches(Locale::ZhCn, ""), "此压缩文件没有项目");
+        assert_eq!(archive_no_matches(Locale::ZhCn, ""), "此文件夹没有项目");
     }
 
     #[test]
@@ -1522,6 +1570,18 @@ mod tests {
             ),
             "正在扫描 · 已读取 2.0 KB"
         );
+    }
+
+    #[test]
+    fn folder_navigation_has_semantic_breadcrumbs_and_native_buttons() {
+        let source = include_str!("accessible_main.rs");
+        assert!(source.contains("aria-label\": choose(locale, \"Archive folder\""));
+        assert!(source.contains("\"aria-current\""));
+        assert!(source.contains("choose(locale, \"Open folder\", \"打开文件夹\")"));
+        assert!(source.contains("navigate_archive_directory(state, PathBuf::new())"));
+        assert!(source.contains("class: \"folder-link\""));
+        assert!(STYLES.contains(".breadcrumbs"));
+        assert!(STYLES.contains(".folder-link"));
     }
 
     #[test]
