@@ -640,19 +640,25 @@ fn apply_accessible_shortcut(mut state: Signal<UiState>, shortcut: AccessibleSho
     }
 }
 
+fn single_openable_archive(paths: &[PathBuf]) -> Option<&Path> {
+    let [path] = paths else {
+        return None;
+    };
+    (path.is_file()
+        && detect_format_from_path(path).is_some_and(|format| format.capabilities().list))
+    .then_some(path.as_path())
+}
+
 fn handle_dropped_paths(mut state: Signal<UiState>, paths: Vec<PathBuf>) {
     if paths.is_empty() {
         return;
     }
-    if paths.len() == 1
-        && paths[0].is_file()
-        && detect_format_from_path(&paths[0]).is_some_and(|format| format.capabilities().list)
-    {
+    if let Some(path) = single_openable_archive(&paths).map(Path::to_path_buf) {
         let mut value = state.write();
         value.password.clear();
         value.automatic_extract_destination = None;
         drop(value);
-        begin_load(state, paths.into_iter().next().expect("one dropped path"));
+        begin_load(state, path);
         return;
     }
     let existing = paths.into_iter().filter(|path| path.exists()).collect();
@@ -1546,6 +1552,30 @@ mod tests {
         .join();
 
         assert_eq!(lock_operation_queue(&queue).pending_count(), 0);
+    }
+
+    #[test]
+    fn only_one_existing_supported_archive_opens_from_a_drop() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let archive = temporary.path().join("sample.zip");
+        let plain_file = temporary.path().join("notes.txt");
+        let archive_named_directory = temporary.path().join("folder.zip");
+        std::fs::write(&archive, b"not parsed by this classification test")
+            .expect("archive fixture");
+        std::fs::write(&plain_file, b"plain fixture").expect("plain fixture");
+        std::fs::create_dir(&archive_named_directory).expect("directory fixture");
+
+        assert_eq!(
+            single_openable_archive(std::slice::from_ref(&archive)),
+            Some(archive.as_path())
+        );
+        assert_eq!(single_openable_archive(&[]), None);
+        assert_eq!(
+            single_openable_archive(&[archive.clone(), plain_file.clone()]),
+            None
+        );
+        assert_eq!(single_openable_archive(&[plain_file]), None);
+        assert_eq!(single_openable_archive(&[archive_named_directory]), None);
     }
 
     #[test]
