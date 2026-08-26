@@ -943,10 +943,12 @@ fn extract_rar(
         )?;
         if output.is_none() {
             summary.skipped += 1;
-        } else if entry.is_directory {
+        } else if entry.is_directory
+            && let Some(directory) = output.as_ref()
+        {
             directories.push((
                 archive_name(&entry.path).to_ascii_lowercase(),
-                output.clone().expect("checked Some"),
+                directory.clone(),
             ));
         }
         outputs.insert(archive_name(&entry.path).to_ascii_lowercase(), output);

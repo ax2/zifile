@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use dioxus::prelude::*;
@@ -92,6 +92,16 @@ struct QueuedOperation {
     archive_path: Option<PathBuf>,
 }
 
+type SharedOperationQueue = Arc<Mutex<OperationQueue<QueuedOperation>>>;
+
+fn lock_operation_queue(
+    queue: &Mutex<OperationQueue<QueuedOperation>>,
+) -> MutexGuard<'_, OperationQueue<QueuedOperation>> {
+    queue
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AccessibleShortcut {
     Open,
@@ -128,7 +138,7 @@ struct UiState {
     busy: bool,
     cancellation: Option<CancellationToken>,
     progress: Option<OperationProgress>,
-    operations: Arc<Mutex<OperationQueue<QueuedOperation>>>,
+    operations: SharedOperationQueue,
     dark: bool,
     locale: Locale,
     revision: u64,
@@ -219,11 +229,7 @@ fn App() -> Element {
     let theme = if view.dark { "dark" } else { "light" };
     let progress = view.progress.as_ref().map(OperationProgress::snapshot);
     let (status_role, status_live) = status_semantics(view.status_kind);
-    let queued_count = view
-        .operations
-        .lock()
-        .expect("operation queue lock must not be poisoned")
-        .pending_count();
+    let queued_count = lock_operation_queue(&view.operations).pending_count();
     let queue_summary = operation_queue_summary(locale, queued_count);
     let progress_view = progress.map(|snapshot| {
         (
@@ -900,10 +906,7 @@ fn launch_worker(
         archive_path,
     };
     let operations = state.read().operations.clone();
-    let submission = operations
-        .lock()
-        .expect("operation queue lock must not be poisoned")
-        .submit(operation);
+    let submission = lock_operation_queue(&operations).submit(operation);
     match submission {
         Ok(Submission::Start(job)) => start_worker(state, job),
         Ok(Submission::Queued { position, .. }) => {
@@ -1062,10 +1065,7 @@ fn finish_worker(
     if let Some(destination) = automatic_extract {
         extract_to(state, destination);
     }
-    let next = operations
-        .lock()
-        .expect("operation queue lock must not be poisoned")
-        .complete(id);
+    let next = lock_operation_queue(&operations).complete(id);
     match next {
         Ok(Some(job)) => start_worker(state, job),
         Ok(None) => {}
@@ -1077,11 +1077,7 @@ fn finish_worker(
 
 fn clear_queued(mut state: Signal<UiState>) {
     let operations = state.read().operations.clone();
-    let cleared = operations
-        .lock()
-        .expect("operation queue lock must not be poisoned")
-        .clear_pending()
-        .len();
+    let cleared = lock_operation_queue(&operations).clear_pending().len();
     let locale = state.read().locale;
     let status = match locale {
         Locale::En => format!("Cleared {cleared} queued operations"),
@@ -1538,6 +1534,20 @@ fn format_bytes(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn operation_queue_recovers_after_a_poisoned_lock() {
+        let queue: SharedOperationQueue = Arc::new(Mutex::new(OperationQueue::default()));
+        let poisoned = queue.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = poisoned.lock().expect("test lock should start healthy");
+            panic!("poison operation queue for recovery coverage");
+        })
+        .join();
+
+        assert_eq!(lock_operation_queue(&queue).pending_count(), 0);
+    }
+
     #[test]
     fn format_values_round_trip() {
         for format in CREATE_FORMATS {

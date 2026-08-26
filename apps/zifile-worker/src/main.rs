@@ -197,9 +197,7 @@ where
         });
         let result = operation();
         done.store(true, Ordering::Release);
-        reporter
-            .join()
-            .expect("the worker progress reporter must not panic");
+        let _ = reporter.join();
         let _ = emit(
             &writer,
             WorkerEvent::Progress {
