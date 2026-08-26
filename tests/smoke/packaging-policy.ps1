@@ -20,10 +20,11 @@ $signingOperationsDocs = Join-Path $repoRoot 'scripts\Test-SigningOperationsDocs
 $partnerCenterIdentity = Join-Path $repoRoot 'packaging\store\Test-PartnerCenterIdentity.ps1'
 $wingetGenerator = Join-Path $repoRoot 'packaging\winget\Generate-Manifests.ps1'
 $wingetVerifier = Join-Path $repoRoot 'packaging\winget\Test-Manifests.ps1'
+$wingetClientInstaller = Join-Path $repoRoot 'packaging\winget\Install-ValidationClient.ps1'
 $wingetSmoke = Join-Path $repoRoot 'tests\smoke\winget-manifest.ps1'
 $userDocs = Join-Path $repoRoot 'scripts\Test-UserDocs.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $wingetGenerator, $wingetVerifier, $wingetSmoke, $userDocs)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -616,6 +617,8 @@ if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ReleaseReadiness.ps1')) 
     throw 'CI does not validate the 1.0 release readiness manifest.'
 }
 foreach ($requiredWingetCiToken in @(
+    'Install current WinGet validation client',
+    './packaging/winget/Install-ValidationClient.ps1',
     'Official WinGet manifest validation',
     './tests/smoke/winget-manifest.ps1'
 )) {
@@ -623,11 +626,26 @@ foreach ($requiredWingetCiToken in @(
         throw "CI does not run official WinGet manifest validation: $requiredWingetCiToken"
     }
 }
+$wingetClientInstallerSource = Get-Content -Raw -LiteralPath $wingetClientInstaller
+foreach ($requiredWingetClientToken in @(
+    "[string]`$ModuleVersion = '1.29.280'",
+    "[string]`$ClientVersion = '1.29.280'",
+    'Install-Module',
+    'Microsoft.WinGet.Client',
+    'Repair-WinGetPackageManager -Version $ClientVersion -Force',
+    'current_stable_client_pinned = $true'
+)) {
+    if ($wingetClientInstallerSource -notmatch [Regex]::Escape($requiredWingetClientToken)) {
+        throw "WinGet validation client bootstrap is not pinned to the reviewed Microsoft release: $requiredWingetClientToken"
+    }
+}
 $toolchainIndex = $ciSource.IndexOf('uses: dtolnay/rust-toolchain@1.93.0', [StringComparison]::Ordinal)
 $packagingPolicyIndex = $ciSource.IndexOf('name: Packaging policy smoke test', [StringComparison]::Ordinal)
+$wingetSetupIndex = $ciSource.IndexOf('name: Install current WinGet validation client', [StringComparison]::Ordinal)
 $officialWingetIndex = $ciSource.IndexOf('name: Official WinGet manifest validation', [StringComparison]::Ordinal)
-if ($toolchainIndex -lt 0 -or $packagingPolicyIndex -lt 0 -or $officialWingetIndex -lt 0 -or
-    $packagingPolicyIndex -gt $toolchainIndex -or $officialWingetIndex -gt $toolchainIndex) {
+if ($toolchainIndex -lt 0 -or $packagingPolicyIndex -lt 0 -or $wingetSetupIndex -lt 0 -or $officialWingetIndex -lt 0 -or
+    $packagingPolicyIndex -gt $wingetSetupIndex -or $wingetSetupIndex -gt $officialWingetIndex -or
+    $officialWingetIndex -gt $toolchainIndex) {
     throw 'Packaging policy and official WinGet validation must fail fast before Rust toolchain setup.'
 }
 $releaseWorkflowSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\release.yml')
