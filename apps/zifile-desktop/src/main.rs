@@ -836,16 +836,35 @@ fn view(state: &ZiFile) -> Element<'_, Message> {
         || space().height(0).into(),
         |progress| {
             let snapshot = progress.snapshot();
-            row![
-                container(progress_bar(0.0..=1.0, snapshot.fraction())).width(Fill),
-                text(format!(
+            let progress_text = if snapshot.total_bytes == 0 && snapshot.processed_bytes > 0 {
+                match state.locale {
+                    Locale::En => {
+                        format!("Scanning · {} read", format_bytes(snapshot.processed_bytes))
+                    }
+                    Locale::ZhCn => format!(
+                        "正在扫描 · 已读取 {}",
+                        format_bytes(snapshot.processed_bytes)
+                    ),
+                }
+            } else if snapshot.total_entries == 0 && snapshot.processed_entries > 0 {
+                match state.locale {
+                    Locale::En => {
+                        format!("Scanning · {} entries found", snapshot.processed_entries)
+                    }
+                    Locale::ZhCn => format!("正在扫描 · 已发现 {} 项", snapshot.processed_entries),
+                }
+            } else {
+                format!(
                     "{} / {} · {} / {}",
                     snapshot.processed_entries,
                     snapshot.total_entries,
                     format_bytes(snapshot.processed_bytes),
                     format_bytes(snapshot.total_bytes)
-                ))
-                .size(12),
+                )
+            };
+            row![
+                container(progress_bar(0.0..=1.0, snapshot.fraction())).width(Fill),
+                text(progress_text).size(12),
             ]
             .spacing(12)
             .align_y(iced::Alignment::Center)

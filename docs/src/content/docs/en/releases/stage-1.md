@@ -37,6 +37,16 @@ WinGet 1.12 candidate manifests generated from real Release hashes passed local 
 - Partner Center identity/name, production signing, Store submission, and WinGet PR.
 - Signed-package reproducibility and cross-machine/toolchain evidence remain separate gates. Raw PE reproducibility was completed later in this log: run `32826187552` produced 5/5 on both x64 and ARM64, with later clean-merge runs preserving 5/5.
 
+## 2026-08-26 — Archive-open progress and cancellation
+
+Opening a large archive already ran in the isolated Worker and could be forcibly reclaimed by the desktop, but the core List API had no common progress or cooperative-cancellation contract. Backward-compatible `ListOptions` and `list_archive_with_options` now cover ZIP, 7z, RAR 1.3–7, CAB, five TAR compositions, and six single compression streams. Every provider checks cancellation at scan boundaries and advances progress. Formats with a known entry count are determinate; TAR/CAB-style scans use explicit bilingual “Scanning” copy until completion publishes a consistent final total. Single streams also report actually decoded bytes.
+
+Worker List now shares the 100 ms reporter and cancellation listener used by test/create/extract, with its final progress snapshot ordered before `archive_start` and streamed entries. Both desktop UIs therefore receive live status, taskbar progress, and their existing Cancel behavior without a protocol change. Core round trips enforce final progress invariants across all 15 format classes and include pre-cancellation; the real Worker smoke parses JSON Lines and checks final-event ordering.
+
+Local verification passed 90 all-workspace/all-target/all-feature Rust tests and three Criterion targets, strict Clippy, rustfmt, the foundation Worker smoke, the 23-script packaging policy, all three nightly fuzz bins, and an Astro build with 27 locale pairs, 55 pages, and zero diagnostics. No foreground UI automation was used while the user session was active; real Narrator and visible-focus evidence remain separate accessibility gates.
+
+The same batch expands the permanent malformed-header regression from ZIP, 7z, TAR, and tar.gz to all 15 format classes. Every minimal input retains enough signature or extension hint to reach its intended provider; List and integrity testing must both return an ordinary error without panicking. Continuous fuzzing and real third-party corpora remain independent defense-in-depth gates.
+
 ## 2026-08-24 — Parser-boundary hardening
 
 Extraction originally listed with global defaults before applying caller limits, so strict caller entry/depth limits did not constrain early parser work. Limit-aware list/test APIs now apply extraction limits before destination creation. Integration tests cover strict ZIP/7z/TAR limits and malformed ZIP/7z/tar/tgz inputs.

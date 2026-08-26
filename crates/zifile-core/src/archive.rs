@@ -60,6 +60,14 @@ pub enum ConflictPolicy {
 }
 
 #[derive(Debug, Clone, Default)]
+pub struct ListOptions {
+    pub limits: SafetyLimits,
+    pub password: Option<String>,
+    pub cancellation: CancellationToken,
+    pub progress: OperationProgress,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct TestOptions {
     pub limits: SafetyLimits,
     pub password: Option<String>,
@@ -213,7 +221,13 @@ impl CancellationToken {
 }
 
 pub fn list_archive(path: impl AsRef<Path>, password: Option<&str>) -> ZiFileResult<ArchiveInfo> {
-    list_archive_with_limits(path, password, SafetyLimits::default())
+    list_archive_with_options(
+        path,
+        &ListOptions {
+            password: password.map(str::to_owned),
+            ..ListOptions::default()
+        },
+    )
 }
 
 pub fn list_archive_with_limits(
@@ -221,29 +235,47 @@ pub fn list_archive_with_limits(
     password: Option<&str>,
     limits: SafetyLimits,
 ) -> ZiFileResult<ArchiveInfo> {
+    list_archive_with_options(
+        path,
+        &ListOptions {
+            limits,
+            password: password.map(str::to_owned),
+            ..ListOptions::default()
+        },
+    )
+}
+
+pub fn list_archive_with_options(
+    path: impl AsRef<Path>,
+    options: &ListOptions,
+) -> ZiFileResult<ArchiveInfo> {
+    options.cancellation.check()?;
     let path = path.as_ref();
     let format = detect_format(path)?;
     let entries = match format {
-        ArchiveFormat::Zip => list_zip(path, password, limits)?,
+        ArchiveFormat::Zip => list_zip(path, options)?,
         ArchiveFormat::SevenZip => {
-            guard_archive_backend(format, "listing", || list_seven_zip(path, password, limits))?
+            guard_archive_backend(format, "listing", || list_seven_zip(path, options))?
         }
         ArchiveFormat::Tar
         | ArchiveFormat::TarGzip
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
-        | ArchiveFormat::TarBzip2 => list_tar(path, format, limits)?,
+        | ArchiveFormat::TarBzip2 => list_tar(path, format, options)?,
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
         | ArchiveFormat::Bzip2
         | ArchiveFormat::Lz4
-        | ArchiveFormat::Brotli => list_stream(path, format, limits)?,
-        ArchiveFormat::Rar => {
-            guard_archive_backend(format, "listing", || list_rar(path, password, limits))?
-        }
-        ArchiveFormat::Cab => guard_archive_backend(format, "listing", || list_cab(path, limits))?,
+        | ArchiveFormat::Brotli => list_stream(path, format, options)?,
+        ArchiveFormat::Rar => guard_archive_backend(format, "listing", || list_rar(path, options))?,
+        ArchiveFormat::Cab => guard_archive_backend(format, "listing", || list_cab(path, options))?,
     };
+    options.cancellation.check()?;
+    let scanned_bytes = options.progress.snapshot().processed_bytes;
+    options
+        .progress
+        .set_totals(entries.len() as u64, scanned_bytes);
 
     let total_size = entries.iter().try_fold(0_u64, |total, entry| {
         total
@@ -258,7 +290,7 @@ pub fn list_archive_with_limits(
         total_size,
         compressed_size,
     };
-    validate_declared_limits(&info, limits)?;
+    validate_declared_limits(&info, options.limits)?;
     Ok(info)
 }
 
@@ -293,7 +325,15 @@ pub fn test_archive_with_options(
 ) -> ZiFileResult<ArchiveInfo> {
     options.cancellation.check()?;
     let path = path.as_ref();
-    let info = list_archive_with_limits(path, options.password.as_deref(), options.limits)?;
+    let info = list_archive_with_options(
+        path,
+        &ListOptions {
+            limits: options.limits,
+            password: options.password.clone(),
+            cancellation: options.cancellation.clone(),
+            ..ListOptions::default()
+        },
+    )?;
     validate_declared_limits(&info, options.limits)?;
     let total_entries = info
         .entries
@@ -350,7 +390,15 @@ pub fn extract_archive(
     }
     let archive = archive.as_ref();
     let destination = destination.as_ref();
-    let info = list_archive_with_limits(archive, options.password.as_deref(), options.limits)?;
+    let info = list_archive_with_options(
+        archive,
+        &ListOptions {
+            limits: options.limits,
+            password: options.password.clone(),
+            cancellation: options.cancellation.clone(),
+            ..ListOptions::default()
+        },
+    )?;
     validate_declared_limits(&info, options.limits)?;
     let selected = info.entries.iter().filter(|entry| {
         !entry.is_directory
@@ -459,18 +507,20 @@ fn cab_file_names(cabinet: &Cabinet<BufReader<File>>) -> Vec<String> {
         .collect()
 }
 
-fn list_cab(path: &Path, limits: SafetyLimits) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+fn list_cab(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
     let cabinet = open_cab(path)?;
     let mut entries = Vec::new();
     for folder in cabinet.folder_entries() {
         for entry in folder.file_entries() {
-            if entries.len() as u64 >= limits.max_entries {
+            options.cancellation.check()?;
+            if entries.len() as u64 >= options.limits.max_entries {
                 return Err(ZiFileError::LimitExceeded(format!(
                     "entry count exceeds {}",
-                    limits.max_entries
+                    options.limits.max_entries
                 )));
             }
-            let safe = safe_relative_path(entry.name(), limits.max_path_depth)?;
+            let safe = safe_relative_path(entry.name(), options.limits.max_path_depth)?;
             entries.push(ArchiveEntryInfo {
                 path: safe,
                 size: u64::from(entry.uncompressed_size()),
@@ -478,9 +528,10 @@ fn list_cab(path: &Path, limits: SafetyLimits) -> ZiFileResult<Vec<ArchiveEntryI
                 is_directory: false,
                 encrypted: false,
             });
+            options.progress.advance_entry();
         }
     }
-    validate_entry_names(&entries, limits)?;
+    validate_entry_names(&entries, options.limits)?;
     Ok(entries)
 }
 
@@ -592,24 +643,23 @@ fn rar_error_is_limit(error: &rars::Error) -> bool {
     }
 }
 
-fn list_rar(
-    path: &Path,
-    password: Option<&str>,
-    limits: SafetyLimits,
-) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
-    let archive = read_rar(path, password, limits)?;
+fn list_rar(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
+    let archive = read_rar(path, options.password.as_deref(), options.limits)?;
+    options.cancellation.check()?;
     reject_rar_special_entries(&archive)?;
     let mut entries = Vec::new();
     for member in archive.members() {
-        if entries.len() as u64 >= limits.max_entries {
+        options.cancellation.check()?;
+        if entries.len() as u64 >= options.limits.max_entries {
             return Err(ZiFileError::LimitExceeded(format!(
                 "entry count exceeds {}",
-                limits.max_entries
+                options.limits.max_entries
             )));
         }
         reject_rar_member_link(&member)?;
         let name = member.meta.name_lossy();
-        let safe = safe_relative_path(&name, limits.max_path_depth)?;
+        let safe = safe_relative_path(&name, options.limits.max_path_depth)?;
         entries.push(ArchiveEntryInfo {
             path: safe,
             size: member.meta.unpacked_size,
@@ -617,8 +667,9 @@ fn list_rar(
             is_directory: member.meta.is_directory,
             encrypted: member.meta.is_encrypted,
         });
+        options.progress.advance_entry();
     }
-    validate_entry_names(&entries, limits)?;
+    validate_entry_names(&entries, options.limits)?;
     Ok(entries)
 }
 
@@ -961,20 +1012,19 @@ fn persist_rar_output(pending: PendingRarFile) -> ZiFileResult<()> {
     Ok(())
 }
 
-fn list_zip(
-    path: &Path,
-    _password: Option<&str>,
-    limits: SafetyLimits,
-) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+fn list_zip(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
     let mut archive = ZipArchive::new(BufReader::new(File::open(path)?))?;
-    if archive.len() as u64 > limits.max_entries {
+    if archive.len() as u64 > options.limits.max_entries {
         return Err(ZiFileError::LimitExceeded(format!(
             "entry count exceeds {}",
-            limits.max_entries
+            options.limits.max_entries
         )));
     }
+    options.progress.set_totals(archive.len() as u64, 0);
     let mut entries = Vec::with_capacity(archive.len());
     for index in 0..archive.len() {
+        options.cancellation.check()?;
         let entry = archive.by_index_raw(index)?;
         let safe = entry
             .enclosed_name()
@@ -987,8 +1037,9 @@ fn list_zip(
             is_directory: entry.is_dir(),
             encrypted: entry.encrypted(),
         });
+        options.progress.advance_entry();
     }
-    validate_entry_names(&entries, limits)?;
+    validate_entry_names(&entries, options.limits)?;
     Ok(entries)
 }
 
@@ -1133,15 +1184,17 @@ fn create_zip(
 fn list_tar(
     path: &Path,
     format: ArchiveFormat,
-    limits: SafetyLimits,
+    options: &ListOptions,
 ) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
     let mut archive = tar::Archive::new(open_tar_reader(path, format)?);
     let mut result = Vec::new();
     for entry in archive.entries()? {
-        if result.len() as u64 >= limits.max_entries {
+        options.cancellation.check()?;
+        if result.len() as u64 >= options.limits.max_entries {
             return Err(ZiFileError::LimitExceeded(format!(
                 "entry count exceeds {}",
-                limits.max_entries
+                options.limits.max_entries
             )));
         }
         let entry = entry?;
@@ -1152,7 +1205,7 @@ fn list_tar(
             ));
         }
         let path = entry.path()?.into_owned();
-        let safe = safe_relative_path(&path.to_string_lossy(), limits.max_path_depth)?;
+        let safe = safe_relative_path(&path.to_string_lossy(), options.limits.max_path_depth)?;
         result.push(ArchiveEntryInfo {
             path: safe,
             size: entry.size(),
@@ -1160,8 +1213,9 @@ fn list_tar(
             is_directory: entry_type.is_dir(),
             encrypted: false,
         });
+        options.progress.advance_entry();
     }
-    validate_entry_names(&result, limits)?;
+    validate_entry_names(&result, options.limits)?;
     Ok(result)
 }
 
@@ -1367,34 +1421,33 @@ fn guard_archive_backend<T>(
     })
 }
 
-fn list_seven_zip(
-    path: &Path,
-    password: Option<&str>,
-    limits: SafetyLimits,
-) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
-    let reader = SevenZReader::open(path, seven_password(password))?;
-    if reader.archive().files.len() as u64 > limits.max_entries {
+fn list_seven_zip(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
+    let reader = SevenZReader::open(path, seven_password(options.password.as_deref()))?;
+    options.cancellation.check()?;
+    if reader.archive().files.len() as u64 > options.limits.max_entries {
         return Err(ZiFileError::LimitExceeded(format!(
             "entry count exceeds {}",
-            limits.max_entries
+            options.limits.max_entries
         )));
     }
     let files = reader.archive().files.clone();
-    let entries = files
-        .iter()
-        .map(|entry| {
-            let mut methods = Vec::new();
-            reader.file_compression_methods(entry.name(), &mut methods)?;
-            Ok(ArchiveEntryInfo {
-                path: safe_relative_path(entry.name(), limits.max_path_depth)?,
-                size: entry.size(),
-                compressed_size: entry.compressed_size,
-                is_directory: entry.is_directory(),
-                encrypted: methods.contains(&sevenz_rust2::EncoderMethod::AES256_SHA256),
-            })
-        })
-        .collect::<ZiFileResult<Vec<_>>>()?;
-    validate_entry_names(&entries, limits)?;
+    options.progress.set_totals(files.len() as u64, 0);
+    let mut entries = Vec::with_capacity(files.len());
+    for entry in &files {
+        options.cancellation.check()?;
+        let mut methods = Vec::new();
+        reader.file_compression_methods(entry.name(), &mut methods)?;
+        entries.push(ArchiveEntryInfo {
+            path: safe_relative_path(entry.name(), options.limits.max_path_depth)?,
+            size: entry.size(),
+            compressed_size: entry.compressed_size,
+            is_directory: entry.is_directory(),
+            encrypted: methods.contains(&sevenz_rust2::EncoderMethod::AES256_SHA256),
+        });
+        options.progress.advance_entry();
+    }
+    validate_entry_names(&entries, options.limits)?;
     Ok(entries)
 }
 
@@ -1553,16 +1606,26 @@ fn seven_password(password: Option<&str>) -> Password {
 fn list_stream(
     path: &Path,
     format: ArchiveFormat,
-    limits: SafetyLimits,
+    options: &ListOptions,
 ) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
+    options.progress.set_totals(1, 0);
     let mut reader = open_stream_decoder(path, format)?;
     let compressed_size = fs::metadata(path)?.len();
     let ratio_limit = compressed_size
-        .saturating_mul(limits.max_expansion_ratio)
+        .saturating_mul(options.limits.max_expansion_ratio)
         .max(compressed_size);
-    let maximum = limits.max_expanded_bytes.min(ratio_limit);
+    let maximum = options.limits.max_expanded_bytes.min(ratio_limit);
     let mut size = 0;
-    copy_limited(&mut reader, &mut io::sink(), &mut size, maximum, None, None)?;
+    copy_limited(
+        &mut reader,
+        &mut io::sink(),
+        &mut size,
+        maximum,
+        Some(&options.cancellation),
+        Some(&options.progress),
+    )?;
+    options.progress.advance_entry();
     Ok(vec![ArchiveEntryInfo {
         path: stream_output_name(path, format),
         size,

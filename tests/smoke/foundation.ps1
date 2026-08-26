@@ -90,10 +90,26 @@ try {
             password = $null
         }
     } | ConvertTo-Json -Depth 5 -Compress
-    $workerOutput = ($workerRequest | & $workerPath) -join "`n"
+    $workerListLines = @($workerRequest | & $workerPath)
+    $workerOutput = $workerListLines -join "`n"
     if ($LASTEXITCODE -ne 0 -or $workerOutput -notmatch 'archive_start' -or
         $workerOutput -notmatch 'unicode-测试.txt' -or $workerOutput -notmatch 'archive_end') {
         throw 'Isolated worker IPC smoke test failed.'
+    }
+    $workerListEvents = @($workerListLines | ForEach-Object { $_ | ConvertFrom-Json })
+    $listProgressEvents = @($workerListEvents | Where-Object { $_.payload.event -eq 'progress' })
+    $lastListProgress = $listProgressEvents | Select-Object -Last 1
+    [object[]]$workerListEventNames = @($workerListEvents | ForEach-Object { $_.payload.event })
+    $listArchiveStartIndex = [Array]::IndexOf($workerListEventNames, 'archive_start')
+    $lastListProgressIndex = [Array]::LastIndexOf($workerListEventNames, 'progress')
+    if (
+        $listProgressEvents.Count -lt 1 -or
+        -not $lastListProgress -or
+        $lastListProgress.payload.snapshot.total_entries -lt 1 -or
+        $lastListProgress.payload.snapshot.processed_entries -ne $lastListProgress.payload.snapshot.total_entries -or
+        $lastListProgressIndex -ge $listArchiveStartIndex
+    ) {
+        throw 'Worker listing did not emit a complete final progress snapshot before archive streaming.'
     }
 
     $workerTestRequest = @{

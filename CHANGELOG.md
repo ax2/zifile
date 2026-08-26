@@ -36,6 +36,8 @@ All notable changes to ZiFile are documented here. The format follows
 - Store privacy-route gates that verify both localized Astro outputs during CI and
   the deployed public HTTPS pages after every GitHub Pages publication.
 - Security-focused fuzz targets and archive throughput benchmarks.
+- Permanent malformed/truncated-header regression coverage for all 15 supported archive
+  and compression format classes, requiring both list and integrity-test rejection.
 - Bidirectional ZIP and tar.gz interoperability tests against Windows reference tools.
 - Simplified Chinese and English desktop UI with system-locale detection and persisted
   language/theme preferences; passwords are never included in settings.
@@ -74,6 +76,9 @@ All notable changes to ZiFile are documented here. The format follows
   active cancellation, pending-work clearing, and non-persistent sensitive payloads.
 - Entry/byte progress and cooperative cancellation for archive integrity testing across
   ZIP, 7z, RAR, CAB, TAR compositions, and supported compression streams.
+- Entry-scan progress and cooperative cancellation while opening all supported archives,
+  including expanded-byte scan feedback for single compression streams and bilingual
+  indeterminate scanning copy until a final total is known.
 - A pure-Rust read-only RAR 1.3–7 beta provider with encrypted headers, solid archives,
   selected extraction, resource limits, cancellation, and link/redirection rejection.
 - A pure-Rust read-only Windows CAB beta provider with signature detection, browsing,

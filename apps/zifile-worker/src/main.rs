@@ -6,8 +6,8 @@ use std::thread;
 use std::time::Duration;
 
 use zifile_core::{
-    CreateOptions, ExtractOptions, OperationProgress, TestOptions, create_archive, extract_archive,
-    list_archive, test_archive_with_options,
+    CreateOptions, ExtractOptions, ListOptions, OperationProgress, TestOptions, create_archive,
+    extract_archive, list_archive_with_options, test_archive_with_options,
 };
 use zifile_worker_protocol::{
     Envelope, PROTOCOL_VERSION, WorkerControl, WorkerEvent, WorkerRequest,
@@ -34,7 +34,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let writer = shared_stdout();
     match request {
         WorkerRequest::List { archive, password } => {
-            emit_archive(&writer, list_archive(archive, password.as_deref())?)?;
+            let progress = OperationProgress::default();
+            let cancellation = zifile_core::CancellationToken::default();
+            listen_for_cancel(cancellation.clone());
+            let options = ListOptions {
+                password,
+                cancellation,
+                progress: progress.clone(),
+                ..ListOptions::default()
+            };
+            let archive = with_progress(writer.clone(), progress, move || {
+                list_archive_with_options(archive, &options)
+            })?;
+            emit_archive(&writer, archive)?;
         }
         WorkerRequest::Test { archive, password } => {
             let progress = OperationProgress::default();

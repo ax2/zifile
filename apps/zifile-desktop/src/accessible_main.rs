@@ -1227,6 +1227,21 @@ fn operation_queue_summary(locale: Locale, count: usize) -> String {
     }
 }
 fn operation_progress_text(locale: Locale, snapshot: ProgressSnapshot) -> String {
+    if snapshot.total_bytes == 0 && snapshot.processed_bytes > 0 {
+        return match locale {
+            Locale::En => format!("Scanning · {} read", format_bytes(snapshot.processed_bytes)),
+            Locale::ZhCn => format!(
+                "正在扫描 · 已读取 {}",
+                format_bytes(snapshot.processed_bytes)
+            ),
+        };
+    }
+    if snapshot.total_entries == 0 && snapshot.processed_entries > 0 {
+        return match locale {
+            Locale::En => format!("Scanning · {} entries found", snapshot.processed_entries),
+            Locale::ZhCn => format!("正在扫描 · 已发现 {} 项", snapshot.processed_entries),
+        };
+    }
     let percent = (snapshot.fraction() * 100.0).round() as u8;
     let processed_entries = snapshot.processed_entries.min(snapshot.total_entries);
     let processed_bytes = snapshot.processed_bytes.min(snapshot.total_bytes);
@@ -1431,6 +1446,27 @@ mod tests {
         assert_eq!(
             operation_progress_text(Locale::En, ProgressSnapshot::default()),
             "Operation starting"
+        );
+        assert_eq!(
+            operation_progress_text(
+                Locale::En,
+                ProgressSnapshot {
+                    processed_entries: 17,
+                    ..ProgressSnapshot::default()
+                }
+            ),
+            "Scanning · 17 entries found"
+        );
+        assert_eq!(
+            operation_progress_text(
+                Locale::ZhCn,
+                ProgressSnapshot {
+                    processed_bytes: 2048,
+                    total_entries: 1,
+                    ..ProgressSnapshot::default()
+                }
+            ),
+            "正在扫描 · 已读取 2.0 KB"
         );
     }
 

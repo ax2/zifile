@@ -5,10 +5,10 @@ use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 use zifile_core::{
-    ArchiveFormat, CancellationToken, ConflictPolicy, CreateOptions, ExtractOptions,
+    ArchiveFormat, CancellationToken, ConflictPolicy, CreateOptions, ExtractOptions, ListOptions,
     OperationProgress, SafetyLimits, TestOptions, ZiFileError, create_archive, detect_format,
-    extract_archive, list_archive, list_archive_with_limits, test_archive,
-    test_archive_with_limits, test_archive_with_options,
+    extract_archive, list_archive, list_archive_with_limits, list_archive_with_options,
+    test_archive, test_archive_with_limits, test_archive_with_options,
 };
 
 fn fixture() -> (TempDir, PathBuf) {
@@ -89,6 +89,7 @@ fn cab_fixture_with_compression(
 }
 
 fn assert_test_progress(path: &Path, password: Option<&str>) -> zifile_core::ArchiveInfo {
+    assert_list_progress(path, password);
     let progress = OperationProgress::default();
     let info = test_archive_with_options(
         path,
@@ -110,6 +111,25 @@ fn assert_test_progress(path: &Path, password: Option<&str>) -> zifile_core::Arc
     assert_eq!(snapshot.processed_entries, snapshot.total_entries);
     assert_eq!(snapshot.total_bytes, info.total_size);
     assert_eq!(snapshot.processed_bytes, info.total_size);
+    assert_eq!(snapshot.fraction(), 1.0);
+    info
+}
+
+fn assert_list_progress(path: &Path, password: Option<&str>) -> zifile_core::ArchiveInfo {
+    let progress = OperationProgress::default();
+    let info = list_archive_with_options(
+        path,
+        &ListOptions {
+            password: password.map(str::to_owned),
+            progress: progress.clone(),
+            ..ListOptions::default()
+        },
+    )
+    .unwrap();
+    let snapshot = progress.snapshot();
+    assert_eq!(snapshot.total_entries, info.entries.len() as u64);
+    assert_eq!(snapshot.processed_entries, snapshot.total_entries);
+    assert_eq!(snapshot.processed_bytes, snapshot.total_bytes);
     assert_eq!(snapshot.fraction(), 1.0);
     info
 }
@@ -495,6 +515,34 @@ fn archive_testing_reports_progress_and_honors_precancellation() {
 }
 
 #[test]
+fn archive_listing_reports_progress_and_honors_precancellation() {
+    let (temp, source) = fixture();
+    let archive = temp.path().join("list-progress.zip");
+    create_archive(
+        &[source],
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    assert_list_progress(&archive, None);
+
+    let cancellation = CancellationToken::default();
+    cancellation.cancel();
+    assert!(matches!(
+        list_archive_with_options(
+            &archive,
+            &ListOptions {
+                cancellation,
+                ..ListOptions::default()
+            },
+        ),
+        Err(ZiFileError::Cancelled)
+    ));
+}
+
+#[test]
 fn rar_reader_covers_every_supported_archive_version() {
     let temp = tempfile::tempdir().unwrap();
     for version in rars::ArchiveVersion::ALL {
@@ -812,15 +860,26 @@ fn extraction_uses_caller_limits_before_creating_destination() {
 }
 
 #[test]
-fn malformed_primary_archive_headers_fail_without_panicking() {
+fn malformed_headers_for_every_supported_format_fail_without_panicking() {
     let temp = tempfile::tempdir().unwrap();
     let mut tar = vec![0_u8; 512];
     tar[257..262].copy_from_slice(b"ustar");
     let cases = [
         ("broken.zip", b"PK\x03\x04broken".to_vec()),
         ("broken.7z", b"7z\xBC\xAF\x27\x1Cbroken".to_vec()),
-        ("broken.tgz", b"\x1F\x8B\x08broken".to_vec()),
+        ("broken.rar", b"Rar!\x1A\x07\x01\x00broken".to_vec()),
+        ("broken.cab", b"MSCFbroken".to_vec()),
         ("broken.tar", tar),
+        ("broken.tar.gz", b"\x1F\x8B\x08broken".to_vec()),
+        ("broken.tar.zst", b"\x28\xB5\x2F\xFDbroken".to_vec()),
+        ("broken.tar.xz", b"\xFD7zXZ\x00broken".to_vec()),
+        ("broken.tar.bz2", b"BZhbroken".to_vec()),
+        ("broken.gz", b"\x1F\x8B\x08broken".to_vec()),
+        ("broken.zst", b"\x28\xB5\x2F\xFDbroken".to_vec()),
+        ("broken.xz", b"\xFD7zXZ\x00broken".to_vec()),
+        ("broken.bz2", b"BZhbroken".to_vec()),
+        ("broken.lz4", b"\x04\x22\x4D\x18broken".to_vec()),
+        ("broken.br", b"\xFFbroken".to_vec()),
     ];
     let limits = SafetyLimits {
         max_entries: 16,
@@ -831,6 +890,10 @@ fn malformed_primary_archive_headers_fail_without_panicking() {
     for (name, bytes) in cases {
         let path = temp.path().join(name);
         fs::write(&path, bytes).unwrap();
+        assert!(
+            list_archive_with_limits(&path, None, limits).is_err(),
+            "malformed input unexpectedly listed: {name}"
+        );
         assert!(
             test_archive_with_limits(&path, None, limits).is_err(),
             "malformed input unexpectedly passed: {name}"
