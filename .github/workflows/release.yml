@@ -58,6 +58,15 @@ jobs:
             $readinessArguments.RequireReleaseReady = $true
           }
           ./scripts/Test-ReleaseReadiness.ps1 @readinessArguments
+          $identityArguments = @{
+            IdentityName = $env:ZIFILE_MSIX_IDENTITY
+            Publisher = $env:ZIFILE_MSIX_PUBLISHER
+          }
+          if ('${{ github.event_name }}' -ne 'workflow_dispatch' -or
+              '${{ inputs.signing_provider }}' -eq 'digicert-stm') {
+            $identityArguments.RequireConfigured = $true
+          }
+          ./packaging/store/Test-PartnerCenterIdentity.ps1 @identityArguments
           "semver=$($version.version)" >> $env:GITHUB_OUTPUT
           "msix=$($version.msix_version)" >> $env:GITHUB_OUTPUT
       - name: Test workspace

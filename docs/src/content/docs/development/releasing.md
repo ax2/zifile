@@ -25,6 +25,8 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 
 手动 Release 可选择 `digicert-stm` 做完整签名演练。构建阶段要求仓库 Variables `ZIFILE_MSIX_IDENTITY`、`ZIFILE_MSIX_PUBLISHER`；受保护 Environment 提供 Variables `SM_HOST`、`SM_KEYPAIR_ALIAS` 和 Secrets `SM_API_KEY`、`SM_CLIENT_CERT_FILE_B64`、`SM_CLIENT_CERT_PASSWORD`。客户端认证证书只用于登录签名服务，写入 Runner 临时目录并在作业结束前删除；代码签名私钥始终留在云 HSM。
 
+正式标签或 `digicert-stm` 演练会在编译前运行 `Test-PartnerCenterIdentity.ps1 -RequireConfigured`。它要求 Name/Publisher 同时存在，Name 符合 MSIX 的 3–50 位字母数字/点/横线边界，Publisher 是有效 X.500 distinguished name，并拒绝 `.Dev` 与未签名 OID。数值必须从 Partner Center 的 [Product identity](https://learn.microsoft.com/windows/apps/publish/view-app-identity-details) 原样复制；预检只证明结构和来源约束，不证明账号或名称已经预留。
+
 生产配置、审批、轮换、应急停止、吊销和最小证据集见[生产签名运维](/zifile/development/signing-operations/)。签名 Job 按架构串行化不同发布运行、设置 30 分钟硬超时，并使用 Job 级最小权限；任何超时都作为失败处理，不能绕过签后验签直接发布。
 
 每次打包都会重新解包 MSIX，并核对 Identity、Publisher、版本、最低 Windows build、桌面/CLI/Worker 三枚 EXE 与 Explorer DLL 的 PE 架构、主要文件关联、`zifile.exe` alias、敏感文件/ZIP 缺失和签名状态。审计 JSON 随对应架构进入校验和、来源证明和 Release artifact；它不能替代安装、升级、卸载或 WACK 实机门禁。
