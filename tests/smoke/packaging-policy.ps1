@@ -18,8 +18,10 @@ $cloudSigningInputs = Join-Path $repoRoot 'packaging\msix\Test-CloudSigningInput
 $signedReleaseArtifacts = Join-Path $repoRoot 'packaging\msix\Test-SignedReleaseArtifacts.ps1'
 $signingOperationsDocs = Join-Path $repoRoot 'scripts\Test-SigningOperationsDocs.ps1'
 $partnerCenterIdentity = Join-Path $repoRoot 'packaging\store\Test-PartnerCenterIdentity.ps1'
+$wingetGenerator = Join-Path $repoRoot 'packaging\winget\Generate-Manifests.ps1'
+$wingetVerifier = Join-Path $repoRoot 'packaging\winget\Test-Manifests.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $wingetGenerator, $wingetVerifier)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -92,6 +94,67 @@ try {
 finally {
     if (Test-Path -LiteralPath $versionFixture) {
         Remove-Item -LiteralPath $versionFixture -Recurse -Force
+    }
+}
+
+$wingetFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
+    'zifile-winget-policy-{0}' -f [Guid]::NewGuid().ToString('N')
+)))
+if (-not $wingetFixture.StartsWith($temporaryBase, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Refusing to create the WinGet fixture outside the system temporary directory.'
+}
+try {
+    New-Item -ItemType Directory -Path $wingetFixture -Force | Out-Null
+    $wingetVersion = '9.8.7'
+    $wingetX64 = Join-Path $wingetFixture 'ZiFile-9.8.7.0-windows-x64.msix'
+    $wingetArm64 = Join-Path $wingetFixture 'ZiFile-9.8.7.0-windows-arm64.msix'
+    Set-Content -LiteralPath $wingetX64 -Value 'deterministic x64 signed-package fixture' -Encoding utf8NoBOM
+    Set-Content -LiteralPath $wingetArm64 -Value 'deterministic arm64 signed-package fixture' -Encoding utf8NoBOM
+    $wingetX64Sha = (Get-FileHash -LiteralPath $wingetX64 -Algorithm SHA256).Hash
+    $wingetArm64Sha = (Get-FileHash -LiteralPath $wingetArm64 -Algorithm SHA256).Hash
+    & $wingetGenerator `
+        -Version $wingetVersion `
+        -X64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$wingetVersion/$(Split-Path $wingetX64 -Leaf)" `
+        -X64InstallerSha256 $wingetX64Sha `
+        -Arm64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$wingetVersion/$(Split-Path $wingetArm64 -Leaf)" `
+        -Arm64InstallerSha256 $wingetArm64Sha `
+        -OutputRoot $wingetFixture | Out-Null
+    $wingetManifestDirectory = Join-Path $wingetFixture 'manifests\z\ZiCode\ZiFile\9.8.7'
+    $wingetResult = & $wingetVerifier `
+        -ManifestDirectory $wingetManifestDirectory `
+        -Version $wingetVersion `
+        -X64InstallerPath $wingetX64 `
+        -Arm64InstallerPath $wingetArm64 | ConvertFrom-Json
+    if (-not $wingetResult.ready_for_winget_validate -or
+        -not $wingetResult.local_installers_verified -or
+        $wingetResult.manifest_files -ne 4 -or
+        $wingetResult.architectures.Count -ne 2) {
+        throw 'The generated WinGet multi-file candidate did not pass the signed-package verifier.'
+    }
+    $installerManifest = Join-Path $wingetManifestDirectory 'ZiCode.ZiFile.installer.yaml'
+    $originalInstallerManifest = Get-Content -Raw -LiteralPath $installerManifest
+    $tamperedInstallerManifest = $originalInstallerManifest.Replace($wingetX64Sha, ('0' * 64))
+    Set-Content -LiteralPath $installerManifest -Value $tamperedInstallerManifest -Encoding utf8NoBOM -NoNewline
+    $null = Get-ExpectedFailure -Pattern 'does not match the signed local MSIX' -Action {
+        & $wingetVerifier `
+            -ManifestDirectory $wingetManifestDirectory `
+            -Version $wingetVersion `
+            -X64InstallerPath $wingetX64 `
+            -Arm64InstallerPath $wingetArm64
+    }
+    $null = Get-ExpectedFailure -Pattern 'versioned ZiFile GitHub Release path' -Action {
+        & $wingetGenerator `
+            -Version $wingetVersion `
+            -X64InstallerUrl "https://example.com/$(Split-Path $wingetX64 -Leaf)" `
+            -X64InstallerSha256 $wingetX64Sha `
+            -Arm64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$wingetVersion/$(Split-Path $wingetArm64 -Leaf)" `
+            -Arm64InstallerSha256 $wingetArm64Sha `
+            -OutputRoot $wingetFixture
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $wingetFixture) {
+        Remove-Item -LiteralPath $wingetFixture -Recurse -Force
     }
 }
 
@@ -538,6 +601,18 @@ if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-SecurityDocs.ps1')) {
 if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ReleaseReadiness.ps1')) {
     throw 'CI does not validate the 1.0 release readiness manifest.'
 }
+$releaseWorkflowSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\release.yml')
+foreach ($requiredWingetToken in @(
+    './packaging/winget/Generate-Manifests.ps1',
+    './packaging/winget/Test-Manifests.ps1',
+    'target/winget/manifests/z/ZiCode/ZiFile/$version',
+    '-X64InstallerPath $x64.FullName',
+    '-Arm64InstallerPath $arm64.FullName'
+)) {
+    if ($releaseWorkflowSource -notmatch [Regex]::Escape($requiredWingetToken)) {
+        throw "Release does not enforce the verified WinGet candidate token: $requiredWingetToken"
+    }
+}
 foreach ($requiredRepairWorkflowToken in @(
     'MSIX Repair helper',
     'timeout-minutes: 2',
@@ -626,4 +701,8 @@ foreach ($requiredWackToken in @(
     partner_center_identity_preflight_wired = $true
     partial_partner_center_identity_rejected = $true
     malformed_partner_center_identity_rejected = $true
+    winget_community_path_generated = $true
+    winget_local_hashes_verified = $true
+    winget_invalid_release_url_rejected = $true
+    winget_release_gate_wired = $true
 } | ConvertTo-Json

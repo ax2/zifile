@@ -9,7 +9,8 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 - Release 已移除 PFX，具备受保护的 DigiCert Binary Signing simple-signing、签后系统验签、时间戳检查和签后审计路径；真实账号演练仍待外部凭据。
 - `Test-PartnerCenterIdentity.ps1` 在标签/真实签名演练编译前拒绝缺失、只配置一项、非法 Name、`.Dev`、未签名 OID 和无效 X.500 Publisher；正式值仍必须由 Product identity 页面提供。
 - SHA-256、CycloneDX JSON SBOM 和 GitHub 构建来源证明。
-- WinGet 1.12 多文件清单生成器，覆盖两个架构、文件关联和中英文元数据。
+- WinGet 1.12 多文件清单生成器，覆盖两个架构、文件关联和中英文元数据，并直接生成社区仓库要求的 `manifests/z/ZiCode/ZiFile/<version>/` 目录。
+- 标签发布在上传前运行 `Test-Manifests.ps1`，要求四个 schema 类型、正式 GitHub Release HTTPS URL、x64/ARM64 一一对应，并把两个清单 SHA-256 与签后本地 MSIX 精确比较；篡改或错误版本路径会使发布失败。
 - 真实 Release SHA-256 的候选清单已通过本机 `winget validate`；该结果不等于已提交或已获社区仓库接受。
 - 每个 MSIX 在构建后自动解包审计 Identity、Publisher、版本、最低系统版本、四枚 PE 架构（桌面、CLI、Worker 与 Explorer DLL）、主要文件关联、CLI alias、敏感文件和签名状态，并随包生成 `.audit.json`。
 - 标签发布固定进入 `production-signing` Environment，并且发布任务只消费通过签后门禁的 `signed-windows-*`；`.Dev` Identity、未签名 OID Publisher、缺失云签名输入或无效/无时间戳签名都会失败。
@@ -36,7 +37,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 4. 用正式 Identity 重建 x64 与 ARM64 包，分别验证安装、启动、文件关联、升级和卸载。
 5. 在当前用户的管理员交互式会话中运行 Windows App Certification Kit，并完成键盘、讲述人、高对比度、DPI 与中文输入法检查。
 6. 复核已准备的双语商店说明、隐私说明和认证备注，部署公开隐私页，采集正式候选包的双语桌面截图，并填写年龄分级与市场。
-7. 上传通过验证的 MSIX 包并提交认证；公开 Release 后再生成和验证 WinGet 清单 PR。
+7. 上传通过验证的 MSIX 包并提交认证；公开 Release 附带已通过本地签后一致性门禁的 WinGet 清单，再运行官方 `winget validate` 并提交社区仓库 PR。
 
 未完成这些外部门禁时，任何 Alpha 构建都不得标记为“Microsoft Store 已就绪”或“已签名”。
 
