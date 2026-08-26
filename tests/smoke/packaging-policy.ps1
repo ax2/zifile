@@ -618,6 +618,7 @@ if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ReleaseReadiness.ps1')) 
 }
 foreach ($requiredWingetCiToken in @(
     'Install current WinGet validation client',
+    'GITHUB_TOKEN: ${{ github.token }}',
     './packaging/winget/Install-ValidationClient.ps1',
     'Official WinGet manifest validation',
     './tests/smoke/winget-manifest.ps1'

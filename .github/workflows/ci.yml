@@ -32,6 +32,8 @@ jobs:
         run: ./tests/smoke/packaging-policy.ps1
       - name: Install current WinGet validation client
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: ./packaging/winget/Install-ValidationClient.ps1
       - name: Official WinGet manifest validation
         shell: pwsh
