@@ -21,6 +21,6 @@ description: ZiFile 稳定版标签的机器可读门禁与当前证据边界。
 8. Microsoft Store 提交与认证。
 9. WinGet 社区仓库接受。
 10. Partner Center 名称与正式 Package Identity。
-11. ADR-0006 云 HSM 生产签名替换 PFX 脚手架。
+11. ADR-0006 已移除 PFX 并接入云 HSM 签名/签后审计；仍需真实证书完成双架构签名、可信生命周期和吊销演练。
 
 此页面是可读说明，JSON 清单和机器门禁才决定稳定标签是否允许。`candidate` 不等于 Store-ready、已签名或可发布。

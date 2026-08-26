@@ -14,8 +14,10 @@ $releaseNotes = Join-Path $repoRoot 'scripts\Test-ReleaseNotes.ps1'
 $contributorDocs = Join-Path $repoRoot 'scripts\Test-ContributorDocs.ps1'
 $securityDocs = Join-Path $repoRoot 'scripts\Test-SecurityDocs.ps1'
 $releaseReadiness = Join-Path $repoRoot 'scripts\Test-ReleaseReadiness.ps1'
+$cloudSigningInputs = Join-Path $repoRoot 'packaging\msix\Test-CloudSigningInputs.ps1'
+$signedReleaseArtifacts = Join-Path $repoRoot 'packaging\msix\Test-SignedReleaseArtifacts.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -249,14 +251,136 @@ $null = Get-ExpectedFailure -Pattern 'supported semantic version' -Action {
         -SigningPasswordAvailable
 }
 
+$cloudMissingFailure = Get-ExpectedFailure -Pattern 'protected production inputs' -Action {
+    & $cloudSigningInputs -Provider '' -IdentityName '' -Publisher ''
+}
+foreach ($inputName in @(
+    'ZIFILE_SIGNING_PROVIDER',
+    'ZIFILE_MSIX_IDENTITY',
+    'ZIFILE_MSIX_PUBLISHER',
+    'SM_HOST',
+    'SM_API_KEY',
+    'SM_CLIENT_CERT_FILE_B64',
+    'SM_CLIENT_CERT_PASSWORD',
+    'SM_KEYPAIR_ALIAS'
+)) {
+    if ($cloudMissingFailure -notmatch [Regex]::Escape($inputName)) {
+        throw "Cloud-signing input diagnostic omitted $inputName."
+    }
+}
+$cloudAccepted = & $cloudSigningInputs `
+    -Provider 'digicert-stm' `
+    -IdentityName 'ZiCode.ZiFile' `
+    -Publisher 'CN=ZiCode Official' `
+    -HostAvailable `
+    -ApiKeyAvailable `
+    -ClientCertificateAvailable `
+    -ClientCertificatePasswordAvailable `
+    -KeypairAliasAvailable |
+    ConvertFrom-Json
+if (-not $cloudAccepted.validated -or
+    $cloudAccepted.private_code_signing_key_exported -or
+    $cloudAccepted.credential_values_disclosed) {
+    throw 'Protected cloud-signing inputs were not accepted with the required custody boundary.'
+}
+$null = Get-ExpectedFailure -Pattern 'Unsupported production signing provider' -Action {
+    & $cloudSigningInputs `
+        -Provider 'pfx' `
+        -IdentityName 'ZiCode.ZiFile' `
+        -Publisher 'CN=ZiCode Official' `
+        -HostAvailable `
+        -ApiKeyAvailable `
+        -ClientCertificateAvailable `
+        -ClientCertificatePasswordAvailable `
+        -KeypairAliasAvailable
+}
+$null = Get-ExpectedFailure -Pattern 'development MSIX identity' -Action {
+    & $cloudSigningInputs `
+        -Provider 'digicert-stm' `
+        -IdentityName 'ZiCode.ZiFile.Dev' `
+        -Publisher 'CN=ZiCode Official' `
+        -HostAvailable `
+        -ApiKeyAvailable `
+        -ClientCertificateAvailable `
+        -ClientCertificatePasswordAvailable `
+        -KeypairAliasAvailable
+}
+
+$signedFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
+    'zifile-signed-artifacts-{0}' -f [Guid]::NewGuid().ToString('N')
+)))
+if (-not $signedFixture.StartsWith($temporaryBase, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Refusing to create the signed-artifact fixture outside the system temporary directory.'
+}
+try {
+    New-Item -ItemType Directory -Path $signedFixture -Force | Out-Null
+    foreach ($fixtureName in @(
+        'zifile-desktop-windows-x64.exe',
+        'zifile-cli-windows-x64.exe',
+        'zifile-worker-windows-x64.exe',
+        'zifile-shell-windows-x64.dll',
+        'ZiFile-1.0.0.0-windows-x64.msix'
+    )) {
+        Set-Content -LiteralPath (Join-Path $signedFixture $fixtureName) `
+            -Value 'intentionally unsigned fixture' -Encoding utf8NoBOM
+    }
+    $null = Get-ExpectedFailure -Pattern 'signature is not valid' -Action {
+        & $signedReleaseArtifacts `
+            -ArtifactDirectory $signedFixture `
+            -Architecture x64 `
+            -ExpectedVersion 1.0.0.0 `
+            -ExpectedIdentityName 'ZiCode.ZiFile' `
+            -ExpectedPublisher 'CN=ZiCode Official' `
+            -Provider digicert-stm
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $signedFixture) {
+        Remove-Item -LiteralPath $signedFixture -Recurse -Force
+    }
+}
+
 $buildSource = Get-Content -Raw -LiteralPath $packageBuild
 if ($buildSource -notmatch [Regex]::Escape("Test-Package.ps1")) {
     throw 'Build-Package.ps1 does not invoke the package auditor.'
 }
 $releaseSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\release.yml')
 $lifecycleWorkflowSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\msix-lifecycle.yml')
-if ($releaseSource -notmatch [Regex]::Escape('Test-PublishingInputs.ps1')) {
-    throw 'The release workflow does not invoke the publishing input policy.'
+foreach ($requiredSigningWorkflowToken in @(
+    'signing_provider:',
+    'environment: production-signing',
+    'Test-CloudSigningInputs.ps1',
+    'digicert/code-signing-software-trust-action@v1.2.1',
+    'simple-signing-mode: true',
+    'digest-alg: SHA-256',
+    'timestamp: true',
+    'Test-SignedReleaseArtifacts.ps1',
+    'signed-windows-${{ matrix.architecture }}',
+    'pattern: signed-windows-*',
+    'Attest signed Windows artifacts'
+)) {
+    if ($releaseSource -notmatch [Regex]::Escape($requiredSigningWorkflowToken)) {
+        throw "The release workflow omits cloud-signing token: $requiredSigningWorkflowToken"
+    }
+}
+foreach ($retiredPfxToken in @('ZIFILE_PFX_BASE64', 'ZIFILE_PFX_PASSWORD')) {
+    if ($releaseSource -match [Regex]::Escape($retiredPfxToken)) {
+        throw "The release workflow still references retired PFX input: $retiredPfxToken"
+    }
+}
+$signedVerifierSource = Get-Content -Raw -LiteralPath $signedReleaseArtifacts
+foreach ($requiredVerifierToken in @(
+    'Get-AuthenticodeSignature',
+    'SignatureStatus]::Valid',
+    'TimeStamperCertificate',
+    'SignerCertificate.Subject -ne $ExpectedPublisher',
+    'RequireSignature',
+    'SHA256SUMS-$Architecture.txt',
+    '*.zip'
+)) {
+    if ($signedVerifierSource -notmatch [Regex]::Escape($requiredVerifierToken)) {
+        throw "The signed-release verifier omits required token: $requiredVerifierToken"
+    }
 }
 if ($releaseSource -notmatch [Regex]::Escape('Test-VersionConsistency.ps1 @arguments')) {
     throw 'The release workflow does not enforce the workspace version source.'
@@ -447,4 +571,9 @@ foreach ($requiredWackToken in @(
     release_readiness_wired = $true
     stable_release_pending_rejected = $true
     complete_release_readiness_accepted = $true
+    cloud_signing_inputs_accepted = $true
+    unsupported_signing_provider_rejected = $true
+    unsigned_release_artifacts_rejected = $true
+    production_signing_workflow_wired = $true
+    pfx_release_inputs_retired = $true
 } | ConvertTo-Json

@@ -21,6 +21,6 @@ Normal CI, manual Release rehearsals, and hyphenated prerelease tags validate th
 8. Complete Microsoft Store submission and certification.
 9. Obtain acceptance in the WinGet community repository.
 10. Reserve the Partner Center name and obtain the formal Package Identity.
-11. Replace PFX scaffolding with the ADR-0006 production cloud-HSM signer.
+11. ADR-0006 has removed PFX and wired cloud-HSM signing/post-signing audit; real-certificate dual-architecture signing, trusted lifecycle, and revocation evidence remain.
 
 This page explains the policy; the JSON manifest and machine gate decide whether a stable tag is allowed. `candidate` does not mean Store-ready, signed, or releasable.

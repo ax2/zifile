@@ -19,9 +19,11 @@ GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID 
 
 文档当前发布到 `ax2.github.io/zifile`；完成 DNS 配置后迁移到计划域名 `zifile.zicode.com`。
 
-Partner Center 需要先手动预留名称并完成首个提交；之后可以接入 Store Submission API。签名策略见 [ADR-0006](/zifile/architecture/adr-0006-release-signing/)：Store 完成商店通道最终签名，GitHub/WinGet 使用云 HSM 托管的公开受信任签名，生产私钥不得导出到 GitHub Secret。现有 PFX 路径仅为管线脚手架，不能解除 1.0 发布门禁。
+Partner Center 需要先手动预留名称并完成首个提交；之后可以接入 Store Submission API。签名策略见 [ADR-0006](/zifile/architecture/adr-0006-release-signing/)：Store 完成商店通道最终签名，GitHub/WinGet 使用云 HSM 托管的公开受信任签名，生产私钥不得导出到 GitHub Secret。Release workflow 已移除 PFX，并接入 DigiCert Binary Signing 的受保护 simple-signing 路径；没有真实证书证据前，1.0 签名门禁仍保持 `pending`。
 
-推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE，生成校验和、结构化包审计、CycloneDX SBOM、来源证明和 WinGet 1.12 多文件清单候选，然后发布 GitHub Release。当前预发布标签流程要求正式 Identity、Publisher、PFX 和密码四项 Secret 全部存在；缺一项、使用 `.Dev` Identity 或未签名 OID Publisher 都会在构建前失败。稳定版标签还会拒绝 PFX 脚手架，直到 ADR-0006 云 HSM 集成落地，避免误发不符合签名决策的 1.0。没有正式凭据时只能手动生成开发用途的未签名包，不得提交 WinGet 或 Store。未签名 `.Dev` 包使用微软固定 OID Publisher并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
+推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE，然后在受保护的 `production-signing` Environment 中签署桌面/CLI/Worker EXE、Explorer DLL 和 MSIX。签后门禁要求所有文件具有同一 Publisher、有效系统信任链和时间戳，并重新生成包审计、SHA-256 与来源证明；发布任务只下载 `signed-windows-*` 产物，再生成 WinGet 1.12 多文件清单候选和 GitHub Release。没有正式凭据时只能手动选择 `signing_provider=none` 生成开发用途的未签名包，不得提交 WinGet 或 Store。未签名 `.Dev` 包使用微软固定 OID Publisher 并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
+
+手动 Release 可选择 `digicert-stm` 做完整签名演练。构建阶段要求仓库 Variables `ZIFILE_MSIX_IDENTITY`、`ZIFILE_MSIX_PUBLISHER`；受保护 Environment 提供 Variables `SM_HOST`、`SM_KEYPAIR_ALIAS` 和 Secrets `SM_API_KEY`、`SM_CLIENT_CERT_FILE_B64`、`SM_CLIENT_CERT_PASSWORD`。客户端认证证书只用于登录签名服务，写入 Runner 临时目录并在作业结束前删除；代码签名私钥始终留在云 HSM。
 
 每次打包都会重新解包 MSIX，并核对 Identity、Publisher、版本、最低 Windows build、桌面/CLI/Worker 三枚 EXE 与 Explorer DLL 的 PE 架构、主要文件关联、`zifile.exe` alias、敏感文件/ZIP 缺失和签名状态。审计 JSON 随对应架构进入校验和、来源证明和 Release artifact；它不能替代安装、升级、卸载或 WACK 实机门禁。
 
@@ -31,7 +33,7 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 
 Windows Release 使用仓库固定的 Rust 1.93.0、锁文件、单作业 Cargo 构建和 MSVC `/Brepro` 确定性链接。独立的双构建工作流会在两个隔离目标目录比较五个裸 PE 文件的 SHA-256；方法与证据边界见[可复现 Windows 构建](/zifile/development/reproducible-builds/)。
 
-在打标签前可从 Actions 手动运行 Release 工作流。该模式不接收第二个版本输入，而是使用 `Cargo.toml` 的工作区版本，真实构建和保存双架构产物与 SBOM，但会跳过公开 Release 和 WinGet 发布候选，适合验证交叉编译与打包环境。普通 CI 与 Release 都运行版本一致性门禁；标签必须精确匹配 `v<workspace-version>`。CLI、核心 Provider 和 IPC 的兼容边界见[公开契约与版本策略](/zifile/development/contracts/)。
+在打标签前可从 Actions 手动运行 Release 工作流。该模式不接收第二个版本输入，而是使用 `Cargo.toml` 的工作区版本；`none` 保存双架构未签名产物与 SBOM，`digicert-stm` 额外进入受保护环境并保存签后产物与签名审计，两者都跳过公开 Release 和 WinGet 发布。普通 CI 与 Release 都运行版本一致性门禁；标签必须精确匹配 `v<workspace-version>`。CLI、核心 Provider 和 IPC 的兼容边界见[公开契约与版本策略](/zifile/development/contracts/)。
 
 普通 CI 还会检查 `CHANGELOG.md` 只有一个 `[Unreleased]` 章节。标签发布必须先把本次内容整理为 `## [<workspace-version>] - YYYY-MM-DD`，至少包含一个 Keep a Changelog 分类和一条非占位更新；版本标题缺失、日期无效、空章节或残留 `TODO`/`TBD` 都会在构建前失败。手动 Release 只验证 `[Unreleased]` 结构，便于发布前演练。
 

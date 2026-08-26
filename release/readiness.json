@@ -15,6 +15,6 @@
     { "id": "microsoft-store-certification", "status": "pending", "issue": 17, "evidence": [], "notes": "Partner Center submission and Microsoft certification must complete." },
     { "id": "winget-acceptance", "status": "pending", "issue": 18, "evidence": [], "notes": "The versioned manifest must be accepted by microsoft/winget-pkgs." },
     { "id": "partner-center-identity", "status": "pending", "issue": 8, "evidence": [], "notes": "ZiFile name reservation and the assigned package identity are required." },
-    { "id": "production-cloud-hsm-signing", "status": "pending", "issue": 19, "evidence": [], "notes": "The ADR-0006 cloud-HSM path must replace PFX release scaffolding." }
+    { "id": "production-cloud-hsm-signing", "status": "pending", "issue": 19, "evidence": [], "notes": "The PFX workflow is removed and the DigiCert Binary Signing path is wired; a real trusted dual-architecture rehearsal, lifecycle test, and revocation exercise still require provisioned credentials." }
   ]
 }
