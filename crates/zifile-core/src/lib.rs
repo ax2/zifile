@@ -1,6 +1,11 @@
 #![cfg_attr(
     not(test),
-    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing
+    )
 )]
 
 //! Core domain model for ZiFile.
@@ -275,7 +280,11 @@ pub fn detect_format(path: impl AsRef<Path>) -> ZiFileResult<ArchiveFormat> {
     let mut file = File::open(path)?;
     let mut header = [0_u8; 512];
     let count = file.read(&mut header)?;
-    let bytes = &header[..count];
+    let bytes = header.get(..count).ok_or_else(|| {
+        ZiFileError::Backend(
+            "reader returned more bytes than the supplied header buffer".to_owned(),
+        )
+    })?;
     let extension_hint = detect_format_from_path(path);
 
     let detected = if bytes.starts_with(b"PK\x03\x04")
@@ -315,7 +324,7 @@ pub fn detect_format(path: impl AsRef<Path>) -> ZiFileResult<ArchiveFormat> {
         })
     } else if bytes.starts_with(b"\x04\x22\x4D\x18") {
         Some(ArchiveFormat::Lz4)
-    } else if bytes.len() >= 262 && &bytes[257..262] == b"ustar" {
+    } else if bytes.get(257..262) == Some(b"ustar") {
         Some(ArchiveFormat::Tar)
     } else if extension_hint == Some(ArchiveFormat::Brotli) {
         // Brotli intentionally has no universal magic bytes.

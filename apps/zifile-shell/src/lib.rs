@@ -1,7 +1,12 @@
 #![cfg(target_os = "windows")]
 #![cfg_attr(
     not(test),
-    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing
+    )
 )]
 
 use std::ffi::c_void;
@@ -306,7 +311,8 @@ fn sibling_desktop_path() -> Result<PathBuf> {
     if length == 0 || length >= buffer.len() {
         return Err(E_FAIL.into());
     }
-    let mut path = PathBuf::from(String::from_utf16_lossy(&buffer[..length]));
+    let module_path = buffer.get(..length).ok_or(E_FAIL)?;
+    let mut path = PathBuf::from(String::from_utf16_lossy(module_path));
     path.set_file_name("zifile-desktop.exe");
     Ok(path)
 }
@@ -323,7 +329,16 @@ fn icon_resource_string(desktop: &std::path::Path) -> String {
 fn user_locale_is_chinese() -> bool {
     let mut locale = [0_u16; 85];
     let length = unsafe { GetUserDefaultLocaleName(&mut locale) };
-    length > 2 && String::from_utf16_lossy(&locale[..length as usize - 1]).starts_with("zh")
+    let Some(end) = usize::try_from(length)
+        .ok()
+        .filter(|length| *length > 2)
+        .and_then(|length| length.checked_sub(1))
+    else {
+        return false;
+    };
+    locale
+        .get(..end)
+        .is_some_and(|name| String::from_utf16_lossy(name).starts_with("zh"))
 }
 
 fn allocate_shell_string(value: &str) -> Result<PWSTR> {

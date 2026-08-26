@@ -17,7 +17,7 @@ pub fn create_source_issue(
     match format.create_input() {
         None => Some(CreateSourceIssue::UnsupportedFormat),
         Some(_) if sources.is_empty() => Some(CreateSourceIssue::MissingSources),
-        Some(CreateInputKind::SingleFile) if sources.len() != 1 || !sources[0].is_file() => {
+        Some(CreateInputKind::SingleFile) if !matches!(sources, [source] if source.is_file()) => {
             Some(CreateSourceIssue::SingleFileRequired)
         }
         Some(_) => None,

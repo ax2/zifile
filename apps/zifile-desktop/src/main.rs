@@ -1,6 +1,11 @@
 #![cfg_attr(
     not(test),
-    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing
+    )
 )]
 
 use std::collections::HashSet;
@@ -1504,7 +1509,8 @@ fn format_bytes(bytes: u64) -> String {
     if unit == 0 {
         format!("{bytes} B")
     } else {
-        format!("{value:.1} {}", UNITS[unit])
+        let unit_label = UNITS.get(unit).copied().unwrap_or("TB");
+        format!("{value:.1} {unit_label}")
     }
 }
 

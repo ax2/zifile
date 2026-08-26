@@ -1793,7 +1793,12 @@ fn create_stream(
     format: ArchiveFormat,
     options: &CreateOptions,
 ) -> ZiFileResult<OperationSummary> {
-    if sources.len() != 1 || !sources[0].is_file() {
+    let [source] = sources else {
+        return Err(ZiFileError::InvalidInput(format!(
+            "{format} streams require exactly one input file; use a TAR composition for directories"
+        )));
+    };
+    if !source.is_file() {
         return Err(ZiFileError::InvalidInput(format!(
             "{format} streams require exactly one input file; use a TAR composition for directories"
         )));
@@ -1805,7 +1810,6 @@ fn create_stream(
     {
         return Err(ZiFileError::UnsupportedEncryption(format));
     }
-    let source = &sources[0];
     let bytes = fs::metadata(source)?.len();
     options.progress.set_totals(1, bytes);
     let mut input = BufReader::new(File::open(source)?);
@@ -1994,6 +1998,9 @@ fn copy_limited(
         if count == 0 {
             break;
         }
+        let buffer_chunk = buffer.get(..count).ok_or_else(|| {
+            ZiFileError::Backend("reader returned more bytes than the supplied buffer".to_owned())
+        })?;
         let count = count as u64;
         *total = total
             .checked_add(count)
@@ -2003,7 +2010,7 @@ fn copy_limited(
                 "expanded data exceeds {maximum} bytes"
             )));
         }
-        writer.write_all(&buffer[..count as usize])?;
+        writer.write_all(buffer_chunk)?;
         if let Some(progress) = progress {
             progress.advance_bytes(count);
         }
