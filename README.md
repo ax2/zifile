@@ -60,6 +60,7 @@ pnpm --dir docs build
 - [Contributing](CONTRIBUTING.md)
 - [Desktop usage and accessibility](docs/src/content/docs/development/desktop.md)
 - [Release process](docs/src/content/docs/development/releasing.md)
+- [Production signing operations](docs/src/content/docs/development/signing-operations.md)
 - [1.0 release readiness manifest](release/readiness.json)
 - [Stage 0 work log](docs/src/content/docs/releases/stage-0.md)
 - [Stage 1 work log](docs/src/content/docs/releases/stage-1.md)
