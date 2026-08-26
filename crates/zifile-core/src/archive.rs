@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
-use std::io::{self, BufReader, BufWriter, Read, Seek, Write};
+use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -57,6 +57,14 @@ pub enum ConflictPolicy {
     Skip,
     Rename,
     Error,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TestOptions {
+    pub limits: SafetyLimits,
+    pub password: Option<String>,
+    pub cancellation: CancellationToken,
+    pub progress: OperationProgress,
 }
 
 #[derive(Debug, Clone)]
@@ -255,7 +263,13 @@ pub fn list_archive_with_limits(
 }
 
 pub fn test_archive(path: impl AsRef<Path>, password: Option<&str>) -> ZiFileResult<ArchiveInfo> {
-    test_archive_with_limits(path, password, SafetyLimits::default())
+    test_archive_with_options(
+        path,
+        &TestOptions {
+            password: password.map(str::to_owned),
+            ..TestOptions::default()
+        },
+    )
 }
 
 pub fn test_archive_with_limits(
@@ -263,19 +277,40 @@ pub fn test_archive_with_limits(
     password: Option<&str>,
     limits: SafetyLimits,
 ) -> ZiFileResult<ArchiveInfo> {
+    test_archive_with_options(
+        path,
+        &TestOptions {
+            limits,
+            password: password.map(str::to_owned),
+            ..TestOptions::default()
+        },
+    )
+}
+
+pub fn test_archive_with_options(
+    path: impl AsRef<Path>,
+    options: &TestOptions,
+) -> ZiFileResult<ArchiveInfo> {
+    options.cancellation.check()?;
     let path = path.as_ref();
-    let info = list_archive_with_limits(path, password, limits)?;
-    validate_declared_limits(&info, limits)?;
+    let info = list_archive_with_limits(path, options.password.as_deref(), options.limits)?;
+    validate_declared_limits(&info, options.limits)?;
+    let total_entries = info
+        .entries
+        .iter()
+        .filter(|entry| !entry.is_directory)
+        .count() as u64;
+    options.progress.set_totals(total_entries, info.total_size);
     match info.format {
-        ArchiveFormat::Zip => test_zip(path, password, limits)?,
-        ArchiveFormat::SevenZip => guard_archive_backend(info.format, "testing", || {
-            test_seven_zip(path, password, limits)
-        })?,
+        ArchiveFormat::Zip => test_zip(path, options)?,
+        ArchiveFormat::SevenZip => {
+            guard_archive_backend(info.format, "testing", || test_seven_zip(path, options))?
+        }
         ArchiveFormat::Tar
         | ArchiveFormat::TarGzip
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
-        | ArchiveFormat::TarBzip2 => test_tar(path, info.format, limits)?,
+        | ArchiveFormat::TarBzip2 => test_tar(path, info.format, options)?,
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
@@ -288,16 +323,17 @@ pub fn test_archive_with_limits(
                 &mut reader,
                 &mut io::sink(),
                 &mut total,
-                limits.max_expanded_bytes,
-                None,
-                None,
+                options.limits.max_expanded_bytes,
+                Some(&options.cancellation),
+                Some(&options.progress),
             )?;
+            options.progress.advance_entry();
         }
         ArchiveFormat::Rar => {
-            guard_archive_backend(info.format, "testing", || test_rar(path, password, limits))?
+            guard_archive_backend(info.format, "testing", || test_rar(path, options))?
         }
         ArchiveFormat::Cab => {
-            guard_archive_backend(info.format, "testing", || test_cab(path, limits))?
+            guard_archive_backend(info.format, "testing", || test_cab(path, options))?
         }
     }
     Ok(info)
@@ -391,7 +427,29 @@ pub fn create_archive(
 }
 
 fn open_cab(path: &Path) -> ZiFileResult<Cabinet<BufReader<File>>> {
-    Cabinet::new(BufReader::new(File::open(path)?)).map_err(ZiFileError::Io)
+    const CABINET_CHAIN_FLAGS: u16 = 0x0003;
+    const CABINET_FLAGS_OFFSET: usize = 30;
+
+    let mut file = File::open(path)?;
+    let mut header = [0_u8; CABINET_FLAGS_OFFSET + 2];
+    file.read_exact(&mut header)?;
+    let flags = u16::from_le_bytes([
+        header[CABINET_FLAGS_OFFSET],
+        header[CABINET_FLAGS_OFFSET + 1],
+    ]);
+    if flags & CABINET_CHAIN_FLAGS != 0 {
+        return Err(ZiFileError::InvalidInput(
+            "multi-cabinet sets are not supported".to_owned(),
+        ));
+    }
+    file.seek(SeekFrom::Start(0))?;
+    let cabinet = Cabinet::new(BufReader::new(file)).map_err(ZiFileError::Io)?;
+    if cabinet.cabinet_set_index() != 0 {
+        return Err(ZiFileError::InvalidInput(
+            "multi-cabinet sets are not supported".to_owned(),
+        ));
+    }
+    Ok(cabinet)
 }
 
 fn cab_file_names(cabinet: &Cabinet<BufReader<File>>) -> Vec<String> {
@@ -426,20 +484,22 @@ fn list_cab(path: &Path, limits: SafetyLimits) -> ZiFileResult<Vec<ArchiveEntryI
     Ok(entries)
 }
 
-fn test_cab(path: &Path, limits: SafetyLimits) -> ZiFileResult<()> {
+fn test_cab(path: &Path, options: &TestOptions) -> ZiFileResult<()> {
     let mut cabinet = open_cab(path)?;
     let names = cab_file_names(&cabinet);
     let mut total = 0_u64;
     for name in names {
+        options.cancellation.check()?;
         let mut reader = cabinet.read_file(&name).map_err(ZiFileError::Io)?;
         copy_limited(
             &mut reader,
             &mut io::sink(),
             &mut total,
-            limits.max_expanded_bytes,
-            None,
-            None,
+            options.limits.max_expanded_bytes,
+            Some(&options.cancellation),
+            Some(&options.progress),
         )?;
+        options.progress.advance_entry();
     }
     Ok(())
 }
@@ -602,29 +662,39 @@ fn reject_rar_member_link(member: &rars::ArchiveMember) -> ZiFileResult<()> {
     Ok(())
 }
 
-fn test_rar(path: &Path, password: Option<&str>, limits: SafetyLimits) -> ZiFileResult<()> {
-    let archive = read_rar(path, password, limits)?;
+fn test_rar(path: &Path, options: &TestOptions) -> ZiFileResult<()> {
+    let archive = read_rar(path, options.password.as_deref(), options.limits)?;
     reject_rar_special_entries(&archive)?;
     for member in archive.members() {
         reject_rar_member_link(&member)?;
     }
     let total = Arc::new(AtomicU64::new(0));
     let limit_exceeded = Arc::new(AtomicBool::new(false));
-    let result = archive.extract_to_with_options(rar_read_options(password, limits), |_| {
-        Ok(Box::new(RarGuardedWriter::discard(
-            Arc::clone(&total),
-            limits.max_expanded_bytes,
-            Arc::clone(&limit_exceeded),
-            None,
-        )) as Box<dyn Write>)
-    });
+    let result = archive.extract_to_with_options(
+        rar_read_options(options.password.as_deref(), options.limits),
+        |_| {
+            Ok(Box::new(RarGuardedWriter::discard(
+                Arc::clone(&total),
+                options.limits.max_expanded_bytes,
+                Arc::clone(&limit_exceeded),
+                Some(options.cancellation.clone()),
+                Some(options.progress.clone()),
+            )) as Box<dyn Write>)
+        },
+    );
+    options.cancellation.check()?;
     if limit_exceeded.load(Ordering::Acquire) {
         return Err(ZiFileError::LimitExceeded(format!(
             "expanded data exceeds {} bytes",
-            limits.max_expanded_bytes
+            options.limits.max_expanded_bytes
         )));
     }
-    result.map_err(map_rar_error)
+    result.map_err(map_rar_error)?;
+    for member in archive.members().filter(|member| !member.meta.is_directory) {
+        let _ = member;
+        options.progress.advance_entry();
+    }
+    Ok(())
 }
 
 struct PendingRarFile {
@@ -648,6 +718,7 @@ impl RarGuardedWriter {
         maximum: u64,
         limit_exceeded: Arc<AtomicBool>,
         cancellation: Option<CancellationToken>,
+        progress: Option<OperationProgress>,
     ) -> Self {
         Self {
             temporary: None,
@@ -656,7 +727,7 @@ impl RarGuardedWriter {
             maximum,
             limit_exceeded,
             cancellation,
-            progress: None,
+            progress,
         }
     }
 
@@ -809,6 +880,7 @@ fn extract_rar(
                     options.limits.max_expanded_bytes,
                     Arc::clone(&limit_exceeded),
                     Some(options.cancellation.clone()),
+                    None,
                 )) as Box<dyn Write>);
             };
             if meta.is_directory {
@@ -920,21 +992,23 @@ fn list_zip(
     Ok(entries)
 }
 
-fn test_zip(path: &Path, password: Option<&str>, limits: SafetyLimits) -> ZiFileResult<()> {
+fn test_zip(path: &Path, options: &TestOptions) -> ZiFileResult<()> {
     let mut archive = ZipArchive::new(BufReader::new(File::open(path)?))?;
     let mut total = 0;
     for index in 0..archive.len() {
-        let mut entry = open_zip_entry(&mut archive, index, password)?;
+        options.cancellation.check()?;
+        let mut entry = open_zip_entry(&mut archive, index, options.password.as_deref())?;
         reject_zip_link(entry.unix_mode(), entry.name())?;
         if !entry.is_dir() {
             copy_limited(
                 &mut entry,
                 &mut io::sink(),
                 &mut total,
-                limits.max_expanded_bytes,
-                None,
-                None,
+                options.limits.max_expanded_bytes,
+                Some(&options.cancellation),
+                Some(&options.progress),
             )?;
+            options.progress.advance_entry();
         }
     }
     Ok(())
@@ -1091,10 +1165,11 @@ fn list_tar(
     Ok(result)
 }
 
-fn test_tar(path: &Path, format: ArchiveFormat, limits: SafetyLimits) -> ZiFileResult<()> {
+fn test_tar(path: &Path, format: ArchiveFormat, options: &TestOptions) -> ZiFileResult<()> {
     let mut archive = tar::Archive::new(open_tar_reader(path, format)?);
     let mut total = 0;
     for entry in archive.entries()? {
+        options.cancellation.check()?;
         let mut entry = entry?;
         let entry_type = entry.header().entry_type();
         if entry_type.is_symlink() || entry_type.is_hard_link() {
@@ -1107,10 +1182,11 @@ fn test_tar(path: &Path, format: ArchiveFormat, limits: SafetyLimits) -> ZiFileR
                 &mut entry,
                 &mut io::sink(),
                 &mut total,
-                limits.max_expanded_bytes,
-                None,
-                None,
+                options.limits.max_expanded_bytes,
+                Some(&options.cancellation),
+                Some(&options.progress),
             )?;
+            options.progress.advance_entry();
         }
     }
     Ok(())
@@ -1322,23 +1398,39 @@ fn list_seven_zip(
     Ok(entries)
 }
 
-fn test_seven_zip(path: &Path, password: Option<&str>, limits: SafetyLimits) -> ZiFileResult<()> {
-    let mut reader = SevenZReader::open(path, seven_password(password))?;
+fn test_seven_zip(path: &Path, options: &TestOptions) -> ZiFileResult<()> {
+    let mut reader = SevenZReader::open(path, seven_password(options.password.as_deref()))?;
     let mut total = 0;
-    reader.for_each_entries(|entry, input| {
-        if !entry.is_directory() {
-            copy_limited(
-                input,
-                &mut io::sink(),
-                &mut total,
-                limits.max_expanded_bytes,
-                None,
-                None,
-            )
-            .map_err(|error| sevenz_rust2::Error::from(io::Error::other(error.to_string())))?;
+    let mut operation_error = None;
+    let result = reader.for_each_entries(|entry, input| {
+        let operation = (|| -> ZiFileResult<()> {
+            options.cancellation.check()?;
+            if !entry.is_directory() {
+                copy_limited(
+                    input,
+                    &mut io::sink(),
+                    &mut total,
+                    options.limits.max_expanded_bytes,
+                    Some(&options.cancellation),
+                    Some(&options.progress),
+                )?;
+                options.progress.advance_entry();
+            }
+            Ok(())
+        })();
+        match operation {
+            Ok(()) => Ok(true),
+            Err(error) => {
+                let message = error.to_string();
+                operation_error = Some(error);
+                Err(sevenz_rust2::Error::from(io::Error::other(message)))
+            }
         }
-        Ok(true)
-    })?;
+    });
+    if let Some(error) = operation_error {
+        return Err(error);
+    }
+    result?;
     Ok(())
 }
 

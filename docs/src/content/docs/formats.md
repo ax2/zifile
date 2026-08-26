@@ -19,4 +19,4 @@ description: ZiFile 当前已验证和计划中的压缩与归档格式能力矩
 
 RAR 创建不在计划内。只读浏览、完整性测试和选择性解压使用纯 Rust 的 `rars` Provider（MIT OR Apache-2.0）。ZiFile 会拒绝不安全路径、链接和 RAR 5+ 重定向，执行声明大小与实际解码大小限制，先写临时文件，并在隔离 Worker 中处理归档。密码保护的 RAR 可以读取，密码不会持久化。
 
-CAB 使用纯 Rust、MIT 许可的 `cab` Provider。当前支持浏览、完整性校验和选择性安全解压 None、MSZIP 与 LZX 内容；Quantum 压缩和跨多个 Cabinet 的集合暂不支持，CAB 创建也不对外开放。
+CAB 使用纯 Rust、MIT 许可的 `cab` Provider。当前支持浏览、完整性校验和选择性安全解压 None、MSZIP 与 LZX 内容；Quantum 压缩和跨多个 Cabinet 的集合暂不支持，多 Cabinet 头部会在浏览前被明确拒绝，CAB 创建也不对外开放。

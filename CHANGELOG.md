@@ -72,10 +72,13 @@ All notable changes to ZiFile are documented here. The format follows
   create-form selects/ranges/passwords, reverse traversal and disabled-control skipping.
 - A bounded 32-operation FIFO shared by both desktop UIs, with monotonic completion IDs,
   active cancellation, pending-work clearing, and non-persistent sensitive payloads.
+- Entry/byte progress and cooperative cancellation for archive integrity testing across
+  ZIP, 7z, RAR, CAB, TAR compositions, and supported compression streams.
 - A pure-Rust read-only RAR 1.3–7 beta provider with encrypted headers, solid archives,
   selected extraction, resource limits, cancellation, and link/redirection rejection.
 - A pure-Rust read-only Windows CAB beta provider with signature detection, browsing,
-  integrity testing, selective safe extraction, cancellation, and resource limits.
+  integrity testing, selective safe extraction, cancellation, resource limits, and
+  explicit rejection of unsupported multi-cabinet sets.
 - A Rust Windows 11 `IExplorerCommand` extension and shared `--create` startup protocol,
   packaged behind trusted-install and Explorer-activation release gates.
 - Store listing, privacy, screenshot-import, WACK-readiness, signed-package lifecycle,

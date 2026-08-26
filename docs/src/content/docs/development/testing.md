@@ -28,6 +28,8 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 
 基础冒烟还会向真实 `zifile-worker.exe` 发送版本化 list 请求，并要求收到 metadata、Unicode entry 和唯一结束事件；随后对 32 MiB 随机输入启动 7z 创建并发送取消控制消息，验证 Worker 在时限内退出、目标不存在且没有临时文件残留。桌面协议单测覆盖缺少终结事件和逐条条目重建；Windows 实机检查验证桌面可通过 Job Object Worker 打开并校验 7z。
 
+完整性校验使用 `TestOptions` 为 ZIP、7z、RAR、CAB、TAR 组合和六种压缩流提供统一的条目/字节进度与协作取消。Worker 每 100 ms 发送有界进度，并在操作返回后补发最终快照，避免小归档只出现初始 0%；预取消回归要求在解析前返回 `Cancelled`。归档列表阶段仍没有细粒度进度。
+
 CLI 密码单测覆盖显式 opt-in、CRLF/LF 删除、前后空格保留和缺失/空输入拒绝。基础冒烟还要求 CLI 帮助仅暴露 `--password-stdin`，并通过标准输入真实创建、校验和解压 AES 7z；固定测试密码不输出到结果。
 
 任务栏状态映射使用纯单元测试覆盖隐藏、不确定、正常和取消状态；x64 Release/MSIX 构建验证 COM 绑定和 App Execution Alias manifest。任务栏视觉检查与 Narrator/UI Automation 检查仍需在适合的交互式测试环境补证。

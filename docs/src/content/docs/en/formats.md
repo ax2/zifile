@@ -19,4 +19,4 @@ ZIP, 7z, and TAR compositions accept multiple files and folders when created. Si
 
 RAR creation is out of scope. Read-only browsing, integrity testing and selective extraction use the pure-Rust `rars` provider (MIT OR Apache-2.0). ZiFile rejects unsafe paths, links and RAR 5+ redirections, applies declared and decoded-size limits, writes to temporary files, and runs archive work in the isolated Worker. Password-protected RAR archives are supported without persisting passwords.
 
-CAB uses the pure-Rust, MIT-licensed `cab` provider. Browsing, integrity testing, and selective safe extraction currently cover None, MSZIP, and LZX content. Quantum compression and multi-cabinet sets are not supported, and CAB creation is not exposed.
+CAB uses the pure-Rust, MIT-licensed `cab` provider. Browsing, integrity testing, and selective safe extraction currently cover None, MSZIP, and LZX content. Quantum compression and multi-cabinet sets are not supported; multi-cabinet headers are explicitly rejected before browsing, and CAB creation is not exposed.

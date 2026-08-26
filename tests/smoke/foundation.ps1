@@ -96,6 +96,32 @@ try {
         throw 'Isolated worker IPC smoke test failed.'
     }
 
+    $workerTestRequest = @{
+        version = 1
+        payload = @{
+            operation = 'test'
+            archive = $archivePath
+            password = $null
+        }
+    } | ConvertTo-Json -Depth 5 -Compress
+    $workerTestLines = @($workerTestRequest | & $workerPath)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Worker integrity test request failed.'
+    }
+    $workerTestEvents = @($workerTestLines | ForEach-Object { $_ | ConvertFrom-Json })
+    $progressEvents = @($workerTestEvents | Where-Object { $_.payload.event -eq 'progress' })
+    $lastProgress = $progressEvents | Select-Object -Last 1
+    if (
+        $progressEvents.Count -lt 1 -or
+        -not $lastProgress -or
+        $lastProgress.payload.snapshot.total_entries -lt 1 -or
+        $lastProgress.payload.snapshot.processed_entries -ne $lastProgress.payload.snapshot.total_entries -or
+        $lastProgress.payload.snapshot.processed_bytes -ne $lastProgress.payload.snapshot.total_bytes -or
+        $workerTestEvents[-1].payload.event -ne 'archive_end'
+    ) {
+        throw 'Worker integrity test did not emit a complete final progress snapshot before its archive result.'
+    }
+
     $cancelRoot = Join-Path $smokeRoot 'worker-cancel'
     New-Item -ItemType Directory -Path $cancelRoot | Out-Null
     $cancelSource = Join-Path $cancelRoot 'random.bin'

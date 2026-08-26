@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use zifile_core::{
     ArchiveFormat, CancellationToken, ConflictPolicy, CreateOptions, ExtractOptions,
-    OperationProgress, SafetyLimits, ZiFileError, create_archive, detect_format, extract_archive,
-    list_archive, list_archive_with_limits, test_archive, test_archive_with_limits,
+    OperationProgress, SafetyLimits, TestOptions, ZiFileError, create_archive, detect_format,
+    extract_archive, list_archive, list_archive_with_limits, test_archive,
+    test_archive_with_limits, test_archive_with_options,
 };
 
 fn fixture() -> (TempDir, PathBuf) {
@@ -87,6 +88,32 @@ fn cab_fixture_with_compression(
     writer.finish().unwrap();
 }
 
+fn assert_test_progress(path: &Path, password: Option<&str>) -> zifile_core::ArchiveInfo {
+    let progress = OperationProgress::default();
+    let info = test_archive_with_options(
+        path,
+        &TestOptions {
+            password: password.map(str::to_owned),
+            progress: progress.clone(),
+            ..TestOptions::default()
+        },
+    )
+    .unwrap();
+    let snapshot = progress.snapshot();
+    assert_eq!(
+        snapshot.total_entries,
+        info.entries
+            .iter()
+            .filter(|entry| !entry.is_directory)
+            .count() as u64
+    );
+    assert_eq!(snapshot.processed_entries, snapshot.total_entries);
+    assert_eq!(snapshot.total_bytes, info.total_size);
+    assert_eq!(snapshot.processed_bytes, info.total_size);
+    assert_eq!(snapshot.fraction(), 1.0);
+    info
+}
+
 #[test]
 fn cab_uncompressed_content_is_supported() {
     let temp = tempfile::tempdir().unwrap();
@@ -96,7 +123,7 @@ fn cab_uncompressed_content_is_supported() {
         &[("plain.txt", b"uncompressed cabinet")],
         cab::CompressionType::None,
     );
-    test_archive(&archive, None).unwrap();
+    assert_test_progress(&archive, None);
     let output = temp.path().join("cab-none");
     let summary = extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
     assert_eq!(summary.files, 1);
@@ -132,7 +159,7 @@ fn assert_round_trip(format: ArchiveFormat) {
             .iter()
             .any(|entry| entry.path.ends_with("hello.txt"))
     );
-    test_archive(&archive, None).unwrap();
+    assert_test_progress(&archive, None);
 
     let output = temp.path().join("output");
     let extract_progress = OperationProgress::default();
@@ -204,7 +231,7 @@ fn stream_formats_round_trip_single_files() {
             &CreateOptions::default(),
         )
         .unwrap();
-        test_archive(&archive, None).unwrap();
+        assert_test_progress(&archive, None);
         let output = temp.path().join("output");
         extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
         assert_eq!(
@@ -297,7 +324,7 @@ fn rar_is_read_only_and_supports_solid_selected_extraction() {
     assert_eq!(info.format, ArchiveFormat::Rar);
     assert_eq!(info.entries.len(), 2);
     assert_eq!(info.total_size, 32);
-    test_archive(&archive, None).unwrap();
+    assert_test_progress(&archive, None);
 
     let output = temp.path().join("rar-selected");
     let selected = HashSet::from([PathBuf::from("nested/中文.txt")]);
@@ -354,7 +381,7 @@ fn cab_is_read_only_and_supports_safe_selected_extraction() {
     assert_eq!(info.format, ArchiveFormat::Cab);
     assert_eq!(info.entries.len(), 2);
     assert_eq!(info.total_size, 28);
-    test_archive(&archive, None).unwrap();
+    assert_test_progress(&archive, None);
 
     let output = temp.path().join("cab-selected");
     let selected = HashSet::from([PathBuf::from("nested/unicode.txt")]);
@@ -411,6 +438,63 @@ fn cab_rejects_unsafe_paths_and_declared_limits() {
 }
 
 #[test]
+fn cab_rejects_multi_cabinet_sets_before_listing() {
+    let temp = tempfile::tempdir().unwrap();
+    let linked_archive = temp.path().join("linked.cab");
+    cab_fixture(&linked_archive, &[("one.txt", b"one")]);
+
+    let mut bytes = fs::read(&linked_archive).unwrap();
+    bytes[30] |= 0x02;
+    fs::write(&linked_archive, bytes).unwrap();
+
+    assert!(matches!(
+        list_archive(&linked_archive, None),
+        Err(ZiFileError::InvalidInput(message))
+            if message == "multi-cabinet sets are not supported"
+    ));
+
+    let indexed_archive = temp.path().join("indexed.cab");
+    cab_fixture(&indexed_archive, &[("one.txt", b"one")]);
+    let mut bytes = fs::read(&indexed_archive).unwrap();
+    bytes[34..36].copy_from_slice(&1_u16.to_le_bytes());
+    fs::write(&indexed_archive, bytes).unwrap();
+
+    assert!(matches!(
+        list_archive(&indexed_archive, None),
+        Err(ZiFileError::InvalidInput(message))
+            if message == "multi-cabinet sets are not supported"
+    ));
+}
+
+#[test]
+fn archive_testing_reports_progress_and_honors_precancellation() {
+    let (temp, source) = fixture();
+    let archive = temp.path().join("progress.zip");
+    create_archive(
+        &[source],
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    assert_test_progress(&archive, None);
+
+    let cancellation = CancellationToken::default();
+    cancellation.cancel();
+    assert!(matches!(
+        test_archive_with_options(
+            &archive,
+            &TestOptions {
+                cancellation,
+                ..TestOptions::default()
+            },
+        ),
+        Err(ZiFileError::Cancelled)
+    ));
+}
+
+#[test]
 fn rar_reader_covers_every_supported_archive_version() {
     let temp = tempfile::tempdir().unwrap();
     for version in rars::ArchiveVersion::ALL {
@@ -418,7 +502,7 @@ fn rar_reader_covers_every_supported_archive_version() {
         rar_version_fixture(&archive, version);
         let info = list_archive(&archive, None).unwrap();
         assert_eq!(info.entries.len(), 1, "failed to list {version}");
-        test_archive(&archive, None).unwrap();
+        assert_test_progress(&archive, None);
         let output = temp.path().join(format!("extract-{version}"));
         extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
         assert_eq!(
@@ -440,7 +524,7 @@ fn encrypted_rar_headers_require_the_correct_password() {
         Err(ZiFileError::PasswordRequired)
     ));
     assert!(list_archive(&archive, Some("wrong password")).is_err());
-    test_archive(&archive, Some("correct horse")).unwrap();
+    assert_test_progress(&archive, Some("correct horse"));
 
     let output = temp.path().join("rar-encrypted");
     let summary = extract_archive(
