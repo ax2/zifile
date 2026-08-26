@@ -623,6 +623,13 @@ foreach ($requiredWingetCiToken in @(
         throw "CI does not run official WinGet manifest validation: $requiredWingetCiToken"
     }
 }
+$toolchainIndex = $ciSource.IndexOf('uses: dtolnay/rust-toolchain@1.93.0', [StringComparison]::Ordinal)
+$packagingPolicyIndex = $ciSource.IndexOf('name: Packaging policy smoke test', [StringComparison]::Ordinal)
+$officialWingetIndex = $ciSource.IndexOf('name: Official WinGet manifest validation', [StringComparison]::Ordinal)
+if ($toolchainIndex -lt 0 -or $packagingPolicyIndex -lt 0 -or $officialWingetIndex -lt 0 -or
+    $packagingPolicyIndex -gt $toolchainIndex -or $officialWingetIndex -gt $toolchainIndex) {
+    throw 'Packaging policy and official WinGet validation must fail fast before Rust toolchain setup.'
+}
 $releaseWorkflowSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\release.yml')
 foreach ($requiredWingetToken in @(
     './packaging/winget/Generate-Manifests.ps1',
@@ -729,4 +736,5 @@ foreach ($requiredWackToken in @(
     winget_release_gate_wired = $true
     official_winget_ci_validation_wired = $true
     user_docs_wired = $true
+    packaging_release_gates_fail_fast = $true
 } | ConvertTo-Json
