@@ -50,6 +50,8 @@ RAR 门禁从固定的 `rars` 源码提交 `7d8f9386ef777a2415da34fe1db193d8471f
 
 CAB 互操作门禁在 Windows Runner 使用系统 `makecab.exe` 生成 MSZIP 与 LZX Cabinet，再要求 ZiFile 完成签名识别、浏览、校验和解压，并与系统 `expand.exe` 的输出比较 SHA-256。None 压缩由 Rust 集成夹具覆盖；Quantum 与跨 Cabinet 集合明确不支持。每次 CI 上传不含用户数据的结构化 JSON 证据。
 
+CAB 解码阶段负向回归保留合法元数据并翻转首个 CFDATA 压缩字节，先证明列表仍能读取单个条目，再要求完整性校验失败、选择性解压报错且目标目录为空。该检查证明损坏负载不会越过临时文件提交边界，不把只测损坏头误当成解码器覆盖。
+
 每次 CI 会编译 libFuzzer 目标；每周定时工作流对路径策略、格式识别和归档解析器各运行 180 秒有界 fuzz，失败时保留崩溃产物 14 天。归档目标用带格式签名的变异输入覆盖 ZIP、7z、RAR、CAB、四种 TAR 组合和六种单流格式，限制输入为 256 KiB、RSS 为 2 GiB、单输入为 10 秒；目标内部还使用 256 条目、4 MiB 展开量、64 倍压缩比和 32 层路径的严格限制。Windows/MSVC 本地 `cargo-fuzz` 因 `sevenz-rust2` DLL 与 libFuzzer 入口点参数冲突无法链接，Rust 编译检查可通过；动态 campaign 以 Linux GNU 定时工作流为验收环境。损坏、截断、炸弹及更多 libarchive 变体仍需继续扩展。
 
 首轮归档解析器 campaign 32733658052 在约 569,000 次执行后发现 292 字节输入可令 `sevenz-rust2` 0.20.2 的文件数量分配触发 `capacity overflow`。第二轮 campaign 32803785688 又发现 173 字节输入可触发 ASan 超大内存分配；这类 OOM 不能由 `catch_unwind` 可靠隔离。两份输入均已转为永久集成测试和 fuzz 启动重放夹具。项目因此升级到 Rust 1.93.0 与带有元数据计数边界修复的 `sevenz-rust2` 0.22.0；Provider 的 panic 边界继续作为纵深防御。升级后的定向 campaign 32813469578 强制重放两份样本，并在 181 秒内继续执行 498,937 次、峰值 RSS 370 MiB，未产生新崩溃产物。

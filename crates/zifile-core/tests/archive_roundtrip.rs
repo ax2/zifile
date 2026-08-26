@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use tempfile::TempDir;
 use zifile_core::{
@@ -17,7 +18,26 @@ fn fixture() -> (TempDir, PathBuf) {
     fs::create_dir_all(source.join("nested")).unwrap();
     fs::write(source.join("hello.txt"), "hello ZiFile\n").unwrap();
     fs::write(source.join("nested/中文.txt"), "安全归档\n").unwrap();
+    set_mtime(&source.join("hello.txt"), 1_700_000_000);
+    set_mtime(&source.join("nested/中文.txt"), 1_700_000_002);
+    set_mtime(&source.join("nested"), 1_700_000_004);
+    set_mtime(&source, 1_700_000_006);
     (temp, source)
+}
+
+fn set_mtime(path: &Path, seconds: i64) {
+    filetime::set_file_mtime(path, filetime::FileTime::from_unix_time(seconds, 0)).unwrap();
+}
+
+fn assert_mtime(path: &Path, expected: u64) {
+    let actual = fs::metadata(path)
+        .unwrap()
+        .modified()
+        .unwrap()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    assert_eq!(actual, expected, "unexpected mtime for {}", path.display());
 }
 
 fn rar_fixture(path: &Path, password: Option<&str>) {
@@ -153,6 +173,51 @@ fn cab_uncompressed_content_is_supported() {
     );
 }
 
+#[test]
+fn readonly_archives_restore_file_modified_times() {
+    const EXPECTED: u64 = 1_700_000_000;
+    const DOS_DATETIME: u32 = 0x576E_B1AA; // 2023-11-14 22:13:20
+    let temp = tempfile::tempdir().unwrap();
+
+    let rar = temp.path().join("dated.rar");
+    let mut rar_builder = rars::Builder::new(rars::ArchiveVersion::Rar50);
+    rar_builder
+        .add_bytes(
+            b"dated.txt".to_vec(),
+            b"RAR timestamp".to_vec(),
+            Some(DOS_DATETIME),
+            None,
+        )
+        .unwrap();
+    rar_builder.write_to_path(&rar, None).unwrap();
+    let rar_output = temp.path().join("rar-dated");
+    extract_archive(&rar, &rar_output, &ExtractOptions::default()).unwrap();
+    assert_mtime(&rar_output.join("dated.txt"), EXPECTED);
+
+    let cab = temp.path().join("dated.cab");
+    let mut cab_builder = cab::CabinetBuilder::new();
+    cab_builder
+        .add_folder(cab::CompressionType::MsZip)
+        .add_file("dated.txt")
+        .set_datetime(
+            time::Date::from_calendar_date(2023, time::Month::November, 14)
+                .unwrap()
+                .with_hms(22, 13, 20)
+                .unwrap(),
+        );
+    let mut cab_writer = cab_builder.build(fs::File::create(&cab).unwrap()).unwrap();
+    cab_writer
+        .next_file()
+        .unwrap()
+        .unwrap()
+        .write_all(b"CAB timestamp")
+        .unwrap();
+    cab_writer.finish().unwrap();
+    let cab_output = temp.path().join("cab-dated");
+    extract_archive(&cab, &cab_output, &ExtractOptions::default()).unwrap();
+    assert_mtime(&cab_output.join("dated.txt"), EXPECTED);
+}
+
 fn assert_round_trip(format: ArchiveFormat) {
     let (temp, source) = fixture();
     let archive = temp
@@ -203,6 +268,10 @@ fn assert_round_trip(format: ArchiveFormat) {
         fs::read_to_string(output.join("input/nested/中文.txt")).unwrap(),
         "安全归档\n"
     );
+    assert_mtime(&output.join("input/hello.txt"), 1_700_000_000);
+    assert_mtime(&output.join("input/nested/中文.txt"), 1_700_000_002);
+    assert_mtime(&output.join("input/nested"), 1_700_000_004);
+    assert_mtime(&output.join("input"), 1_700_000_006);
 }
 
 #[test]
@@ -484,6 +553,29 @@ fn cab_rejects_multi_cabinet_sets_before_listing() {
         Err(ZiFileError::InvalidInput(message))
             if message == "multi-cabinet sets are not supported"
     ));
+}
+
+#[test]
+fn cab_corrupt_data_fails_integrity_test_without_committing_output() {
+    let temp = tempfile::tempdir().unwrap();
+    let archive = temp.path().join("corrupt-data.cab");
+    cab_fixture(&archive, &[("payload.bin", &vec![0x5a; 64 * 1024])]);
+
+    let mut bytes = fs::read(&archive).unwrap();
+    let folder_data_offset = u32::from_le_bytes(bytes[36..40].try_into().unwrap()) as usize;
+    let first_data_byte = folder_data_offset + 8;
+    assert!(first_data_byte < bytes.len(), "CAB fixture layout drifted");
+    bytes[first_data_byte] ^= 0x40;
+    fs::write(&archive, bytes).unwrap();
+
+    let info = list_archive(&archive, None).unwrap();
+    assert_eq!(info.entries.len(), 1);
+    assert!(test_archive(&archive, None).is_err());
+
+    let output = temp.path().join("corrupt-output");
+    assert!(extract_archive(&archive, &output, &ExtractOptions::default()).is_err());
+    assert!(!output.join("payload.bin").exists());
+    assert_eq!(fs::read_dir(&output).unwrap().count(), 0);
 }
 
 #[test]

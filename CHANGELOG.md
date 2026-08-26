@@ -83,7 +83,8 @@ All notable changes to ZiFile are documented here. The format follows
   selected extraction, resource limits, cancellation, and link/redirection rejection.
 - A pure-Rust read-only Windows CAB beta provider with signature detection, browsing,
   integrity testing, selective safe extraction, cancellation, resource limits, and
-  explicit rejection of unsupported multi-cabinet sets.
+  explicit rejection of unsupported multi-cabinet sets; corrupt compressed data fails
+  integrity testing and cannot commit partial extraction output.
 - A Rust Windows 11 `IExplorerCommand` extension and shared `--create` startup protocol,
   packaged behind trusted-install and Explorer-activation release gates.
 - Store listing, privacy, screenshot-import, WACK-readiness, signed-package lifecycle,

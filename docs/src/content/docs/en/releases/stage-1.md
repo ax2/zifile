@@ -47,6 +47,8 @@ Local verification passed 90 all-workspace/all-target/all-feature Rust tests and
 
 The same batch expands the permanent malformed-header regression from ZIP, 7z, TAR, and tar.gz to all 15 format classes. Every minimal input retains enough signature or extension hint to reach its intended provider; List and integrity testing must both return an ordinary error without panicking. Continuous fuzzing and real third-party corpora remain independent defense-in-depth gates.
 
+CAB also gains a decode-stage corruption regression: metadata remains listable while the first compressed CFDATA byte is flipped. Integrity testing and extraction must fail, the atomic temporary file must not commit, and the destination remains empty. This moves fixed coverage beyond header parsing into actual compressed payload and persistence boundaries.
+
 ## 2026-08-24 — Parser-boundary hardening
 
 Extraction originally listed with global defaults before applying caller limits, so strict caller entry/depth limits did not constrain early parser work. Limit-aware list/test APIs now apply extraction limits before destination creation. Integration tests cover strict ZIP/7z/TAR limits and malformed ZIP/7z/tar/tgz inputs.

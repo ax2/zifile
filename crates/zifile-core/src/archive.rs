@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bzip2::read::BzDecoder;
 use bzip2::write::BzEncoder;
@@ -566,6 +567,10 @@ fn extract_cab(
     let mut claimed = HashSet::new();
     for name in names {
         options.cancellation.check()?;
+        let modified = cabinet
+            .get_file_entry(&name)
+            .and_then(|entry| entry.datetime())
+            .map(primitive_datetime_to_system_time);
         let relative = safe_relative_path(&name, options.limits.max_path_depth)?;
         if !is_selected(&relative, options) {
             continue;
@@ -593,6 +598,7 @@ fn extract_cab(
             )?;
             Ok(())
         })?;
+        set_modified_time_if_present(&output, modified)?;
         summary.files += 1;
         options.progress.advance_entry();
     }
@@ -751,6 +757,7 @@ fn test_rar(path: &Path, options: &TestOptions) -> ZiFileResult<()> {
 struct PendingRarFile {
     temporary: Arc<Mutex<Option<NamedTempFile>>>,
     destination: PathBuf,
+    modified: Option<SystemTime>,
 }
 
 struct RarGuardedWriter {
@@ -899,7 +906,10 @@ fn extract_rar(
         if output.is_none() {
             summary.skipped += 1;
         } else if entry.is_directory {
-            directories.push(output.clone().expect("checked Some"));
+            directories.push((
+                archive_name(&entry.path).to_ascii_lowercase(),
+                output.clone().expect("checked Some"),
+            ));
         }
         outputs.insert(archive_name(&entry.path).to_ascii_lowercase(), output);
     }
@@ -908,6 +918,7 @@ fn extract_rar(
     let selected_total = Arc::new(AtomicU64::new(0));
     let limit_exceeded = Arc::new(AtomicBool::new(false));
     let mut pending = Vec::<PendingRarFile>::new();
+    let mut directory_times = HashMap::<String, SystemTime>::new();
     let mut setup_error = None;
     let result = archive.extract_to_with_options(
         rar_read_options(options.password.as_deref(), options.limits),
@@ -935,6 +946,9 @@ fn extract_rar(
                 )) as Box<dyn Write>);
             };
             if meta.is_directory {
+                if let Some(modified) = rar_modified_time(meta.file_time, meta.mtime_refinement) {
+                    directory_times.insert(key, modified);
+                }
                 return Ok(Box::new(io::sink()) as Box<dyn Write>);
             }
 
@@ -952,6 +966,7 @@ fn extract_rar(
             pending.push(PendingRarFile {
                 temporary: Arc::clone(&temporary),
                 destination: output.clone(),
+                modified: rar_modified_time(meta.file_time, meta.mtime_refinement),
             });
             Ok(Box::new(RarGuardedWriter::file(
                 temporary,
@@ -979,16 +994,24 @@ fn extract_rar(
     }
     result.map_err(map_rar_error)?;
 
-    for directory in &directories {
+    for (_, directory) in &directories {
         fs::create_dir_all(directory)?;
     }
     summary.directories = directories.len() as u64;
     summary.files = pending.len() as u64;
     summary.bytes = selected_total.load(Ordering::Acquire);
     for pending_file in pending {
+        let destination = pending_file.destination.clone();
+        let modified = pending_file.modified;
         persist_rar_output(pending_file)?;
+        set_modified_time_if_present(&destination, modified)?;
         options.progress.advance_entry();
     }
+    let directory_times = directories
+        .into_iter()
+        .filter_map(|(key, path)| directory_times.remove(&key).map(|time| (path, time)))
+        .collect();
+    restore_directory_times(directory_times)?;
     Ok(summary)
 }
 
@@ -1073,9 +1096,11 @@ fn extract_zip(
     let mut archive = ZipArchive::new(BufReader::new(File::open(path)?))?;
     let mut summary = OperationSummary::default();
     let mut claimed = HashSet::new();
+    let mut directory_times = Vec::new();
     for index in 0..archive.len() {
         options.cancellation.check()?;
         let mut entry = open_zip_entry(&mut archive, index, options.password.as_deref())?;
+        let modified = entry.last_modified().and_then(zip_datetime_to_system_time);
         reject_zip_link(entry.unix_mode(), entry.name())?;
         let relative = safe_relative_path(entry.name(), options.limits.max_path_depth)?;
         if !is_selected(&relative, options) {
@@ -1094,6 +1119,9 @@ fn extract_zip(
         };
         if entry.is_dir() {
             fs::create_dir_all(&output)?;
+            if let Some(modified) = modified {
+                directory_times.push((output.clone(), modified));
+            }
             summary.directories += 1;
         } else {
             write_atomic(&output, |writer| {
@@ -1107,10 +1135,12 @@ fn extract_zip(
                 )?;
                 Ok(())
             })?;
+            set_modified_time_if_present(&output, modified)?;
             summary.files += 1;
             options.progress.advance_entry();
         }
     }
+    restore_directory_times(directory_times)?;
     Ok(summary)
 }
 
@@ -1152,6 +1182,10 @@ fn create_zip(
             .compression_method(CompressionMethod::Deflated)
             .compression_level(Some(i64::from(options.compression_level.min(9))))
             .large_file(source.size >= u64::from(u32::MAX));
+        let base = source
+            .modified
+            .and_then(system_time_to_zip_datetime)
+            .map_or(base, |modified| base.last_modified_time(modified));
         if source.is_directory {
             writer.add_directory(format!("{name}/"), base)?;
             summary.directories += 1;
@@ -1255,10 +1289,16 @@ fn extract_tar(
     let mut archive = tar::Archive::new(open_tar_reader(path, format)?);
     let mut summary = OperationSummary::default();
     let mut claimed = HashSet::new();
+    let mut directory_times = Vec::new();
     for entry in archive.entries()? {
         options.cancellation.check()?;
         let mut entry = entry?;
         let entry_type = entry.header().entry_type();
+        let modified = entry
+            .header()
+            .mtime()
+            .ok()
+            .and_then(|seconds| UNIX_EPOCH.checked_add(Duration::from_secs(seconds)));
         let original = entry.path()?.to_string_lossy().into_owned();
         if entry_type.is_symlink() || entry_type.is_hard_link() {
             return Err(ZiFileError::LinkEntry(original));
@@ -1280,6 +1320,9 @@ fn extract_tar(
         };
         if entry_type.is_dir() {
             fs::create_dir_all(&output)?;
+            if let Some(modified) = modified {
+                directory_times.push((output.clone(), modified));
+            }
             summary.directories += 1;
         } else if entry_type.is_file() {
             write_atomic(&output, |writer| {
@@ -1293,12 +1336,14 @@ fn extract_tar(
                 )?;
                 Ok(())
             })?;
+            set_modified_time_if_present(&output, modified)?;
             summary.files += 1;
             options.progress.advance_entry();
         } else {
             return Err(ZiFileError::UnsupportedEntry(original));
         }
     }
+    restore_directory_times(directory_times)?;
     Ok(summary)
 }
 
@@ -1495,10 +1540,14 @@ fn extract_seven_zip(
     let mut reader = SevenZReader::open(path, seven_password(options.password.as_deref()))?;
     let mut summary = OperationSummary::default();
     let mut claimed = HashSet::new();
+    let mut directory_times = Vec::new();
     let mut operation_error = None;
     let result = reader.for_each_entries(|entry, input| {
         let operation = (|| -> ZiFileResult<()> {
             options.cancellation.check()?;
+            let modified = entry
+                .has_last_modified_date
+                .then(|| SystemTime::from(entry.last_modified_date()));
             let relative = safe_relative_path(entry.name(), options.limits.max_path_depth)?;
             if !is_selected(&relative, options) {
                 return Ok(());
@@ -1515,7 +1564,10 @@ fn extract_seven_zip(
                 return Ok(());
             };
             if entry.is_directory() {
-                fs::create_dir_all(output)?;
+                fs::create_dir_all(&output)?;
+                if let Some(modified) = modified {
+                    directory_times.push((output, modified));
+                }
                 summary.directories += 1;
             } else {
                 write_atomic(&output, |writer| {
@@ -1529,6 +1581,7 @@ fn extract_seven_zip(
                     )?;
                     Ok(())
                 })?;
+                set_modified_time_if_present(&output, modified)?;
                 summary.files += 1;
                 options.progress.advance_entry();
             }
@@ -1547,6 +1600,7 @@ fn extract_seven_zip(
         return Err(error);
     }
     result?;
+    restore_directory_times(directory_times)?;
     Ok(summary)
 }
 
@@ -1982,6 +2036,54 @@ fn unique_path(path: &Path) -> PathBuf {
     parent.join(format!("{stem} (copy)"))
 }
 
+fn primitive_datetime_to_system_time(value: time::PrimitiveDateTime) -> SystemTime {
+    SystemTime::from(value.assume_utc())
+}
+
+fn zip_datetime_to_system_time(value: zip::DateTime) -> Option<SystemTime> {
+    time::PrimitiveDateTime::try_from(value)
+        .ok()
+        .map(primitive_datetime_to_system_time)
+}
+
+fn system_time_to_zip_datetime(value: SystemTime) -> Option<zip::DateTime> {
+    let value = time::OffsetDateTime::from(value);
+    zip::DateTime::try_from(time::PrimitiveDateTime::new(value.date(), value.time())).ok()
+}
+
+fn rar_modified_time(value: u32, refinement: Option<rars::TimeRefinement>) -> Option<SystemTime> {
+    if value == 0 {
+        return None;
+    }
+    let date = (value >> 16) as u16;
+    let time = value as u16;
+    let mut modified = zip_datetime_to_system_time(zip::DateTime::try_from((date, time)).ok()?)?;
+    if let Some(refinement) = refinement {
+        modified = modified.checked_add(Duration::new(
+            u64::from(refinement.add_second),
+            refinement.nanoseconds,
+        ))?;
+    }
+    Some(modified)
+}
+
+fn set_modified_time_if_present(path: &Path, modified: Option<SystemTime>) -> ZiFileResult<()> {
+    if let Some(modified) = modified {
+        filetime::set_file_mtime(path, filetime::FileTime::from_system_time(modified))?;
+    }
+    Ok(())
+}
+
+fn restore_directory_times(mut entries: Vec<(PathBuf, SystemTime)>) -> ZiFileResult<()> {
+    entries.sort_by(|(left, _), (right, _)| {
+        right.components().count().cmp(&left.components().count())
+    });
+    for (path, modified) in entries {
+        set_modified_time_if_present(&path, Some(modified))?;
+    }
+    Ok(())
+}
+
 fn write_atomic(
     destination: &Path,
     write: impl FnOnce(&mut dyn Write) -> ZiFileResult<()>,
@@ -2009,6 +2111,7 @@ struct SourceEntry {
     archive_path: PathBuf,
     is_directory: bool,
     size: u64,
+    modified: Option<SystemTime>,
 }
 
 fn set_source_totals(entries: &[SourceEntry], progress: &OperationProgress) {
@@ -2064,6 +2167,7 @@ fn collect_sources(sources: &[PathBuf], destination: &Path) -> ZiFileResult<Vec<
                 } else {
                     0
                 },
+                modified: metadata.modified().ok(),
             });
         }
     }
