@@ -159,3 +159,6 @@ jobs:
           cache-dependency-path: docs/pnpm-lock.yaml
       - run: pnpm --dir docs install --frozen-lockfile
       - run: pnpm --dir docs build
+      - name: Validate generated Store privacy routes
+        shell: pwsh
+        run: ./packaging/store/Test-PublicPrivacy.ps1 -DocumentationOutput ./docs/dist

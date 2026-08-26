@@ -16,6 +16,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 - 每个 MSIX 在构建后自动解包审计 Identity、Publisher、版本、最低系统版本、四枚 PE 架构（桌面、CLI、Worker 与 Explorer DLL）、主要文件关联、CLI alias、敏感文件和签名状态，并随包生成 `.audit.json`。
 - 标签发布固定进入 `production-signing` Environment，并且发布任务只消费通过签后门禁的 `signed-windows-*`；`.Dev` Identity、未签名 OID Publisher、缺失云签名输入或无效/无时间戳签名都会失败。
 - 简体中文和英文 Store 文案、隐私说明与认证备注已经结构化归档；CI 验证描述、功能、关键词、许可与 HTTPS URL 的 Partner Center 字段限制，并拒绝 JSON 与可读文档的描述段落或功能项漂移。
+- 隐私 URL 固定指向 GitHub Pages 的中英文政策路由。普通 CI 在 Astro 构建后核对两个 `index.html` 与隐私正文标记；Pages 部署后再次请求公开 HTTPS 页面并要求 HTTP 200，防止 Store listing 引用 404 或错误页面。
 - 双语 Desktop 截图清单具有显式 `draft/complete` 状态；门禁验证 PNG/IHDR、1366×768（或纵向等价）最低尺寸、50 MB 上限、SHA-256、路径边界、顺序、场景和 200 字符说明。标签发布必须达到每语言至少四张，否则在打包前失败。
 - Store 冒烟会动态生成中英文各四张真实 PNG，证明完整清单通过，并证明低分辨率和重复图片被拒绝；当前仓库清单仍明确为 0 张 `draft`，没有用测试图冒充正式素材。
 - `Import-Screenshots.ps1` 从固定的双语四场景采集目录原子导入素材，自动计算哈希和说明，并要求应用版本、Windows build、主题、缩放、UTC 时间、源提交及签名候选类型。它只接受 draft 目标且拒绝覆盖已有 `assets`；任一图片或元数据失败都不会形成 complete 清单。

@@ -31,6 +31,8 @@ All notable changes to ZiFile are documented here. The format follows
   path, four-file schema layout, versioned official URLs, dual architectures, and
   exact SHA-256 matches against the signed local MSIX packages, plus official
   `winget validate` schema checks in Windows CI.
+- Store privacy-route gates that verify both localized Astro outputs during CI and
+  the deployed public HTTPS pages after every GitHub Pages publication.
 - Security-focused fuzz targets and archive throughput benchmarks.
 - Bidirectional ZIP and tar.gz interoperability tests against Windows reference tools.
 - Simplified Chinese and English desktop UI with system-locale detection and persisted

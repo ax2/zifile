@@ -18,13 +18,14 @@ $cloudSigningInputs = Join-Path $repoRoot 'packaging\msix\Test-CloudSigningInput
 $signedReleaseArtifacts = Join-Path $repoRoot 'packaging\msix\Test-SignedReleaseArtifacts.ps1'
 $signingOperationsDocs = Join-Path $repoRoot 'scripts\Test-SigningOperationsDocs.ps1'
 $partnerCenterIdentity = Join-Path $repoRoot 'packaging\store\Test-PartnerCenterIdentity.ps1'
+$publicPrivacy = Join-Path $repoRoot 'packaging\store\Test-PublicPrivacy.ps1'
 $wingetGenerator = Join-Path $repoRoot 'packaging\winget\Generate-Manifests.ps1'
 $wingetVerifier = Join-Path $repoRoot 'packaging\winget\Test-Manifests.ps1'
 $wingetClientInstaller = Join-Path $repoRoot 'packaging\winget\Install-ValidationClient.ps1'
 $wingetSmoke = Join-Path $repoRoot 'tests\smoke\winget-manifest.ps1'
 $userDocs = Join-Path $repoRoot 'scripts\Test-UserDocs.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -711,6 +712,26 @@ foreach ($requiredWackToken in @(
         throw "CI does not exercise WACK readiness policy: $requiredWackToken"
     }
 }
+$docsPagesSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\docs-pages.yml')
+foreach ($requiredPrivacyToken in @(
+    'Validate generated Store privacy routes',
+    './packaging/store/Test-PublicPrivacy.ps1 -DocumentationOutput ./docs/dist'
+)) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredPrivacyToken) -or
+        $docsPagesSource -notmatch [Regex]::Escape($requiredPrivacyToken)) {
+        throw "CI and Pages must validate generated Store privacy routes: $requiredPrivacyToken"
+    }
+}
+foreach ($requiredLivePrivacyToken in @(
+    'packaging/store/listing.*.json',
+    'packaging/store/Test-PublicPrivacy.ps1',
+    'Validate deployed Store privacy routes',
+    './packaging/store/Test-PublicPrivacy.ps1 -Live'
+)) {
+    if ($docsPagesSource -notmatch [Regex]::Escape($requiredLivePrivacyToken)) {
+        throw "Pages deployment does not validate the public Store privacy routes: $requiredLivePrivacyToken"
+    }
+}
 
 [pscustomobject]@{
     schema_version = 1
@@ -756,4 +777,5 @@ foreach ($requiredWackToken in @(
     official_winget_ci_validation_wired = $true
     user_docs_wired = $true
     packaging_release_gates_fail_fast = $true
+    public_privacy_routes_wired = $true
 } | ConvertTo-Json

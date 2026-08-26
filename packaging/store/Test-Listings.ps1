@@ -5,6 +5,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $expectedLocales = @('zh-CN', 'en-US')
+$expectedPrivacyPolicyUrls = @{
+    'zh-CN' = 'https://ax2.github.io/zifile/product/privacy/'
+    'en-US' = 'https://ax2.github.io/zifile/en/product/privacy/'
+}
 $requiredTextFields = @(
     'product_name',
     'short_description',
@@ -103,6 +107,9 @@ $listings = foreach ($locale in $expectedLocales) {
             $uri.Scheme -ne 'https') {
             throw "$locale.$urlField must be an absolute HTTPS URL."
         }
+    }
+    if ($listing.privacy_policy_url -cne $expectedPrivacyPolicyUrls[$locale]) {
+        throw "$locale.privacy_policy_url must use the deployed ZiFile privacy policy route."
     }
 
     $listing
