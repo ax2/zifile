@@ -16,7 +16,27 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $identifier = 'ZiCode.ZiFile'
-$output = [IO.Path]::GetFullPath((Join-Path $OutputRoot "$identifier\$Version"))
+$versionPattern = '^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$'
+if ($Version -notmatch $versionPattern) {
+    throw "Version '$Version' is not a supported ZiFile release version."
+}
+foreach ($installer in @(
+    @{ Architecture = 'x64'; Url = $X64InstallerUrl },
+    @{ Architecture = 'arm64'; Url = $Arm64InstallerUrl }
+)) {
+    $expectedPrefix = "https://github.com/ax2/zifile/releases/download/v$Version/"
+    if ($installer.Url.Scheme -ne 'https' -or
+        -not $installer.Url.AbsoluteUri.StartsWith($expectedPrefix, [StringComparison]::Ordinal)) {
+        throw "$($installer.Architecture) installer URL must use the versioned ZiFile GitHub Release path '$expectedPrefix'."
+    }
+    if (-not $installer.Url.AbsolutePath.EndsWith("windows-$($installer.Architecture).msix", [StringComparison]::OrdinalIgnoreCase)) {
+        throw "$($installer.Architecture) installer URL must name the matching windows-$($installer.Architecture).msix package."
+    }
+}
+
+$output = [IO.Path]::GetFullPath([IO.Path]::Combine([string[]]@(
+    $OutputRoot, 'manifests', 'z', 'ZiCode', 'ZiFile', $Version
+)))
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 
 @"

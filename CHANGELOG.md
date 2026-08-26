@@ -24,6 +24,9 @@ All notable changes to ZiFile are documented here. The format follows
 - Determinate byte/entry progress, cooperative cancellation, and bounded list-time decoding.
 - Deterministic Windows assets, x64/ARM64 MSIX packaging and archive file associations.
 - Tag-driven checksums, CycloneDX SBOM, provenance and WinGet 1.12 manifest generation.
+- A release-blocking WinGet candidate verifier that enforces the community-repository
+  path, four-file schema layout, versioned official URLs, dual architectures, and
+  exact SHA-256 matches against the signed local MSIX packages.
 - Security-focused fuzz targets and archive throughput benchmarks.
 - Bidirectional ZIP and tar.gz interoperability tests against Windows reference tools.
 - Simplified Chinese and English desktop UI with system-locale detection and persisted

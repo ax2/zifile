@@ -13,7 +13,19 @@ only after the release URLs and SHA-256 values are final:
   -Arm64InstallerSha256 <64-hex-digits>
 ```
 
-The generated tree is written under `target/winget/` and is ready for
-`winget validate --manifest <directory>`. Submission to `microsoft/winget-pkgs`
+The generated tree is written under the community-repository-compatible path
+`target/winget/manifests/z/ZiCode/ZiFile/<version>/`. Before publication, verify
+the generated URLs and hashes against the signed local MSIX files:
+
+```powershell
+./packaging/winget/Test-Manifests.ps1 `
+  -ManifestDirectory target/winget/manifests/z/ZiCode/ZiFile/1.0.0 `
+  -Version 1.0.0 `
+  -X64InstallerPath <signed-x64.msix> `
+  -Arm64InstallerPath <signed-arm64.msix>
+```
+
+The resulting directory is ready for `winget validate --manifest <directory>`.
+Submission to `microsoft/winget-pkgs`
 remains a deliberate release action after package signing and installation
 testing; the generator never opens a pull request by itself.

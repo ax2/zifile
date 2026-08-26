@@ -309,7 +309,13 @@ jobs:
             -X64InstallerSha256 (Get-FileHash -LiteralPath $x64.FullName -Algorithm SHA256).Hash `
             -Arm64InstallerUrl "$base/$($arm64.Name)" `
             -Arm64InstallerSha256 (Get-FileHash -LiteralPath $arm64.FullName -Algorithm SHA256).Hash
-          Copy-Item -Path "target/winget/ZiCode.ZiFile/$version/*.yaml" -Destination release
+          $manifestDirectory = "target/winget/manifests/z/ZiCode/ZiFile/$version"
+          ./packaging/winget/Test-Manifests.ps1 `
+            -ManifestDirectory $manifestDirectory `
+            -Version $version `
+            -X64InstallerPath $x64.FullName `
+            -Arm64InstallerPath $arm64.FullName
+          Copy-Item -Path "$manifestDirectory/*.yaml" -Destination release
       - name: Attest SBOM
         uses: actions/attest-build-provenance@v4
         with:

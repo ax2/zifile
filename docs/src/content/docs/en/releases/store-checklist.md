@@ -9,7 +9,8 @@ description: External distribution gates, required material, and repeatable chec
 - Release has removed PFX and includes protected DigiCert Binary Signing simple signing, operating-system verification, timestamp enforcement, and post-signing audit; a real-account rehearsal still awaits external credentials.
 - `Test-PartnerCenterIdentity.ps1` rejects missing/partial configuration, malformed Name, `.Dev`, unsigned OID, and invalid X.500 Publisher before a tag or real-signing rehearsal compiles. Formal values must still come from Product identity.
 - SHA-256 files, CycloneDX JSON SBOMs, and GitHub build provenance.
-- WinGet 1.12 multi-file manifests with both architectures, associations, and bilingual metadata.
+- WinGet 1.12 multi-file manifests with both architectures, associations, bilingual metadata, and the community repository path `manifests/z/ZiCode/ZiFile/<version>/`.
+- Tagged publishing runs `Test-Manifests.ps1` before upload. It requires all four schema types, official versioned GitHub Release HTTPS URLs, one x64 and one arm64 installer, and exact SHA-256 matches against the signed local MSIX files. Tampering or a wrong version path fails publishing.
 - Package audits for identity, publisher, version, minimum OS, four PE architectures, associations, CLI alias, sensitive-file/ZIP absence, and signature state.
 - Tags always enter the `production-signing` Environment, and publishing consumes only post-gate `signed-windows-*` artifacts. A `.Dev` identity, unsigned OID publisher, missing cloud input, invalid signature, or missing timestamp fails the run.
 - Structured English and Simplified Chinese listing copy, privacy statements, and certification notes are present; CI validates Partner Center limits for descriptions, features, keywords, licensing, and HTTPS URLs, and rejects drift between JSON description paragraphs/features and the readable pages.
@@ -35,7 +36,7 @@ These items are also tracked in machine-readable [`release/readiness.json`](http
 4. Rebuild both architectures with official identity and test install, launch, association, upgrade, repair, and uninstall.
 5. Run WACK in an administrator's interactive session and complete keyboard, Narrator, high-contrast, DPI, and Chinese IME checks.
 6. Review the prepared bilingual listing copy, privacy statements, and certification notes; deploy the public privacy pages, capture localized desktop screenshots from the signed candidate, and complete age rating and markets.
-7. Submit validated MSIX packages; after a public Release, generate and submit the WinGet PR.
+7. Submit validated MSIX packages; the public Release includes the locally post-signing-verified WinGet candidate, which must then pass official `winget validate` before the community-repository PR is submitted.
 
 Until these external gates pass, no Alpha artifact may be called Store-ready or signed.
 
