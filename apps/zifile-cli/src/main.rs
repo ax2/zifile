@@ -1,5 +1,4 @@
 use std::{
-    fmt::Write,
     io::{self, BufRead},
     path::PathBuf,
 };
@@ -264,8 +263,7 @@ fn format_matrix() -> String {
         String::from("FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tENCRYPTION\tSTAGE\n");
     for format in ArchiveFormat::ALL {
         let capabilities = format.capabilities();
-        writeln!(
-            output,
+        output.push_str(&format!(
             "{format}\t{}\t{}\t{}\t{}\t{}\t{}",
             yes_no(capabilities.list),
             yes_no(capabilities.extract),
@@ -273,8 +271,8 @@ fn format_matrix() -> String {
             create_input_label(format.create_input()),
             yes_no(capabilities.encryption),
             capabilities.stage
-        )
-        .expect("writing to a String cannot fail");
+        ));
+        output.push('\n');
     }
     output
 }
