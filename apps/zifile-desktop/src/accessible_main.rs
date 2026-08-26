@@ -10,7 +10,8 @@ use dioxus_html::HasFileData;
 use rfd::FileDialog;
 use zifile_core::{
     ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy, CreateInputKind,
-    OperationProgress, OperationSummary, ProgressSnapshot, SafetyLimits, detect_format_from_path,
+    OPEN_ARCHIVE_EXTENSIONS, OperationProgress, OperationSummary, ProgressSnapshot, SafetyLimits,
+    detect_format_from_path,
 };
 use zifile_worker_protocol::WorkerRequest;
 
@@ -109,6 +110,7 @@ struct UiState {
     page: Page,
     archive: Option<ArchiveInfo>,
     pending_archive: Option<PathBuf>,
+    automatic_extract_destination: Option<PathBuf>,
     selected: HashSet<PathBuf>,
     entry_directory: PathBuf,
     entry_filter: String,
@@ -139,6 +141,7 @@ impl Default for UiState {
             page: Page::Home,
             archive: None,
             pending_archive: None,
+            automatic_extract_destination: None,
             selected: HashSet::new(),
             entry_directory: PathBuf::new(),
             entry_filter: String::new(),
@@ -187,6 +190,11 @@ fn App() -> Element {
             match startup_request.clone() {
                 StartupRequest::Home => {}
                 StartupRequest::OpenArchive(path) => begin_load(state, path),
+                StartupRequest::ExtractHere(path) => {
+                    state.write().automatic_extract_destination =
+                        Some(startup::extraction_destination(&path));
+                    begin_load(state, path);
+                }
                 StartupRequest::CreateFrom(sources) => {
                     let mut value = state.write();
                     value.page = Page::Create;
@@ -592,7 +600,10 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
 fn open_archive_dialog(mut state: Signal<UiState>) {
     let locale = state.read().locale;
     if let Some(path) = archive_dialog(locale).pick_file() {
-        state.write().password.clear();
+        let mut value = state.write();
+        value.password.clear();
+        value.automatic_extract_destination = None;
+        drop(value);
         begin_load(state, path);
     }
 }
@@ -631,7 +642,10 @@ fn handle_dropped_paths(mut state: Signal<UiState>, paths: Vec<PathBuf>) {
         && paths[0].is_file()
         && detect_format_from_path(&paths[0]).is_some_and(|format| format.capabilities().list)
     {
-        state.write().password.clear();
+        let mut value = state.write();
+        value.password.clear();
+        value.automatic_extract_destination = None;
+        drop(value);
         begin_load(state, paths.into_iter().next().expect("one dropped path"));
         return;
     }
@@ -712,9 +726,6 @@ fn extract_selected(state: Signal<UiState>) {
         .unwrap_or_else(|| Path::new("."))
         .join(archive.path.file_stem().unwrap_or_default());
     let locale = value.locale;
-    let selected = value.selected.clone();
-    let conflict = value.conflict;
-    let password = non_empty(&value.password);
     drop(value);
     let Some(destination) = FileDialog::new()
         .set_title(locale.text(Text::ChooseExtractionFolder))
@@ -723,6 +734,19 @@ fn extract_selected(state: Signal<UiState>) {
     else {
         return;
     };
+    extract_to(state, destination);
+}
+
+fn extract_to(state: Signal<UiState>, destination: PathBuf) {
+    let value = state.read();
+    let Some(archive) = value.archive.clone() else {
+        return;
+    };
+    let selected = value.selected.clone();
+    let conflict = value.conflict;
+    let password = non_empty(&value.password);
+    let locale = value.locale;
+    drop(value);
     let file_count = archive
         .entries
         .iter()
@@ -943,6 +967,7 @@ fn finish_worker(
     result: Result<WorkerOutput, String>,
 ) {
     let locale = state.read().locale;
+    let mut automatic_extract = None;
     let (status, status_kind) = match (kind, result) {
         (OperationKind::List, Ok(WorkerOutput::Archive(archive))) => {
             let status = if locale == Locale::ZhCn {
@@ -974,6 +999,7 @@ fn finish_worker(
             value.entry_sort = EntrySort::Name;
             value.entry_sort_direction = SortDirection::Ascending;
             value.page = Page::Archive;
+            automatic_extract = value.automatic_extract_destination.take();
             (status, StatusKind::Informational)
         }
         (OperationKind::Test, Ok(WorkerOutput::Archive(info))) => {
@@ -1032,6 +1058,9 @@ fn finish_worker(
         value.progress = None;
         value.status = status;
         value.status_kind = status_kind;
+    }
+    if let Some(destination) = automatic_extract {
+        extract_to(state, destination);
     }
     let next = operations
         .lock()
@@ -1318,10 +1347,7 @@ fn archive_dialog(locale: Locale) -> FileDialog {
         .set_title(locale.text(Text::OpenDialog))
         .add_filter(
             locale.text(Text::SupportedArchives),
-            &[
-                "zip", "zipx", "7z", "rar", "cab", "tar", "gz", "tgz", "zst", "xz", "bz2", "lz4",
-                "br",
-            ],
+            OPEN_ARCHIVE_EXTENSIONS,
         )
         .add_filter(locale.text(Text::AllFiles), &["*"])
 }

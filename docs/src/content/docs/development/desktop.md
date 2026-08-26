@@ -59,6 +59,8 @@ Worker 的字节进度（无字节总量时回退到条目进度）同步到 Win
 
 共享队列的 FIFO、容量、陈旧完成保护、清空语义和敏感载荷释放已有纯单元测试，两套 UI 已通过严格 Clippy 与全 feature 测试；真实前台多任务 UI 冒烟仍待无干扰交互回合，因此路线图暂不标记完成。
 
+Windows 11 Explorer 扩展由纯 Rust COM DLL 提供两个现代命令：“使用 ZiFile 创建压缩文件”会把最多 256 个来源送入创建页；“使用 ZiFile 解压到同名目录”只对单个受支持归档显示，并以 `--extract-here` 打开可见桌面窗口。桌面在签名优先列出成功后选择全部普通文件，解压到归档旁的同名目录并对冲突重命名；进度、取消、安全限制和密码重试仍由桌面与隔离 Worker 负责，DLL 本身不解析归档或接触密码。真实 Explorer 激活仍需可信安装包验证。
+
 这些检查尚不等同于完整辅助功能认证。当前 Iced 0.14 UI 不能宣称具备完整的 Windows UI Automation/Narrator 语义树。中文 IME、归档页完整实际键盘/Narrator 遍历、可见焦点、屏幕阅读器、高对比度、每显示器 DPI 和 Windows Application Certification Kit 仍是上架前门禁。可访问 UI 路线见 ADR-0005。
 
 ## 可访问 UI 候选

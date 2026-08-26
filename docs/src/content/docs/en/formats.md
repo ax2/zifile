@@ -19,6 +19,8 @@ ZIP reading supports Store, Deflate, Deflate64, BZip2, LZMA, XZ, Zstandard, and 
 
 `.zipx` is recognized as a ZIP reading alias and is included in both desktop open dialogs and the Windows package file association. ZiFile still creates ordinary `.zip` archives by default.
 
+The desktop open dialog also exposes common comic-book, TAR-family, LZMA, and Bzip2 aliases such as CBZ/CB7/CBR/CBT, TXZ/TZST/TBZ2, `.lzma`, and `.bz`. The Windows package registers archive-oriented aliases but deliberately does not take over `.epub`; EPUB files can still be selected manually and are inspected as ZIP content.
+
 Legacy ZIP Shrink, Reduce 1–4, and Implode methods are also decoded read-only. Pinned upstream fixtures verify ZiFile's extracted bytes against known content, while 7-Zip independently identifies the archived method. These obsolete algorithms are not offered for new archive creation.
 
 ZIP, 7z, and TAR compositions accept multiple files and folders when created. Single-stream gzip, Zstandard, XZ, Bzip2, LZ4, and Brotli require exactly one existing file; use the corresponding TAR composition for folders or multiple items. The desktop validates this before opening the destination dialog.

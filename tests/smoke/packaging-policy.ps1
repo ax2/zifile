@@ -529,7 +529,9 @@ foreach ($requiredShellToken in @(
     'windows.comServer',
     'windows.fileExplorerContextMenus',
     'zifile-shell.dll',
-    '2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531'
+    '2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531',
+    '2D39AD2E-1B36-4F4F-8E09-589F0B1D2BC3',
+    'ExtractArchiveWithZiFile'
 )) {
     if ($manifestSource -notmatch [Regex]::Escape($requiredShellToken)) {
         throw "The MSIX manifest does not include shell extension token: $requiredShellToken"
@@ -545,17 +547,71 @@ if ($manifestSource -notmatch [Regex]::Escape('<uap:FileType>.zipx</uap:FileType
     throw 'The MSIX manifest does not associate supported ZIPX archives.'
 }
 $packageAuditSource = Get-Content -Raw -LiteralPath $packageAudit
-if ($packageAuditSource -notmatch [Regex]::Escape("@('.zip', '.zipx', '.7z'")) {
-    throw 'The package audit does not require the ZIPX file association.'
+if ($packageAuditSource -notmatch [Regex]::Escape("'.zipx'") -or
+    $packageAuditSource -notmatch [Regex]::Escape("'.tbz2'")) {
+    throw 'The package audit does not require the archive alias associations.'
+}
+foreach ($requiredExtractAuditToken in @('$extractShellClsid', 'extract_item_types')) {
+    if ($packageAuditSource -notmatch [Regex]::Escape($requiredExtractAuditToken)) {
+        throw "The package audit omits Explorer extract evidence: $requiredExtractAuditToken"
+    }
+}
+$shellSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'apps\zifile-shell\src\lib.rs')
+foreach ($requiredExtractShellToken in @('EXTRACT_COMMAND_CLSID', '--extract-here', 'ECS_HIDDEN')) {
+    if ($shellSource -notmatch [Regex]::Escape($requiredExtractShellToken)) {
+        throw "The Rust shell extension omits extract command behavior: $requiredExtractShellToken"
+    }
+}
+foreach ($requiredExtractExtension in @(
+    'zip', 'zipx', 'cbz', '7z', 'cb7', 'rar', 'cbr', 'cab', 'tar', 'cbt',
+    'gz', 'tgz', 'zst', 'tzst', 'xz', 'txz', 'lzma', 'bz', 'bz2', 'tbz',
+    'tbz2', 'lz4', 'br'
+)) {
+    if ($shellSource -notmatch [Regex]::Escape(('"{0}"' -f $requiredExtractExtension))) {
+        throw "The Explorer extract command omits a packaged archive extension: $requiredExtractExtension"
+    }
+}
+$startupSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'apps\zifile-desktop\src\startup.rs')
+if ($startupSource -notmatch [Regex]::Escape('ExtractHere') -or
+    $startupSource -notmatch [Regex]::Escape('--extract-here')) {
+    throw 'The shared desktop startup parser omits Explorer extract mode.'
+}
+$coreSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'crates\zifile-core\src\lib.rs')
+if ($coreSource -notmatch [Regex]::Escape('OPEN_ARCHIVE_EXTENSIONS')) {
+    throw 'The core does not expose the shared desktop extension registry.'
+}
+foreach ($requiredCoreExtension in @(
+    'zip', 'zipx', 'cbz', 'epub', '7z', 'cb7', 'rar', 'cbr', 'cab', 'tar', 'cbt',
+    'gz', 'tgz', 'zst', 'tzst', 'xz', 'txz', 'lzma', 'bz', 'bz2', 'tbz', 'tbz2',
+    'lz4', 'br'
+)) {
+    if ($coreSource -notmatch [Regex]::Escape(('"{0}"' -f $requiredCoreExtension))) {
+        throw "The shared desktop extension registry omits: $requiredCoreExtension"
+    }
 }
 foreach ($desktopSourcePath in @(
     (Join-Path $repoRoot 'apps\zifile-desktop\src\main.rs'),
     (Join-Path $repoRoot 'apps\zifile-desktop\src\accessible_main.rs')
 )) {
     $desktopSource = Get-Content -Raw -LiteralPath $desktopSourcePath
-    if ($desktopSource -notmatch [Regex]::Escape('"zip", "zipx"')) {
-        throw "The desktop archive dialog omits ZIPX: $desktopSourcePath"
+    if ($desktopSource -notmatch [Regex]::Escape('OPEN_ARCHIVE_EXTENSIONS')) {
+        throw "The desktop archive dialog does not use the shared extension registry: $desktopSourcePath"
     }
+    if ($desktopSource -notmatch [Regex]::Escape('automatic_extract_destination') -or
+        $desktopSource -notmatch [Regex]::Escape('extraction_destination')) {
+        throw "The desktop does not implement the Explorer extract startup workflow: $desktopSourcePath"
+    }
+}
+foreach ($requiredAssociation in @('.cbz', '.cb7', '.cbr', '.cbt', '.tzst', '.txz', '.lzma', '.bz', '.tbz', '.tbz2')) {
+    if ($manifestSource -notmatch [Regex]::Escape("<uap:FileType>$requiredAssociation</uap:FileType>")) {
+        throw "The MSIX manifest omits supported archive alias: $requiredAssociation"
+    }
+    if ($packageAuditSource -notmatch [Regex]::Escape("'$requiredAssociation'")) {
+        throw "The package audit omits supported archive alias: $requiredAssociation"
+    }
+}
+if ($manifestSource -match [Regex]::Escape('<uap:FileType>.epub</uap:FileType>')) {
+    throw 'The MSIX manifest must not take over EPUB by default.'
 }
 if ($buildSource -notmatch [Regex]::Escape('zifile_shell.dll')) {
     throw 'Build-Package.ps1 does not stage the architecture-matched shell DLL.'
@@ -868,6 +924,7 @@ foreach ($requiredLivePrivacyToken in @(
     package_audit_wired = $true
     release_audit_staged = $true
     shell_extension_wired = $true
+    shell_extract_command_wired = $true
     lifecycle_gate_wired = $true
     lifecycle_workflow_wired = $true
     repair_helper_wired = $true
@@ -875,6 +932,7 @@ foreach ($requiredLivePrivacyToken in @(
     rar_corpus_wired = $true
     cab_association_wired = $true
     zipx_association_wired = $true
+    archive_alias_ingress_wired = $true
     cab_interoperability_wired = $true
     zip_method_corpus_wired = $true
     zip_legacy_corpus_wired = $true

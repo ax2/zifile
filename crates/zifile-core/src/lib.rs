@@ -44,6 +44,13 @@ pub enum ArchiveFormat {
     Cab,
 }
 
+/// Extensions shown by desktop open dialogs for formats ZiFile can inspect.
+/// Existing files are still detected by content signatures before hints.
+pub const OPEN_ARCHIVE_EXTENSIONS: &[&str] = &[
+    "zip", "zipx", "cbz", "epub", "7z", "cb7", "rar", "cbr", "cab", "tar", "cbt", "gz", "tgz",
+    "zst", "tzst", "xz", "txz", "lzma", "bz", "bz2", "tbz", "tbz2", "lz4", "br",
+];
+
 impl ArchiveFormat {
     /// Stable display order used by both CLI and desktop UI.
     pub const ALL: [Self; 15] = [
@@ -393,6 +400,12 @@ mod tests {
             detect_format_from_path("driver.CAB"),
             Some(ArchiveFormat::Cab)
         );
+        for extension in OPEN_ARCHIVE_EXTENSIONS {
+            assert!(
+                detect_format_from_path(format!("sample.{extension}")).is_some(),
+                "desktop extension is not recognized: {extension}"
+            );
+        }
     }
 
     #[test]

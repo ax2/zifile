@@ -33,6 +33,8 @@ Open, reload, test, extract, and create requests may be submitted while work is 
 
 Unit tests cover FIFO ordering, capacity, stale completions, clearing, and payload release. A real foreground multi-operation smoke run is still required before the roadmap queue item can close.
 
+The Windows 11 Explorer extension is a pure-Rust COM DLL with two modern commands. “Create archive with ZiFile” sends up to 256 selected sources to the create page. “Extract to matching folder with ZiFile” is shown only for one supported archive and launches the visible desktop with `--extract-here`. After signature-first listing succeeds, the desktop selects every regular file and extracts to a sibling folder matching the archive stem with rename-on-conflict behavior. Progress, cancellation, limits, and password retry remain in the desktop and isolated Worker; the DLL never parses archives or handles passwords. Real Explorer activation still requires a trusted installed package.
+
 ## Accessibility evidence and limits
 
 The opt-in Dioxus/WebView2 candidate shares the Worker and supports the primary browse, test, selective-extract, create, progress, cancel, drop, and shortcut flows. Windows UI Automation has identified semantic controls; real bilingual keyboard flows, bounded 100,000-entry browsing, cancellation, x64 runnable/MSIX execution, and x64/ARM64 cloud packaging have passed.

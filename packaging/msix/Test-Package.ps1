@@ -158,8 +158,30 @@ try {
             throw "MSIX manifest is missing ZiFile shell command item type: $itemType"
         }
     }
+    $extractShellClsid = '2D39AD2E-1B36-4F4F-8E09-589F0B1D2BC3'
+    $extractShellClass = $manifest.SelectSingleNode(
+        "//com:SurrogateServer/com:Class[@Id='$extractShellClsid']",
+        $namespace
+    )
+    if (-not $extractShellClass -or $extractShellClass.Path -cne 'ZiFile\zifile-shell.dll' -or
+        $extractShellClass.ThreadingModel -cne 'STA') {
+        throw 'MSIX manifest does not register the ZiFile extract STA shell COM class.'
+    }
+    $extractShellItemTypes = @(
+        $manifest.SelectNodes(
+            "//desktop4:FileExplorerContextMenus/desktop5:ItemType[desktop5:Verb[@Clsid='$extractShellClsid']]",
+            $namespace
+        ) | ForEach-Object { $_.Type }
+    )
+    if ($extractShellItemTypes -cnotcontains '*') {
+        throw 'MSIX manifest does not register the ZiFile extract command for file selections.'
+    }
 
-    $requiredExtensions = @('.zip', '.zipx', '.7z', '.rar', '.cab', '.tar', '.gz', '.tgz', '.zst', '.xz', '.bz2', '.lz4', '.br')
+    $requiredExtensions = @(
+        '.zip', '.zipx', '.7z', '.cbz', '.cb7', '.rar', '.cbr', '.cab', '.tar', '.cbt',
+        '.gz', '.tgz', '.zst', '.tzst', '.xz', '.txz', '.lzma', '.bz', '.bz2', '.tbz',
+        '.tbz2', '.lz4', '.br'
+    )
     $declaredExtensions = @(
         $manifest.SelectNodes('//uap:FileTypeAssociation/uap:SupportedFileTypes/uap:FileType', $namespace) |
             ForEach-Object { $_.InnerText }
@@ -199,6 +221,10 @@ try {
             path = $shellClass.Path
             threading_model = $shellClass.ThreadingModel
             item_types = $shellItemTypes
+            extract_clsid = $extractShellClsid
+            extract_path = $extractShellClass.Path
+            extract_threading_model = $extractShellClass.ThreadingModel
+            extract_item_types = $extractShellItemTypes
         }
         forbidden_file_count = $forbiddenFiles.Count
         signature_required = [bool]$RequireSignature

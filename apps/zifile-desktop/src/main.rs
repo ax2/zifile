@@ -16,7 +16,8 @@ use iced::{Element, Fill, Length, Subscription, Task, Theme};
 use rfd::FileDialog;
 use zifile_core::{
     ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy, CreateInputKind,
-    OperationProgress, OperationSummary, SafetyLimits, detect_format_from_path,
+    OPEN_ARCHIVE_EXTENSIONS, OperationProgress, OperationSummary, SafetyLimits,
+    detect_format_from_path,
 };
 use zifile_worker_protocol::WorkerRequest;
 
@@ -63,6 +64,10 @@ fn initialize() -> (ZiFile, Task<Message>) {
     let task = match startup::parse(std::env::args_os().skip(1)) {
         StartupRequest::Home => Task::none(),
         StartupRequest::OpenArchive(path) => begin_load(&mut state, path),
+        StartupRequest::ExtractHere(path) => {
+            state.automatic_extract_destination = Some(startup::extraction_destination(&path));
+            begin_load(&mut state, path)
+        }
         StartupRequest::CreateFrom(sources) => {
             state.page = Page::Create;
             append_unique(&mut state.create_sources, sources);
@@ -84,6 +89,7 @@ struct ZiFile {
     page: Page,
     archive: Option<ArchiveInfo>,
     pending_archive: Option<PathBuf>,
+    automatic_extract_destination: Option<PathBuf>,
     selected: HashSet<PathBuf>,
     entry_directory: PathBuf,
     entry_filter: String,
@@ -112,6 +118,7 @@ impl Default for ZiFile {
             page: Page::Home,
             archive: None,
             pending_archive: None,
+            automatic_extract_destination: None,
             selected: HashSet::new(),
             entry_directory: PathBuf::new(),
             entry_filter: String::new(),
@@ -278,6 +285,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::OpenArchiveDialog => {
             if let Some(path) = archive_dialog(state.locale).pick_file() {
                 state.password.clear();
+                state.automatic_extract_destination = None;
                 return begin_load(state, path);
             }
         }
@@ -314,6 +322,11 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     state.archive = Some(archive);
                     state.pending_archive = None;
                     state.page = Page::Archive;
+                    if let Some(destination) = state.automatic_extract_destination.take()
+                        && let Some(operation) = extract_operation(state, destination)
+                    {
+                        drop(submit_operation(state, operation));
+                    }
                 }
                 Err(error) => {
                     state.status = format!(
@@ -408,39 +421,8 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             else {
                 return Task::none();
             };
-            let path = archive.path.clone();
-            let file_count = archive
-                .entries
-                .iter()
-                .filter(|entry| !entry.is_directory)
-                .count();
-            let selected_paths = if state.selected.len() == file_count {
-                None
-            } else {
-                Some(state.selected.iter().cloned().collect())
-            };
-            let request = WorkerRequest::Extract {
-                archive: path,
-                destination: destination.clone(),
-                conflict: state.conflict.into(),
-                limits: SafetyLimits::default(),
-                password: non_empty(&state.password),
-                selected_paths,
-            };
-            let status = format!(
-                "{} {}…",
-                choose(state.locale, "Extracting to", "正在解压到"),
-                destination.display()
-            );
-            return submit_operation(
-                state,
-                QueuedOperation {
-                    kind: OperationKind::Extract,
-                    request,
-                    status,
-                    archive_path: None,
-                },
-            );
+            return extract_operation(state, destination)
+                .map_or_else(Task::none, |operation| submit_operation(state, operation));
         }
         Message::ExtractFinished(id, result) => {
             state.busy = false;
@@ -632,6 +614,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 && detect_format_from_path(&path).is_some_and(|format| format.capabilities().list)
             {
                 state.password.clear();
+                state.automatic_extract_destination = None;
                 return begin_load(state, path);
             } else if path.exists() {
                 append_unique(&mut state.create_sources, vec![path]);
@@ -737,6 +720,37 @@ fn begin_load(state: &mut ZiFile, path: PathBuf) -> Task<Message> {
             archive_path: Some(path),
         },
     )
+}
+
+fn extract_operation(state: &ZiFile, destination: PathBuf) -> Option<QueuedOperation> {
+    let archive = state.archive.as_ref()?;
+    let file_count = archive
+        .entries
+        .iter()
+        .filter(|entry| !entry.is_directory)
+        .count();
+    let selected_paths = if state.selected.len() == file_count {
+        None
+    } else {
+        Some(state.selected.iter().cloned().collect())
+    };
+    Some(QueuedOperation {
+        kind: OperationKind::Extract,
+        request: WorkerRequest::Extract {
+            archive: archive.path.clone(),
+            destination: destination.clone(),
+            conflict: state.conflict.into(),
+            limits: SafetyLimits::default(),
+            password: non_empty(&state.password),
+            selected_paths,
+        },
+        status: format!(
+            "{} {}…",
+            choose(state.locale, "Extracting to", "正在解压到"),
+            destination.display()
+        ),
+        archive_path: None,
+    })
 }
 
 fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Message> {
@@ -1450,10 +1464,7 @@ fn archive_dialog(locale: Locale) -> FileDialog {
         .set_title(locale.text(Text::OpenDialog))
         .add_filter(
             locale.text(Text::SupportedArchives),
-            &[
-                "zip", "zipx", "7z", "rar", "cab", "tar", "gz", "tgz", "zst", "xz", "bz2", "lz4",
-                "br",
-            ],
+            OPEN_ARCHIVE_EXTENSIONS,
         )
         .add_filter(locale.text(Text::AllFiles), &["*"])
 }
@@ -1633,5 +1644,39 @@ mod tests {
             ),
             "已选 1/3"
         );
+    }
+
+    #[test]
+    fn extract_here_queues_extraction_after_listing_succeeds() {
+        let archive_path = PathBuf::from(r"C:\archives\sample.zip");
+        let destination = PathBuf::from(r"C:\archives\sample");
+        let archive = ArchiveInfo {
+            path: archive_path.clone(),
+            format: ArchiveFormat::Zip,
+            entries: vec![ArchiveEntryInfo {
+                path: PathBuf::from("hello.txt"),
+                size: 5,
+                compressed_size: 5,
+                is_directory: false,
+                encrypted: false,
+                modified: None,
+            }],
+            total_size: 5,
+            compressed_size: 5,
+        };
+        let mut state = ZiFile {
+            automatic_extract_destination: Some(destination.clone()),
+            ..ZiFile::default()
+        };
+        drop(begin_load(&mut state, archive_path));
+        assert_eq!(state.operations.active_id(), Some(1));
+
+        drop(update(&mut state, Message::ArchiveLoaded(1, Ok(archive))));
+
+        assert_eq!(state.operations.active_id(), Some(2));
+        assert!(state.busy);
+        assert!(state.automatic_extract_destination.is_none());
+        assert!(state.status.contains(&destination.display().to_string()));
+        assert_eq!(state.selected, HashSet::from([PathBuf::from("hello.txt")]));
     }
 }

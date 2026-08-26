@@ -19,6 +19,8 @@ ZIP 读取支持 Store、Deflate、Deflate64、BZip2、LZMA、XZ、Zstandard 与
 
 `.zipx` 会作为 ZIP 读取别名识别，并已加入两套桌面打开对话框和 Windows 安装包文件关联；ZiFile 默认仍创建普通 `.zip` 归档。
 
+桌面打开对话框也会显示常见漫画、TAR 家族、LZMA 与 Bzip2 别名，例如 CBZ/CB7/CBR/CBT、TXZ/TZST/TBZ2、`.lzma` 和 `.bz`。Windows 安装包注册面向归档的别名，但不会默认接管 `.epub`；EPUB 仍可在 ZiFile 中手动选择并作为 ZIP 内容检查。
+
 历史 ZIP 的 Shrink、Reduce 1–4 与 Implode 方法也支持只读解码。固定上游语料用于校验 ZiFile 解压后的字节与已知内容完全一致，7-Zip 则独立识别归档所用方法；这些过时算法不会作为新归档的创建选项。
 
 创建 ZIP、7z 和 TAR 组合时可以选择多个文件或文件夹。单流 gzip、Zstandard、XZ、Bzip2、LZ4 和 Brotli 必须恰好选择一个现有文件；若要压缩目录或多个项目，请选择对应的 TAR 组合格式。桌面端会在打开保存对话框前检查这一要求。
