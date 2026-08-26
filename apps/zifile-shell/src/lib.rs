@@ -62,7 +62,7 @@ impl IExplorerCommand_Impl for ZiFileCreateCommand_Impl {
         let enabled = items
             .as_ref()
             .and_then(|items| unsafe { items.GetCount().ok() })
-            .is_some_and(|count| count > 0);
+            .is_some_and(create_selection_enabled);
         Ok(if enabled {
             ECS_ENABLED.0
         } else {
@@ -273,6 +273,10 @@ fn extract_path_supported(path: &std::path::Path) -> bool {
         })
 }
 
+fn create_selection_enabled(count: u32) -> bool {
+    (1..=MAX_SELECTED_ITEMS).contains(&count)
+}
+
 fn command_line_within_limit(command_flag: &str, paths: &[PathBuf]) -> bool {
     let units = paths
         .iter()
@@ -359,6 +363,14 @@ mod tests {
             "--extract-here",
             &[PathBuf::from("x".repeat(MAX_ARGUMENT_UTF16_UNITS))]
         ));
+    }
+
+    #[test]
+    fn create_command_state_matches_the_selection_limit() {
+        assert!(!create_selection_enabled(0));
+        assert!(create_selection_enabled(1));
+        assert!(create_selection_enabled(MAX_SELECTED_ITEMS));
+        assert!(!create_selection_enabled(MAX_SELECTED_ITEMS + 1));
     }
 
     #[test]
