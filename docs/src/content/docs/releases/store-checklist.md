@@ -7,6 +7,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 
 - x64 与 ARM64 的完整可运行目录、独立 EXE 和 MSIX 构建。
 - Release 已移除 PFX，具备受保护的 DigiCert Binary Signing simple-signing、签后系统验签、时间戳检查和签后审计路径；真实账号演练仍待外部凭据。
+- `Test-PartnerCenterIdentity.ps1` 在标签/真实签名演练编译前拒绝缺失、只配置一项、非法 Name、`.Dev`、未签名 OID 和无效 X.500 Publisher；正式值仍必须由 Product identity 页面提供。
 - SHA-256、CycloneDX JSON SBOM 和 GitHub 构建来源证明。
 - WinGet 1.12 多文件清单生成器，覆盖两个架构、文件关联和中英文元数据。
 - 真实 Release SHA-256 的候选清单已通过本机 `winget validate`；该结果不等于已提交或已获社区仓库接受。

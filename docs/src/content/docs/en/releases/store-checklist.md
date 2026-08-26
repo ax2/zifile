@@ -7,6 +7,7 @@ description: External distribution gates, required material, and repeatable chec
 
 - x64/ARM64 runnable directories, standalone EXEs, and MSIX builds.
 - Release has removed PFX and includes protected DigiCert Binary Signing simple signing, operating-system verification, timestamp enforcement, and post-signing audit; a real-account rehearsal still awaits external credentials.
+- `Test-PartnerCenterIdentity.ps1` rejects missing/partial configuration, malformed Name, `.Dev`, unsigned OID, and invalid X.500 Publisher before a tag or real-signing rehearsal compiles. Formal values must still come from Product identity.
 - SHA-256 files, CycloneDX JSON SBOMs, and GitHub build provenance.
 - WinGet 1.12 multi-file manifests with both architectures, associations, and bilingual metadata.
 - Package audits for identity, publisher, version, minimum OS, four PE architectures, associations, CLI alias, sensitive-file/ZIP absence, and signature state.

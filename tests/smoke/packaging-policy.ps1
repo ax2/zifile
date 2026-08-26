@@ -17,8 +17,9 @@ $releaseReadiness = Join-Path $repoRoot 'scripts\Test-ReleaseReadiness.ps1'
 $cloudSigningInputs = Join-Path $repoRoot 'packaging\msix\Test-CloudSigningInputs.ps1'
 $signedReleaseArtifacts = Join-Path $repoRoot 'packaging\msix\Test-SignedReleaseArtifacts.ps1'
 $signingOperationsDocs = Join-Path $repoRoot 'scripts\Test-SigningOperationsDocs.ps1'
+$partnerCenterIdentity = Join-Path $repoRoot 'packaging\store\Test-PartnerCenterIdentity.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -222,6 +223,39 @@ $null = Get-ExpectedFailure -Pattern 'development MSIX identity' -Action {
         -SigningCertificateAvailable `
         -SigningPasswordAvailable
 }
+
+$unconfiguredIdentity = & $partnerCenterIdentity | ConvertFrom-Json
+if ($unconfiguredIdentity.configured -or $unconfiguredIdentity.formal_identity) {
+    throw 'An absent Partner Center identity was not reported as unconfigured.'
+}
+$null = Get-ExpectedFailure -Pattern 'ZIFILE_MSIX_IDENTITY and ZIFILE_MSIX_PUBLISHER' -Action {
+    & $partnerCenterIdentity -RequireConfigured
+}
+$null = Get-ExpectedFailure -Pattern 'configured together' -Action {
+    & $partnerCenterIdentity -IdentityName 'ZiCode.ZiFile'
+}
+$null = Get-ExpectedFailure -Pattern '3-50 alphanumeric' -Action {
+    & $partnerCenterIdentity -IdentityName 'ZiCode ZiFile' -Publisher 'CN=ZiCode Official'
+}
+$null = Get-ExpectedFailure -Pattern 'development MSIX identity' -Action {
+    & $partnerCenterIdentity -IdentityName 'ZiCode.ZiFile.Dev' -Publisher 'CN=ZiCode Official'
+}
+$null = Get-ExpectedFailure -Pattern 'unsigned development publisher' -Action {
+    & $partnerCenterIdentity `
+        -IdentityName 'ZiCode.ZiFile' `
+        -Publisher 'CN=ZiCode Development, OID.2.25.311729368913984317654407730594956997722=1'
+}
+$null = Get-ExpectedFailure -Pattern 'X.500 distinguished name' -Action {
+    & $partnerCenterIdentity -IdentityName 'ZiCode.ZiFile' -Publisher 'not a distinguished name'
+}
+$formalIdentity = & $partnerCenterIdentity `
+    -IdentityName 'ZiCode.ZiFile' `
+    -Publisher 'CN=ZiCode Official, O=ZiCode' `
+    -RequireConfigured |
+    ConvertFrom-Json
+if (-not $formalIdentity.configured -or -not $formalIdentity.formal_identity) {
+    throw 'A valid Partner Center product identity was not accepted.'
+}
 $null = Get-ExpectedFailure -Pattern 'unsigned development publisher' -Action {
     & $publishingPolicy `
         -IdentityName 'ZiCode.ZiFile' `
@@ -358,6 +392,7 @@ foreach ($requiredSigningWorkflowToken in @(
     'signing_provider:',
     'environment: production-signing',
     'Test-CloudSigningInputs.ps1',
+    'Test-PartnerCenterIdentity.ps1',
     'digicert/code-signing-software-trust-action@v1.2.1',
     'simple-signing-mode: true',
     'digest-alg: SHA-256',
@@ -588,4 +623,7 @@ foreach ($requiredWackToken in @(
     least_privilege_release_permissions = $true
     signing_timeout_wired = $true
     signing_concurrency_wired = $true
+    partner_center_identity_preflight_wired = $true
+    partial_partner_center_identity_rejected = $true
+    malformed_partner_center_identity_rejected = $true
 } | ConvertTo-Json
