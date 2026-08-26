@@ -9,6 +9,7 @@ $repairProject = Join-Path $repoRoot 'tests\helpers\msix-repair\MsixRepair.cspro
 $repairProbe = Join-Path $repoRoot 'tests\helpers\msix-repair\Invoke-Probe.ps1'
 $rarCorpus = Join-Path $repoRoot 'tests\interoperability\rar-corpus.ps1'
 $cabInteroperability = Join-Path $repoRoot 'tests\interoperability\cab-windows.ps1'
+$zipMethodCorpus = Join-Path $repoRoot 'tests\interoperability\zip-method-corpus.ps1'
 $wackReadiness = Join-Path $repoRoot 'packaging\msix\Test-WackReadiness.ps1'
 $versionConsistency = Join-Path $repoRoot 'scripts\Test-VersionConsistency.ps1'
 $releaseNotes = Join-Path $repoRoot 'scripts\Test-ReleaseNotes.ps1'
@@ -26,7 +27,7 @@ $wingetClientInstaller = Join-Path $repoRoot 'packaging\winget\Install-Validatio
 $wingetSmoke = Join-Path $repoRoot 'tests\smoke\winget-manifest.ps1'
 $userDocs = Join-Path $repoRoot 'scripts\Test-UserDocs.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -730,6 +731,32 @@ foreach ($requiredCabCiToken in @(
         throw "CI does not publish the CAB interoperability gate or evidence: $requiredCabCiToken"
     }
 }
+$zipMethodCorpusSource = Get-Content -Raw -LiteralPath $zipMethodCorpus
+foreach ($requiredZipMethodToken in @(
+    "name = 'deflate64'",
+    "name = 'bzip2'",
+    "name = 'lzma'",
+    "name = 'xz'",
+    "name = 'ppmd'",
+    "encryption = 'AES256'",
+    "encryption = 'ZipCrypto'",
+    'Get-SevenZipMethods',
+    'Assert-FixtureMatches',
+    'target\zip-method-corpus.json'
+)) {
+    if ($zipMethodCorpusSource -notmatch [Regex]::Escape($requiredZipMethodToken)) {
+        throw "The ZIP method corpus gate omits required token: $requiredZipMethodToken"
+    }
+}
+foreach ($requiredZipMethodCiToken in @(
+    'zip-method-corpus.ps1 -SkipBuild',
+    'Upload ZIP method interoperability evidence',
+    'target/zip-method-corpus.json'
+)) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredZipMethodCiToken)) {
+        throw "CI does not publish the ZIP method corpus gate or evidence: $requiredZipMethodCiToken"
+    }
+}
 foreach ($requiredWackToken in @(
     'WACK readiness policy',
     './tests/smoke/wack-readiness.ps1'
@@ -778,6 +805,7 @@ foreach ($requiredLivePrivacyToken in @(
     rar_corpus_wired = $true
     cab_association_wired = $true
     cab_interoperability_wired = $true
+    zip_method_corpus_wired = $true
     wack_readiness_wired = $true
     version_consistency_wired = $true
     release_notes_wired = $true
