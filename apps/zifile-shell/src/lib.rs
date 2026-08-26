@@ -47,7 +47,7 @@ impl IExplorerCommand_Impl for ZiFileCreateCommand_Impl {
     }
 
     fn GetIcon(&self, _items: Ref<IShellItemArray>) -> Result<PWSTR> {
-        Err(E_NOTIMPL.into())
+        shell_icon_resource()
     }
 
     fn GetToolTip(&self, _items: Ref<IShellItemArray>) -> Result<PWSTR> {
@@ -109,7 +109,7 @@ impl IExplorerCommand_Impl for ZiFileExtractCommand_Impl {
     }
 
     fn GetIcon(&self, _items: Ref<IShellItemArray>) -> Result<PWSTR> {
-        Err(E_NOTIMPL.into())
+        shell_icon_resource()
     }
 
     fn GetToolTip(&self, _items: Ref<IShellItemArray>) -> Result<PWSTR> {
@@ -303,6 +303,15 @@ fn sibling_desktop_path() -> Result<PathBuf> {
     Ok(path)
 }
 
+fn shell_icon_resource() -> Result<PWSTR> {
+    let desktop = sibling_desktop_path()?;
+    allocate_shell_string(&icon_resource_string(&desktop))
+}
+
+fn icon_resource_string(desktop: &std::path::Path) -> String {
+    format!("{},0", desktop.display())
+}
+
 fn user_locale_is_chinese() -> bool {
     let mut locale = [0_u16; 85];
     let length = unsafe { GetUserDefaultLocaleName(&mut locale) };
@@ -411,6 +420,16 @@ mod tests {
         assert_eq!(
             unsafe { command.GetCanonicalName() }.unwrap(),
             EXTRACT_COMMAND_CLSID
+        );
+    }
+
+    #[test]
+    fn command_icon_uses_the_sibling_desktop_resource() {
+        assert_eq!(
+            icon_resource_string(std::path::Path::new(
+                r"C:\Program Files\ZiFile\zifile-desktop.exe"
+            )),
+            r"C:\Program Files\ZiFile\zifile-desktop.exe,0"
         );
     }
 }

@@ -557,7 +557,13 @@ foreach ($requiredExtractAuditToken in @('$extractShellClsid', 'extract_item_typ
     }
 }
 $shellSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'apps\zifile-shell\src\lib.rs')
-foreach ($requiredExtractShellToken in @('EXTRACT_COMMAND_CLSID', '--extract-here', 'ECS_HIDDEN')) {
+foreach ($requiredExtractShellToken in @(
+    'EXTRACT_COMMAND_CLSID',
+    '--extract-here',
+    'ECS_HIDDEN',
+    'shell_icon_resource',
+    'zifile-desktop.exe,0'
+)) {
     if ($shellSource -notmatch [Regex]::Escape($requiredExtractShellToken)) {
         throw "The Rust shell extension omits extract command behavior: $requiredExtractShellToken"
     }

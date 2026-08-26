@@ -39,7 +39,40 @@ pub fn extraction_destination(archive: &Path) -> PathBuf {
     archive
         .parent()
         .unwrap_or_else(|| Path::new("."))
-        .join(archive.file_stem().unwrap_or_default())
+        .join(extraction_folder_name(archive))
+}
+
+fn extraction_folder_name(archive: &Path) -> OsString {
+    const TAR_SUFFIXES: &[&str] = &[
+        ".tar.gz",
+        ".tar.zst",
+        ".tar.xz",
+        ".tar.lzma",
+        ".tar.bz",
+        ".tar.bz2",
+        ".tar.lz4",
+        ".tar.br",
+        ".tgz",
+        ".tzst",
+        ".txz",
+        ".tbz",
+        ".tbz2",
+    ];
+
+    if let Some(file_name) = archive.file_name().and_then(|value| value.to_str()) {
+        let lowercase = file_name.to_ascii_lowercase();
+        if let Some(suffix) = TAR_SUFFIXES
+            .iter()
+            .find(|suffix| lowercase.ends_with(**suffix))
+        {
+            let stem_length = file_name.len() - suffix.len();
+            if stem_length > 0 {
+                return OsString::from(&file_name[..stem_length]);
+            }
+        }
+    }
+
+    archive.file_stem().unwrap_or_default().to_os_string()
 }
 
 #[cfg(test)]
@@ -97,7 +130,36 @@ mod tests {
         );
         assert_eq!(
             extraction_destination(Path::new(r"C:\资料\backup.tar.gz")),
-            PathBuf::from(r"C:\资料\backup.tar")
+            PathBuf::from(r"C:\资料\backup")
+        );
+    }
+
+    #[test]
+    fn extract_here_destination_collapses_tar_stream_aliases() {
+        for archive_name in [
+            "backup.tar.gz",
+            "backup.TAR.ZST",
+            "backup.tar.xz",
+            "backup.tar.lzma",
+            "backup.tar.bz",
+            "backup.tar.bz2",
+            "backup.tar.lz4",
+            "backup.tar.br",
+            "backup.tgz",
+            "backup.tzst",
+            "backup.txz",
+            "backup.tbz",
+            "backup.tbz2",
+        ] {
+            assert_eq!(
+                extraction_destination(Path::new(archive_name)),
+                PathBuf::from("backup"),
+                "unexpected destination for {archive_name}"
+            );
+        }
+        assert_eq!(
+            extraction_destination(Path::new("backup.tar.zip")),
+            PathBuf::from("backup.tar")
         );
     }
 }
