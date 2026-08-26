@@ -51,6 +51,8 @@ pnpm --dir docs build
 
 ## Documentation
 
+- [Getting started](docs/src/content/docs/en/guides/getting-started.md)
+- [Troubleshooting](docs/src/content/docs/en/guides/troubleshooting.md)
 - [Product vision](docs/src/content/docs/product/vision.md)
 - [Roadmap](ROADMAP.md)
 - [Architecture](docs/src/content/docs/architecture/overview.md)

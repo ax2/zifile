@@ -8,6 +8,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Bilingual end-user getting-started and troubleshooting guides covering safe
+  extraction, format input rules, queue/cancellation behavior, CLI passwords,
+  Worker failures, development-package trust, and responsible issue reporting.
 - Rust workspace with `zifile-core`, `zifile-cli`, and `zifile-desktop`.
 - Shared archive format capability registry and extension detection.
 - Conservative default extraction limits.
