@@ -122,6 +122,10 @@ try {
         -Arm64InstallerSha256 $wingetArm64Sha `
         -OutputRoot $wingetFixture | Out-Null
     $wingetManifestDirectory = Join-Path $wingetFixture 'manifests\z\ZiCode\ZiFile\9.8.7'
+    foreach ($manifestPath in Get-ChildItem -LiteralPath $wingetManifestDirectory -File -Filter '*.yaml') {
+        $crlfSource = (Get-Content -Raw -LiteralPath $manifestPath.FullName).Replace("`r`n", "`n").Replace("`n", "`r`n")
+        Set-Content -LiteralPath $manifestPath.FullName -Value $crlfSource -Encoding utf8NoBOM -NoNewline
+    }
     $wingetResult = & $wingetVerifier `
         -ManifestDirectory $wingetManifestDirectory `
         -Version $wingetVersion `
