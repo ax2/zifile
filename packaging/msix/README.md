@@ -57,6 +57,9 @@ DLL, and MSIX with the cloud-held key. `Test-SignedReleaseArtifacts.ps1` require
 valid signatures, one exact Publisher, and timestamps before regenerating audits
 and checksums; publishing downloads only `signed-windows-*`. Manual workflow runs
 may select `none` for unsigned validation or `digicert-stm` for a protected rehearsal.
+Provisioning, approval, credential rotation, emergency stop, revocation, and evidence retention are
+defined in `docs/src/content/docs/development/signing-operations.md` and machine-checked by
+`scripts/Test-SigningOperationsDocs.ps1`.
 
 The MSIX also registers `zifile.exe` as an App Execution Alias. Users can disable aliases in
 Windows Settings, so automation must not assume that the alias is always enabled. The packaged

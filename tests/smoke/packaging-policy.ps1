@@ -16,8 +16,9 @@ $securityDocs = Join-Path $repoRoot 'scripts\Test-SecurityDocs.ps1'
 $releaseReadiness = Join-Path $repoRoot 'scripts\Test-ReleaseReadiness.ps1'
 $cloudSigningInputs = Join-Path $repoRoot 'packaging\msix\Test-CloudSigningInputs.ps1'
 $signedReleaseArtifacts = Join-Path $repoRoot 'packaging\msix\Test-SignedReleaseArtifacts.ps1'
+$signingOperationsDocs = Join-Path $repoRoot 'scripts\Test-SigningOperationsDocs.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -104,6 +105,13 @@ if (-not $contributorResult.synchronized -or $contributorResult.locale_guides -n
 $securityResult = & $securityDocs | ConvertFrom-Json
 if (-not $securityResult.synchronized -or $securityResult.locale_pages -ne 2) {
     throw 'Security documentation is not synchronized with repository policy.'
+}
+$signingOperationsResult = & $signingOperationsDocs | ConvertFrom-Json
+if (-not $signingOperationsResult.synchronized -or
+    $signingOperationsResult.locale_pages -ne 2 -or
+    -not $signingOperationsResult.least_privilege_workflow -or
+    -not $signingOperationsResult.emergency_stop_runbook) {
+    throw 'Signing operations documentation is not synchronized with the protected workflow.'
 }
 $readinessResult = & $releaseReadiness | ConvertFrom-Json
 if ($readinessResult.gates -ne 11 -or
@@ -576,4 +584,8 @@ foreach ($requiredWackToken in @(
     unsigned_release_artifacts_rejected = $true
     production_signing_workflow_wired = $true
     pfx_release_inputs_retired = $true
+    signing_operations_docs_wired = $true
+    least_privilege_release_permissions = $true
+    signing_timeout_wired = $true
+    signing_concurrency_wired = $true
 } | ConvertTo-Json
