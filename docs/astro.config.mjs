@@ -43,6 +43,11 @@ export default defineConfig({
           items: [{ autogenerate: { directory: 'product' } }],
         },
         {
+          label: '使用指南',
+          translations: { en: 'User guides' },
+          items: [{ autogenerate: { directory: 'guides' } }],
+        },
+        {
           label: '架构',
           translations: { en: 'Architecture' },
           items: [{ autogenerate: { directory: 'architecture' } }],

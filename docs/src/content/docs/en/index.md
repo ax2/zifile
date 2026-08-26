@@ -8,6 +8,9 @@ hero:
     - text: View the roadmap
       link: product/roadmap/
       icon: right-arrow
+    - text: Getting started
+      link: guides/getting-started/
+      icon: right-arrow
     - text: GitHub
       link: https://github.com/ax2/zifile
       icon: external
@@ -17,6 +20,8 @@ hero:
 ZiFile is an MIT-licensed project by ZiCode. Its first release focuses on safely browsing, creating, and extracting common archive formats, with room to grow into a trusted set of file operations.
 
 The project is currently in **Stage 1 — Alpha development**. ZIP, 7z, TAR compositions, and the main single-stream formats support real creation, browsing, integrity testing, and safe extraction. The desktop UI and CLI share the same Rust core. Cancellation, the isolated Worker, Windows integration, signed installation, and store certification continue to be hardened.
+
+Start with [Getting started](/zifile/en/guides/getting-started/). See [Troubleshooting](/zifile/en/guides/troubleshooting/) for format, safety-policy, Worker, or development-package failures.
 
 ## Design principles
 

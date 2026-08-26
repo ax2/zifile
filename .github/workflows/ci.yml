@@ -25,6 +25,7 @@ jobs:
           ./scripts/Test-ReleaseNotes.ps1
           ./scripts/Test-ContributorDocs.ps1
           ./scripts/Test-SecurityDocs.ps1
+          ./scripts/Test-UserDocs.ps1
           ./scripts/Test-ReleaseReadiness.ps1
       - uses: dtolnay/rust-toolchain@1.93.0
         with:

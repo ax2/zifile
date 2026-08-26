@@ -21,8 +21,9 @@ $partnerCenterIdentity = Join-Path $repoRoot 'packaging\store\Test-PartnerCenter
 $wingetGenerator = Join-Path $repoRoot 'packaging\winget\Generate-Manifests.ps1'
 $wingetVerifier = Join-Path $repoRoot 'packaging\winget\Test-Manifests.ps1'
 $wingetSmoke = Join-Path $repoRoot 'tests\smoke\winget-manifest.ps1'
+$userDocs = Join-Path $repoRoot 'scripts\Test-UserDocs.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $wingetGenerator, $wingetVerifier, $wingetSmoke)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $wingetGenerator, $wingetVerifier, $wingetSmoke, $userDocs)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -170,6 +171,11 @@ if (-not $contributorResult.synchronized -or $contributorResult.locale_guides -n
 $securityResult = & $securityDocs | ConvertFrom-Json
 if (-not $securityResult.synchronized -or $securityResult.locale_pages -ne 2) {
     throw 'Security documentation is not synchronized with repository policy.'
+}
+$userDocsResult = & $userDocs | ConvertFrom-Json
+if (-not $userDocsResult.synchronized -or $userDocsResult.locale_pairs -ne 2 -or
+    -not $userDocsResult.navigation_wired -or -not $userDocsResult.safe_reporting_documented) {
+    throw 'User documentation is not synchronized with product and safety boundaries.'
 }
 $signingOperationsResult = & $signingOperationsDocs | ConvertFrom-Json
 if (-not $signingOperationsResult.synchronized -or
@@ -599,6 +605,9 @@ if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ContributorDocs.ps1')) {
 if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-SecurityDocs.ps1')) {
     throw 'CI does not enforce security documentation consistency.'
 }
+if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-UserDocs.ps1')) {
+    throw 'CI does not enforce user documentation consistency.'
+}
 if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-ReleaseReadiness.ps1')) {
     throw 'CI does not validate the 1.0 release readiness manifest.'
 }
@@ -715,4 +724,5 @@ foreach ($requiredWackToken in @(
     winget_invalid_release_url_rejected = $true
     winget_release_gate_wired = $true
     official_winget_ci_validation_wired = $true
+    user_docs_wired = $true
 } | ConvertTo-Json
