@@ -73,7 +73,7 @@ foreach ($requiredLine in @(
 
 $installerMatches = [Regex]::Matches(
     $installerSource,
-    '(?ms)^- Architecture: (?<architecture>x64|arm64)\r?\n\s+InstallerUrl: (?<url>\S+)\r?\n\s+InstallerSha256: (?<sha>[A-F0-9]{64})$'
+    '(?ms)^- Architecture: (?<architecture>x64|arm64)\r?\n\s+InstallerUrl: (?<url>\S+)\r?\n\s+InstallerSha256: (?<sha>[A-F0-9]{64})\r?$'
 )
 if ($installerMatches.Count -ne 2 -or
     @($installerMatches | ForEach-Object { $_.Groups['architecture'].Value } | Sort-Object -Unique).Count -ne 2) {
