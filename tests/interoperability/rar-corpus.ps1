@@ -103,7 +103,8 @@ $rejectedCases = @(
     [ordered]@{ name = 'rar5-redirection-hardlink'; path = 'rar50/wild/rarfile_hlink.rar'; sha256 = 'C7C2DB6FB021E89198DA80D4B903D4A46B692C2F31FEC64CB53C7E37AF7A51F4' }
 )
 $malformedCases = @(
-    [ordered]@{ name = 'rar5-default-truncated-half'; source_case = 'rar5-default'; expected_rejection = 'truncated-archive' }
+    [ordered]@{ name = 'rar5-default-truncated-half'; source_case = 'rar5-default'; transform = 'truncate-half'; expected_rejection = 'truncated-archive'; listing_succeeds = $false },
+    [ordered]@{ name = 'rar5-default-corrupt-middle'; source_case = 'rar5-default'; transform = 'flip-middle-byte'; expected_rejection = 'corrupt-payload'; listing_succeeds = $true }
 )
 
 Push-Location $repoRoot
@@ -177,10 +178,26 @@ try {
     foreach ($case in $malformedCases) {
         $sourceArchive = Join-Path $testRoot ($case.source_case + '.rar')
         $sourceBytes = [IO.File]::ReadAllBytes($sourceArchive)
-        $truncatedLength = [Math]::Max(8, [int][Math]::Floor($sourceBytes.Length / 2))
         $archive = Join-Path $testRoot ($case.name + '.rar')
-        $truncatedBytes = [byte[]]$sourceBytes[0..($truncatedLength - 1)]
-        [IO.File]::WriteAllBytes($archive, $truncatedBytes)
+        switch ($case.transform) {
+            'truncate-half' {
+                $truncatedLength = [Math]::Max(8, [int][Math]::Floor($sourceBytes.Length / 2))
+                $truncatedBytes = [byte[]]$sourceBytes[0..($truncatedLength - 1)]
+                [IO.File]::WriteAllBytes($archive, $truncatedBytes)
+            }
+            'flip-middle-byte' {
+                $corruptedBytes = [byte[]]$sourceBytes.Clone()
+                $middle = [int][Math]::Floor($corruptedBytes.Length / 2)
+                $corruptedBytes[$middle] = $corruptedBytes[$middle] -bxor 0xFF
+                [IO.File]::WriteAllBytes($archive, $corruptedBytes)
+            }
+            default { throw "Unknown malformed RAR transformation: $($case.transform)" }
+        }
+
+        if ($case.listing_succeeds) {
+            & $cli list $archive | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "ZiFile could not list the metadata of malformed RAR case $($case.name)." }
+        }
 
         & $cli test $archive 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) { throw "ZiFile accepted malformed RAR case $($case.name) during integrity testing." }
@@ -196,6 +213,7 @@ try {
         $results += [ordered]@{
             name = $case.name
             derived_from = $case.source_case
+            transform = $case.transform
             expected_rejection = $case.expected_rejection
             archive_bytes = (Get-Item -LiteralPath $archive).Length
             archive_sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash

@@ -773,6 +773,9 @@ foreach ($requiredRarToken in @(
     'rar50/wild/symlink.rar',
     'rar5-default-truncated-half',
     'truncated-archive',
+    'rar5-default-corrupt-middle',
+    'flip-middle-byte',
+    'corrupt-payload',
     'expected_rejection',
     '$global:LASTEXITCODE = 0',
     'Assert-TreesMatch'
