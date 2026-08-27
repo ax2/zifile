@@ -13,6 +13,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Bilingual owner-facing Store and WinGet onboarding guidance now records the
+  Company-account boundary, current fee and name-reservation window, business
+  verification inputs, and the first-contribution GitHub/CLA requirements.
 - Formal Partner Center packaging now injects and audits the exact Publisher
   Display Name in addition to Identity and Publisher; the trusted lifecycle
   workflow downloads signed rather than pre-signing x64 artifacts.

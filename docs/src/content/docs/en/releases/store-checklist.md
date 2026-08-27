@@ -32,7 +32,7 @@ The trusted lifecycle workflow downloads only `signed-windows-x64` from two sign
 
 These items are also tracked in machine-readable [`release/readiness.json`](https://github.com/ax2/zifile/blob/main/release/readiness.json) and [1.0 release readiness](/zifile/en/releases/release-readiness/). A stable tag requires evidence and `passed` status for every gate.
 
-1. Register a Partner Center developer account and reserve `ZiFile`.
+1. Register a Partner Center **Company** Windows developer account for the ZiCode legal entity and reserve `ZiFile`. Microsoft's May 2026 onboarding guidance says both Individual and Company accounts currently have no registration fee, and an Individual account cannot be converted directly to Company. Prefer D-U-N-S for company verification or provide the official business documents requested by the portal. A name reservation currently lasts three months, so record its expiry and reserve within the RC submission window.
 2. Store the assigned Package Identity Name, Publisher, and developer-account Publisher Display Name verbatim as GitHub Repository Variables.
 3. Complete DigiCert organization validation and certificate provisioning; configure host, keypair alias, API key, and client-authentication material in the protected Environment and run a dual-architecture manual signing rehearsal. Store distribution is signed by Microsoft.
 4. Rebuild both architectures with official identity and test install, launch, association, upgrade, repair, and uninstall.
@@ -43,3 +43,5 @@ These items are also tracked in machine-readable [`release/readiness.json`](http
 Until these external gates pass, no Alpha artifact may be called Store-ready or signed.
 
 Before WACK, run `Test-WackReadiness.ps1 -ExpectedIdentityName $env:ZIFILE_MSIX_IDENTITY -ExpectedPublisher $env:ZIFILE_MSIX_PUBLISHER -ExpectedPublisherDisplayName $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME -RequireReady` against the target MSIX and adjacent `.audit.json`. Passing readiness only proves the tool, session, architecture, exact Partner Center tuple, hash, minimum OS, and signature preconditions; the generated WACK report remains authoritative.
+
+The WinGet community repository does not require Partner Center access, but a first contribution needs a GitHub account and may require completing the Microsoft CLA once when prompted by the CLA bot. Each PR contains one manifest set for one package version, and installer URLs must be stable, version-specific, and controlled by the publisher. See [Partner Center developer onboarding](https://learn.microsoft.com/windows/apps/publish/partner-center/open-a-developer-account) and the [WinGet first-time contributor checklist](https://github.com/microsoft/winget-pkgs/blob/master/doc/FirstContribution.md).

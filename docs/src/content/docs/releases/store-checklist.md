@@ -33,7 +33,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 
 这些项目同时记录在机器可读的 [`release/readiness.json`](https://github.com/ax2/zifile/blob/main/release/readiness.json) 和 [1.0 发布就绪状态](/zifile/releases/release-readiness/) 中；稳定标签要求全部有证据并标记为 `passed`。
 
-1. 在 Partner Center 注册 Windows 开发者账号并预留 `ZiFile` 名称。
+1. 以 ZiCode 合法主体注册 Partner Center **Company** Windows 开发者账号并预留 `ZiFile` 名称。微软 2026-05 的开户说明显示 Individual 与 Company 当前均免注册费；Individual 不能直接转换为 Company。公司验证优先准备 D-U-N-S，或按页面提交官方企业文件。名称预留当前有效三个月，因此应记录到期日并在 RC 提交窗口内操作。
 2. 将 Partner Center 分配的 Package Identity Name、Publisher 与开发者账户 Publisher Display Name 原样写入 GitHub Repository Variables。
 3. 完成 DigiCert 组织验证与代码签名证书配置，在受保护 Environment 配置 Host、Keypair Alias、API Key 和客户端认证材料，执行双架构手动签名演练；Store 分发包由 Microsoft Store 签名。
 4. 用正式 Identity 重建 x64 与 ARM64 包，分别验证安装、启动、文件关联、升级和卸载。
@@ -45,4 +45,6 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 
 运行 WACK 前先对目标 MSIX 与同目录 `.audit.json` 执行 `Test-WackReadiness.ps1 -ExpectedIdentityName $env:ZIFILE_MSIX_IDENTITY -ExpectedPublisher $env:ZIFILE_MSIX_PUBLISHER -ExpectedPublisherDisplayName $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME -RequireReady`。预检通过只表示工具、会话、架构、Partner Center 三字段、哈希、最低系统版本和签名满足启动条件；最终仍以 WACK 生成的正式报告为准。
 
-微软参考资料：[WinGet 1.12 多文件清单规范](https://github.com/microsoft/winget-pkgs/tree/master/doc/manifest/schema/1.12.0)、[Microsoft Store 提交流程](https://learn.microsoft.com/windows/apps/publish/faq/submit-your-app)、[MSIX 包要求](https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/app-package-requirements)。
+WinGet 社区清单不要求 Partner Center 权限，但首次贡献需要 GitHub 账号并可能由 Microsoft CLA 机器人要求完成一次 CLA。每个 PR 只能包含一个版本的一套 manifest，安装器 URL 必须稳定、版本固定且来自发行方正式来源。
+
+微软参考资料：[Partner Center 开发者开户](https://learn.microsoft.com/windows/apps/publish/partner-center/open-a-developer-account)、[WinGet 首次贡献清单](https://github.com/microsoft/winget-pkgs/blob/master/doc/FirstContribution.md)、[WinGet 1.12 多文件清单规范](https://github.com/microsoft/winget-pkgs/tree/master/doc/manifest/schema/1.12.0)、[Microsoft Store 提交流程](https://learn.microsoft.com/windows/apps/publish/faq/submit-your-app)、[MSIX 包要求](https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/app-package-requirements)。
