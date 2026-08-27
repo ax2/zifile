@@ -102,6 +102,9 @@ $rejectedCases = @(
     [ordered]@{ name = 'rar5-hardlink'; path = 'rar50/wild/hardlink.rar'; sha256 = '2A0494AFAD63DCF7A5522AFD593BDE0CB42F53744888397FEBF112C00853F3D0' },
     [ordered]@{ name = 'rar5-redirection-hardlink'; path = 'rar50/wild/rarfile_hlink.rar'; sha256 = 'C7C2DB6FB021E89198DA80D4B903D4A46B692C2F31FEC64CB53C7E37AF7A51F4' }
 )
+$malformedCases = @(
+    [ordered]@{ name = 'rar5-default-truncated-half'; source_case = 'rar5-default'; expected_rejection = 'truncated-archive' }
+)
 
 Push-Location $repoRoot
 try {
@@ -168,6 +171,34 @@ try {
             files = $count
             archive_bytes = (Get-Item -LiteralPath $archive).Length
             archive_sha256 = $actualArchiveHash
+        }
+    }
+
+    foreach ($case in $malformedCases) {
+        $sourceArchive = Join-Path $testRoot ($case.source_case + '.rar')
+        $sourceBytes = [IO.File]::ReadAllBytes($sourceArchive)
+        $truncatedLength = [Math]::Max(8, [int][Math]::Floor($sourceBytes.Length / 2))
+        $archive = Join-Path $testRoot ($case.name + '.rar')
+        $truncatedBytes = [byte[]]$sourceBytes[0..($truncatedLength - 1)]
+        [IO.File]::WriteAllBytes($archive, $truncatedBytes)
+
+        & $cli test $archive 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { throw "ZiFile accepted malformed RAR case $($case.name) during integrity testing." }
+        $global:LASTEXITCODE = 0
+
+        $rejectedOutput = Join-Path $testRoot ($case.name + '-rejected')
+        & $cli extract $archive $rejectedOutput 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { throw "ZiFile extracted malformed RAR case $($case.name)." }
+        $global:LASTEXITCODE = 0
+        if ((Test-Path -LiteralPath $rejectedOutput) -and @(Get-ChildItem -LiteralPath $rejectedOutput -Recurse -File).Count -ne 0) {
+            throw "ZiFile wrote output for malformed RAR case $($case.name)."
+        }
+        $results += [ordered]@{
+            name = $case.name
+            derived_from = $case.source_case
+            expected_rejection = $case.expected_rejection
+            archive_bytes = (Get-Item -LiteralPath $archive).Length
+            archive_sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
         }
     }
 

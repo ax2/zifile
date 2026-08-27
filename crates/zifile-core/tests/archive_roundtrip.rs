@@ -747,6 +747,22 @@ fn rar_limits_and_cancellation_leave_no_output_file() {
 }
 
 #[test]
+fn truncated_rar_fails_integrity_and_extraction_without_committing_output() {
+    let temp = tempfile::tempdir().unwrap();
+    let archive = temp.path().join("truncated.rar");
+    rar_fixture(&archive, None);
+    let mut bytes = fs::read(&archive).unwrap();
+    bytes.truncate(bytes.len() / 2);
+    fs::write(&archive, bytes).unwrap();
+
+    assert!(test_archive(&archive, None).is_err());
+    let output = temp.path().join("truncated-output");
+    assert!(extract_archive(&archive, &output, &ExtractOptions::default()).is_err());
+    assert!(!output.join("hello.txt").exists());
+    assert!(!output.join("nested/中文.txt").exists());
+}
+
+#[test]
 fn traversal_zip_is_rejected_before_extraction() {
     let temp = tempfile::tempdir().unwrap();
     let archive_path = temp.path().join("evil.zip");

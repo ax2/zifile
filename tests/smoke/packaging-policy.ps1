@@ -771,6 +771,8 @@ foreach ($requiredRarToken in @(
     'E70E00C521EE53176D194CFC66D2C284E340D50C07667776071B220ED956570E',
     'winrar721_header_encrypted_quickopen.rar',
     'rar50/wild/symlink.rar',
+    'rar5-default-truncated-half',
+    'truncated-archive',
     'expected_rejection',
     '$global:LASTEXITCODE = 0',
     'Assert-TreesMatch'
