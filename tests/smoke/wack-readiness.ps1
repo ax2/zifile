@@ -88,6 +88,22 @@ try {
         throw 'WACK readiness accepted a mismatched package/audit hash.'
     }
 
+    $null = $audit.Remove('publisher_display_name')
+    $audit | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $auditPath -Encoding utf8
+    $incompleteEvidencePath = Join-Path $testRoot 'incomplete-audit-readiness.json'
+    $incomplete = & $readiness `
+        -PackagePath $package `
+        -AuditPath $auditPath `
+        -ExpectedIdentityName $formalIdentity `
+        -ExpectedPublisher $formalPublisher `
+        -ExpectedPublisherDisplayName $formalPublisherDisplayName `
+        -AppCertPath $missingAppCert `
+        -EvidencePath $incompleteEvidencePath | ConvertFrom-Json
+    if (@($incomplete.issues.code) -cnotcontains 'audit_schema_invalid' -or
+        -not (Test-Path -LiteralPath $incompleteEvidencePath -PathType Leaf)) {
+        throw 'WACK readiness did not persist structured evidence for an incomplete audit.'
+    }
+
     [pscustomobject]@{
         schema_version = 1
         unsigned_package_rejected = $true
@@ -97,6 +113,7 @@ try {
         missing_appcert_reported = $true
         failure_evidence_persisted = $true
         audit_hash_mismatch_rejected = $true
+        incomplete_audit_evidence_persisted = $true
     } | ConvertTo-Json
 }
 finally {

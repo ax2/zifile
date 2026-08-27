@@ -31,6 +31,16 @@ function Add-ReadinessIssue {
     $issues.Add([pscustomobject]@{ code = $Code; message = $Message })
 }
 
+function Get-AuditValue {
+    param(
+        [Parameter(Mandatory)][object]$InputObject,
+        [Parameter(Mandatory)][string]$Name
+    )
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $null }
+    $property.Value
+}
+
 $runningOnWindows = [Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
     [Runtime.InteropServices.OSPlatform]::Windows
 )
@@ -79,41 +89,64 @@ if ($packageExists) {
 }
 
 if ($null -ne $audit) {
-    if ($audit.schema_version -ne 2) { Add-ReadinessIssue 'audit_schema_invalid' 'WACK requires a schema v2 MSIX audit.' }
-    if ($packageExists -and $audit.package -cne [IO.Path]::GetFileName($package)) {
+    $requiredAuditFields = @(
+        'schema_version', 'package', 'sha256', 'signature_required', 'signature_status',
+        'identity', 'publisher', 'publisher_display_name', 'minimum_windows_version',
+        'forbidden_file_count', 'architecture'
+    )
+    $missingAuditFields = @($requiredAuditFields | Where-Object {
+        $null -eq $audit.PSObject.Properties[$_]
+    })
+    if ($missingAuditFields.Count -gt 0) {
+        Add-ReadinessIssue 'audit_schema_invalid' "MSIX audit is missing required fields: $($missingAuditFields -join ', ')."
+    }
+    $auditSchemaVersion = Get-AuditValue -InputObject $audit -Name 'schema_version'
+    $auditPackage = Get-AuditValue -InputObject $audit -Name 'package'
+    $auditSha256 = Get-AuditValue -InputObject $audit -Name 'sha256'
+    $auditSignatureRequired = Get-AuditValue -InputObject $audit -Name 'signature_required'
+    $auditSignatureStatus = Get-AuditValue -InputObject $audit -Name 'signature_status'
+    $auditIdentity = Get-AuditValue -InputObject $audit -Name 'identity'
+    $auditPublisher = Get-AuditValue -InputObject $audit -Name 'publisher'
+    $auditPublisherDisplayName = Get-AuditValue -InputObject $audit -Name 'publisher_display_name'
+    $auditMinimumWindowsVersion = Get-AuditValue -InputObject $audit -Name 'minimum_windows_version'
+    $auditForbiddenFileCount = Get-AuditValue -InputObject $audit -Name 'forbidden_file_count'
+    $auditArchitecture = Get-AuditValue -InputObject $audit -Name 'architecture'
+
+    if ($auditSchemaVersion -ne 2) { Add-ReadinessIssue 'audit_schema_invalid' 'WACK requires a schema v2 MSIX audit.' }
+    if ($packageExists -and $auditPackage -cne [IO.Path]::GetFileName($package)) {
         Add-ReadinessIssue 'audit_package_mismatch' 'MSIX audit package name does not match the selected package.'
     }
-    if ($packageExists -and $audit.sha256 -cne $actualPackageHash) {
+    if ($packageExists -and $auditSha256 -cne $actualPackageHash) {
         Add-ReadinessIssue 'audit_hash_mismatch' 'MSIX audit SHA-256 does not match the selected package.'
     }
-    if (-not $audit.signature_required -or $audit.signature_status -cne 'Valid') {
+    if ($auditSignatureRequired -ne $true -or $auditSignatureStatus -cne 'Valid') {
         Add-ReadinessIssue 'audit_signature_invalid' 'MSIX audit does not prove a required Valid signature.'
     }
-    if ([string]$audit.identity -cne $ExpectedIdentityName) {
+    if ([string]$auditIdentity -cne $ExpectedIdentityName) {
         Add-ReadinessIssue 'identity_mismatch' 'MSIX audit Identity does not match the formal Partner Center Identity.'
     }
-    if ([string]$audit.publisher -cne $ExpectedPublisher) {
+    if ([string]$auditPublisher -cne $ExpectedPublisher) {
         Add-ReadinessIssue 'publisher_mismatch' 'MSIX audit Publisher does not match the formal Partner Center Publisher.'
     }
-    if ([string]$audit.publisher_display_name -cne $ExpectedPublisherDisplayName) {
+    if ([string]$auditPublisherDisplayName -cne $ExpectedPublisherDisplayName) {
         Add-ReadinessIssue 'publisher_display_name_mismatch' 'MSIX audit Publisher Display Name does not match the formal Partner Center value.'
     }
-    if ([string]$audit.publisher -match 'OID\.2\.25\.311729368913984317654407730594956997722=1') {
+    if ([string]$auditPublisher -match 'OID\.2\.25\.311729368913984317654407730594956997722=1') {
         Add-ReadinessIssue 'unsigned_publisher' 'Unsigned development publisher namespace cannot enter WACK release certification.'
     }
-    if ($audit.minimum_windows_version -cne '10.0.19041.0') {
+    if ($auditMinimumWindowsVersion -cne '10.0.19041.0') {
         Add-ReadinessIssue 'minimum_windows_mismatch' 'Formal ZiFile packages must retain Windows 10 build 19041 minimum support.'
     }
-    if ($audit.forbidden_file_count -ne 0) {
+    if ($auditForbiddenFileCount -ne 0) {
         Add-ReadinessIssue 'forbidden_files' 'MSIX audit reports forbidden files.'
     }
-    if ($audit.architecture -notin @('x64', 'arm64')) {
-        Add-ReadinessIssue 'architecture_invalid' "Unsupported MSIX audit architecture: $($audit.architecture)"
+    if ($auditArchitecture -notin @('x64', 'arm64')) {
+        Add-ReadinessIssue 'architecture_invalid' "Unsupported MSIX audit architecture: $auditArchitecture"
     }
     elseif ($runningOnWindows) {
         $hostArchitecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
-        if ($hostArchitecture -cne [string]$audit.architecture) {
-            Add-ReadinessIssue 'architecture_host_mismatch' "Package architecture $($audit.architecture) cannot be runtime-certified on $hostArchitecture Windows."
+        if ($hostArchitecture -cne [string]$auditArchitecture) {
+            Add-ReadinessIssue 'architecture_host_mismatch' "Package architecture $auditArchitecture cannot be runtime-certified on $hostArchitecture Windows."
         }
     }
 }
