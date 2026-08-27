@@ -37,6 +37,7 @@ impl Locale {
             Text::Home => ("Home", "首页"),
             Text::Archive => ("Archive", "压缩文件"),
             Text::Create => ("Create", "创建"),
+            Text::About => ("About", "关于"),
             Text::Light => ("Light", "浅色"),
             Text::Dark => ("Dark", "深色"),
             Text::SwitchLanguage => ("中文", "English"),
@@ -64,6 +65,15 @@ impl Locale {
                 "Archive work stays on this device. ZiFile does not upload filenames, passwords or file contents.",
                 "所有操作都在本机完成。ZiFile 不上传文件名、密码或文件内容。",
             ),
+            Text::AboutHeading => ("About ZiFile", "关于 ZiFile"),
+            Text::AboutDescription => (
+                "A local-first, open-source archive manager built in Rust for Windows.",
+                "以 Rust 构建、面向 Windows 的本地优先开源压缩文件管理器。",
+            ),
+            Text::Version => ("Version", "版本"),
+            Text::License => ("License", "许可证"),
+            Text::SupportedFormatFamilies => ("Supported format families", "支持的格式系列"),
+            Text::ProjectWebsite => ("Project website", "项目网站"),
             Text::NoArchive => ("No archive open", "尚未打开压缩文件"),
             Text::NoArchiveDescription => (
                 "Open an archive to inspect its contents and extract files.",
@@ -174,6 +184,7 @@ pub enum Text {
     Home,
     Archive,
     Create,
+    About,
     Light,
     Dark,
     SwitchLanguage,
@@ -189,6 +200,12 @@ pub enum Text {
     StartCreating,
     Privacy,
     PrivacyDescription,
+    AboutHeading,
+    AboutDescription,
+    Version,
+    License,
+    SupportedFormatFamilies,
+    ProjectWebsite,
     NoArchive,
     NoArchiveDescription,
     EncryptedArchiveDescription,
@@ -247,6 +264,9 @@ mod tests {
     fn both_locales_cover_representative_navigation_and_security_text() {
         assert_eq!(Locale::En.text(Text::Home), "Home");
         assert_eq!(Locale::ZhCn.text(Text::Home), "首页");
+        assert_eq!(Locale::En.text(Text::About), "About");
+        assert_eq!(Locale::ZhCn.text(Text::AboutHeading), "关于 ZiFile");
+        assert_eq!(Locale::ZhCn.text(Text::License), "许可证");
         assert!(Locale::ZhCn.text(Text::PrivacyDescription).contains("本机"));
         assert_eq!(Locale::ZhCn.toggle(), Locale::En);
     }

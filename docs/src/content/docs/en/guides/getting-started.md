@@ -32,6 +32,8 @@ ZIP, 7z, and TAR compositions accept multiple files and folders. gzip, Zstandard
 
 Open, test, extract, or create requests can be submitted while another operation runs. ZiFile keeps at most 32 operations and executes them in order. **Clear queue** removes only waiting work; **Cancel** affects only the active operation. Language and light/dark theme are stored in `%LOCALAPPDATA%\ZiFile\settings.conf`; paths, recent history, and passwords are not stored.
 
+The **About** page identifies the running version, MIT license, format-family count, project address, and local-processing privacy boundary. Use this version when reporting a problem rather than relying only on the installer filename.
+
 ## Command line
 
 ```powershell

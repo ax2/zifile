@@ -93,6 +93,7 @@ enum Page {
     Home,
     Archive,
     Create,
+    About,
 }
 
 #[derive(Debug)]
@@ -871,6 +872,7 @@ fn view(state: &ZiFile) -> Element<'_, Message> {
             nav_button(state.locale.text(Text::Archive), Page::Archive, state.page),
             nav_button(state.locale.text(Text::Create), Page::Create, state.page),
             space().height(Fill),
+            nav_button(state.locale.text(Text::About), Page::About, state.page),
             row![
                 button(if state.dark {
                     state.locale.text(Text::Light)
@@ -898,6 +900,7 @@ fn view(state: &ZiFile) -> Element<'_, Message> {
         Page::Home => home_view(state),
         Page::Archive => archive_view(state),
         Page::Create => create_view(state),
+        Page::About => about_view(state),
     };
     let progress: Element<'_, Message> = state.progress.as_ref().map_or_else(
         || space().height(0).into(),
@@ -1009,6 +1012,47 @@ fn home_view(state: &ZiFile) -> Element<'_, Message> {
         .style(container::rounded_box),
     ]
     .spacing(24)
+    .width(Fill)
+    .into()
+}
+
+fn about_view(state: &ZiFile) -> Element<'_, Message> {
+    let locale = state.locale;
+    let detail = |label: &'static str, value: String| {
+        container(
+            column![text(label).size(13), text(value).size(18)]
+                .spacing(4)
+                .width(Fill),
+        )
+        .padding(18)
+        .width(Fill)
+        .style(container::rounded_box)
+    };
+    column![
+        text(locale.text(Text::AboutHeading)).size(32),
+        text(locale.text(Text::AboutDescription)).size(17),
+        row![
+            detail(
+                locale.text(Text::Version),
+                env!("CARGO_PKG_VERSION").to_owned()
+            ),
+            detail(locale.text(Text::License), "MIT".to_owned()),
+            detail(
+                locale.text(Text::SupportedFormatFamilies),
+                ArchiveFormat::ALL.len().to_string()
+            ),
+        ]
+        .spacing(14),
+        detail(
+            locale.text(Text::ProjectWebsite),
+            "https://github.com/ax2/zifile".to_owned()
+        ),
+        container(text(locale.text(Text::PrivacyDescription)))
+            .padding(18)
+            .width(Fill)
+            .style(container::rounded_box),
+    ]
+    .spacing(18)
     .width(Fill)
     .into()
 }
@@ -1545,6 +1589,16 @@ mod tests {
             create_source_issue_text(Locale::ZhCn, CreateSourceIssue::UnsupportedFormat),
             "此格式不支持创建。"
         );
+    }
+
+    #[test]
+    fn about_page_exposes_release_identity_in_the_default_ui() {
+        let source = include_str!("main.rs");
+        assert!(source.contains("Page::About => about_view(state)"));
+        assert!(source.contains("env!(\"CARGO_PKG_VERSION\")"));
+        assert!(source.contains("\"MIT\".to_owned()"));
+        assert!(source.contains("ArchiveFormat::ALL.len().to_string()"));
+        assert!(source.contains("https://github.com/ax2/zifile"));
     }
 
     #[test]

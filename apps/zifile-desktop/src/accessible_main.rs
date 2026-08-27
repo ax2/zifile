@@ -85,6 +85,7 @@ enum Page {
     Home,
     Archive,
     Create,
+    About,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -284,6 +285,7 @@ fn App() -> Element {
                     NavButton { label: locale.text(Text::Home), active: page == Page::Home, onclick: move |_| state.write().page = Page::Home }
                     NavButton { label: locale.text(Text::Archive), active: page == Page::Archive, onclick: move |_| state.write().page = Page::Archive }
                     NavButton { label: locale.text(Text::Create), active: page == Page::Create, onclick: move |_| state.write().page = Page::Create }
+                    NavButton { label: locale.text(Text::About), active: page == Page::About, onclick: move |_| state.write().page = Page::About }
                 }
                 div { class: "preferences",
                     button { onclick: move |_| { let mut value = state.write(); value.dark = !value.dark; save_settings(&value); },
@@ -298,6 +300,7 @@ fn App() -> Element {
                     Page::Home => rsx! { Home { state } },
                     Page::Archive => rsx! { ArchivePage { state } },
                     Page::Create => rsx! { CreatePage { state } },
+                    Page::About => rsx! { AboutPage { state } },
                 }
                 footer { class: if view.status_kind == StatusKind::Error { "status-error" } else { "" },
                     div { id: "operation-status", class: "status-copy", role: status_role, "aria-live": status_live, "aria-atomic": "true",
@@ -333,6 +336,26 @@ fn Home(mut state: Signal<UiState>) -> Element {
                 button { class: "primary", onclick: move |_| state.write().page = Page::Create, {locale.text(Text::StartCreating)} } }
         }
         section { class: "privacy", "aria-labelledby": "privacy-title", h3 { id: "privacy-title", {locale.text(Text::Privacy)} } p { {locale.text(Text::PrivacyDescription)} } }
+    } }
+}
+
+#[component]
+fn AboutPage(state: Signal<UiState>) -> Element {
+    let view = state.read();
+    let locale = view.locale;
+    rsx! { section { class: "home", "aria-labelledby": "about-title",
+        h2 { id: "about-title", {locale.text(Text::AboutHeading)} }
+        p { class: "lead", {locale.text(Text::AboutDescription)} }
+        dl { class: "about-details",
+            div { dt { {locale.text(Text::Version)} } dd { {env!("CARGO_PKG_VERSION")} } }
+            div { dt { {locale.text(Text::License)} } dd { "MIT" } }
+            div { dt { {locale.text(Text::SupportedFormatFamilies)} } dd { {ArchiveFormat::ALL.len().to_string()} } }
+            div { dt { {locale.text(Text::ProjectWebsite)} } dd { "https://github.com/ax2/zifile" } }
+        }
+        section { class: "privacy", "aria-labelledby": "about-privacy-title",
+            h3 { id: "about-privacy-title", {locale.text(Text::Privacy)} }
+            p { {locale.text(Text::PrivacyDescription)} }
+        }
     } }
 }
 
@@ -1612,6 +1635,17 @@ mod tests {
             create_source_issue_text(Locale::En, CreateSourceIssue::UnsupportedFormat),
             "This format cannot be created."
         );
+    }
+
+    #[test]
+    fn about_page_exposes_semantic_release_identity() {
+        let source = include_str!("accessible_main.rs");
+        assert!(source.contains("Page::About => rsx! { AboutPage { state } }"));
+        assert!(source.contains("dl { class: \"about-details\""));
+        assert!(source.contains("dt { {locale.text(Text::Version)} }"));
+        assert!(source.contains("dd { {env!(\"CARGO_PKG_VERSION\")} }"));
+        assert!(source.contains("https://github.com/ax2/zifile"));
+        assert!(STYLES.contains(".about-details"));
     }
     #[test]
     fn conflict_values_round_trip() {
