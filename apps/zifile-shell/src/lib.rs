@@ -11,6 +11,7 @@
 
 use std::ffi::c_void;
 use std::os::windows::ffi::OsStrExt;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -233,7 +234,23 @@ extern "system" fn DllGetClassObject(
     interface_id: *const GUID,
     object: *mut *mut c_void,
 ) -> HRESULT {
-    if class_id.is_null() || interface_id.is_null() || object.is_null() {
+    ffi_hresult(|| dll_get_class_object(class_id, interface_id, object))
+}
+
+fn ffi_hresult(action: impl FnOnce() -> HRESULT) -> HRESULT {
+    catch_unwind(AssertUnwindSafe(action)).unwrap_or(E_FAIL)
+}
+
+fn dll_get_class_object(
+    class_id: *const GUID,
+    interface_id: *const GUID,
+    object: *mut *mut c_void,
+) -> HRESULT {
+    if object.is_null() {
+        return E_POINTER;
+    }
+    unsafe { object.write(std::ptr::null_mut()) };
+    if class_id.is_null() || interface_id.is_null() {
         return E_POINTER;
     }
     let factory: IClassFactory = match unsafe { *class_id } {
@@ -367,6 +384,29 @@ mod tests {
             EXTRACT_COMMAND_CLSID,
             GUID::from_u128(0x2d39ad2e_1b36_4f4f_8e09_589f0b1d2bc3)
         );
+    }
+
+    #[test]
+    fn ffi_hresult_contains_unexpected_panics() {
+        assert_eq!(ffi_hresult(|| panic!("intentional FFI test panic")), E_FAIL);
+    }
+
+    #[test]
+    fn dll_factory_rejects_invalid_inputs_and_clears_output() {
+        let mut object = std::ptr::dangling_mut::<c_void>();
+        assert_eq!(
+            DllGetClassObject(std::ptr::null(), &IClassFactory::IID, &mut object),
+            E_POINTER
+        );
+        assert!(object.is_null());
+
+        object = std::ptr::dangling_mut::<c_void>();
+        let unknown = GUID::from_u128(0x4a26c80b_16af_4247_b0a8_86d2d31fbfaa);
+        assert_eq!(
+            DllGetClassObject(&unknown, &IClassFactory::IID, &mut object),
+            CLASS_E_CLASSNOTAVAILABLE
+        );
+        assert!(object.is_null());
     }
 
     #[test]
