@@ -958,6 +958,60 @@ fn cancellation_stops_before_writing_output() {
 }
 
 #[test]
+fn active_cancellation_does_not_commit_a_partial_zip_output() {
+    const PAYLOAD_BYTES: usize = 32 * 1024 * 1024;
+    let temp = tempfile::tempdir().unwrap();
+    let archive = temp.path().join("active-cancel.zip");
+    let payload = (0..PAYLOAD_BYTES)
+        .map(|index| {
+            let value = (index as u64)
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (value >> 32) as u8
+        })
+        .collect::<Vec<_>>();
+    let file = fs::File::create(&archive).unwrap();
+    let mut writer = zip::ZipWriter::new(file);
+    writer
+        .start_file(
+            "active-cancel.bin",
+            zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored),
+        )
+        .unwrap();
+    writer.write_all(&payload).unwrap();
+    writer.finish().unwrap();
+
+    let cancellation = CancellationToken::default();
+    let progress = OperationProgress::default();
+    let cancellation_monitor = cancellation.clone();
+    let progress_monitor = progress.clone();
+    let monitor = std::thread::spawn(move || {
+        loop {
+            if progress_monitor.snapshot().processed_bytes > 0 {
+                cancellation_monitor.cancel();
+                return;
+            }
+            std::thread::yield_now();
+        }
+    });
+    let output = temp.path().join("active-cancel-output");
+    let result = extract_archive(
+        &archive,
+        &output,
+        &ExtractOptions {
+            cancellation,
+            progress,
+            ..ExtractOptions::default()
+        },
+    );
+    monitor.join().unwrap();
+
+    assert!(matches!(result, Err(ZiFileError::Cancelled)));
+    assert!(!output.join("active-cancel.bin").exists());
+}
+
+#[test]
 fn caller_entry_limits_apply_during_archive_listing() {
     for format in [
         ArchiveFormat::Zip,
