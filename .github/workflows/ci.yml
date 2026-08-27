@@ -30,6 +30,32 @@ jobs:
       - name: Packaging policy smoke test
         shell: pwsh
         run: ./tests/smoke/packaging-policy.ps1
+      - name: PowerShell syntax checks
+        shell: pwsh
+        run: |
+          $failures = @()
+          foreach ($root in @('scripts', 'tests', 'packaging')) {
+            foreach ($file in (Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.ps1')) {
+              $tokens = $null
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                $file.FullName,
+                [ref]$tokens,
+                [ref]$errors
+              ) | Out-Null
+              if (@($errors).Count -gt 0) {
+                $failures += [pscustomobject]@{
+                  path = $file.FullName
+                  errors = @($errors | ForEach-Object Message)
+                }
+              }
+            }
+          }
+          if ($failures.Count -gt 0) {
+            $failures | ConvertTo-Json -Depth 5
+            throw 'PowerShell syntax errors detected.'
+          }
+          Write-Host "PowerShell syntax checks passed for $((Get-ChildItem scripts,tests,packaging -Recurse -File -Filter '*.ps1').Count) scripts."
       - name: Install current WinGet validation client
         shell: pwsh
         env:
