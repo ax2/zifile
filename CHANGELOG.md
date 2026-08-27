@@ -8,6 +8,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Fixed
 
+- Match accessible-desktop shortcuts against their exact non-lock modifiers so
+  combinations such as `Ctrl+Shift+N`, `Alt+F1`, and `Ctrl+Shift+A` retain their
+  native behavior instead of invoking ZiFile's simpler declared commands.
 - Preserve native Escape behavior while the accessible desktop is idle, and
   intercept Escape only when an active operation has a cancellation token.
 - Expose every handled accessible-desktop shortcut (`Ctrl+O`, `Ctrl+N`, `F1`,

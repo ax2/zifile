@@ -274,9 +274,8 @@ fn App() -> Element {
                 if event.is_composing() {
                     return;
                 }
-                let control = event.modifiers().contains(Modifiers::CONTROL);
                 if let Some(shortcut) =
-                    accessible_shortcut(&event.key().to_string(), control, can_cancel)
+                    accessible_shortcut(&event.key().to_string(), event.modifiers(), can_cancel)
                 {
                     event.prevent_default();
                     apply_accessible_shortcut(state, shortcut);
@@ -478,9 +477,8 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
         }
         div { class: "table-wrap", tabindex: "0", role: "region", "aria-label": choose(locale, "Archive entries", "压缩文件项目"), "aria-describedby": "archive-selection-summary archive-filter-summary", "aria-keyshortcuts": ARIA_SHORTCUT_SELECT_ALL,
             onkeydown: move |event: KeyboardEvent| {
-                let control = event.modifiers().contains(Modifiers::CONTROL);
                 if !event.is_composing()
-                    && is_select_all_shortcut(&event.key().to_string(), control)
+                    && is_select_all_shortcut(&event.key().to_string(), event.modifiers())
                 {
                     event.prevent_default();
                     select_all(state, true);
@@ -663,16 +661,18 @@ fn open_archive_dialog(mut state: Signal<UiState>) {
 
 fn accessible_shortcut(
     key: &str,
-    control: bool,
+    modifiers: Modifiers,
     cancellation_available: bool,
 ) -> Option<AccessibleShortcut> {
+    let modifiers = shortcut_modifiers(modifiers);
     if key.eq_ignore_ascii_case("escape") {
-        return cancellation_available.then_some(AccessibleShortcut::Cancel);
+        return (cancellation_available && modifiers.is_empty())
+            .then_some(AccessibleShortcut::Cancel);
     }
     if key.eq_ignore_ascii_case("f1") {
-        return Some(AccessibleShortcut::About);
+        return modifiers.is_empty().then_some(AccessibleShortcut::About);
     }
-    if !control {
+    if modifiers != Modifiers::CONTROL {
         return None;
     }
     match key.to_ascii_lowercase().as_str() {
@@ -682,8 +682,17 @@ fn accessible_shortcut(
     }
 }
 
-fn is_select_all_shortcut(key: &str, control: bool) -> bool {
-    control && key.eq_ignore_ascii_case("a")
+fn shortcut_modifiers(modifiers: Modifiers) -> Modifiers {
+    let lock_modifiers = Modifiers::CAPS_LOCK
+        | Modifiers::FN_LOCK
+        | Modifiers::NUM_LOCK
+        | Modifiers::SCROLL_LOCK
+        | Modifiers::SYMBOL_LOCK;
+    modifiers & !lock_modifiers
+}
+
+fn is_select_all_shortcut(key: &str, modifiers: Modifiers) -> bool {
+    shortcut_modifiers(modifiers) == Modifiers::CONTROL && key.eq_ignore_ascii_case("a")
 }
 
 fn apply_accessible_shortcut(mut state: Signal<UiState>, shortcut: AccessibleShortcut) {
@@ -1879,28 +1888,43 @@ mod tests {
     #[test]
     fn accessible_shortcuts_are_deliberate_and_ime_safe() {
         assert_eq!(
-            accessible_shortcut("o", true, false),
+            accessible_shortcut("o", Modifiers::CONTROL, false),
             Some(AccessibleShortcut::Open)
         );
         assert_eq!(
-            accessible_shortcut("N", true, false),
+            accessible_shortcut("N", Modifiers::CONTROL, false),
             Some(AccessibleShortcut::Create)
         );
         assert_eq!(
-            accessible_shortcut("Escape", false, true),
+            accessible_shortcut("Escape", Modifiers::empty(), true),
             Some(AccessibleShortcut::Cancel)
         );
         assert_eq!(
-            accessible_shortcut("F1", false, false),
+            accessible_shortcut("F1", Modifiers::empty(), false),
             Some(AccessibleShortcut::About)
         );
-        assert_eq!(accessible_shortcut("Escape", false, false), None);
-        assert_eq!(accessible_shortcut("a", true, true), None);
-        assert_eq!(accessible_shortcut("o", false, true), None);
-        assert!(is_select_all_shortcut("a", true));
-        assert!(is_select_all_shortcut("A", true));
-        assert!(!is_select_all_shortcut("a", false));
-        assert!(!is_select_all_shortcut("o", true));
+        assert_eq!(
+            accessible_shortcut("Escape", Modifiers::empty(), false),
+            None
+        );
+        assert_eq!(
+            accessible_shortcut("N", Modifiers::CONTROL | Modifiers::SHIFT, false),
+            None
+        );
+        assert_eq!(accessible_shortcut("F1", Modifiers::ALT, false), None);
+        assert_eq!(accessible_shortcut("a", Modifiers::CONTROL, true), None);
+        assert_eq!(accessible_shortcut("o", Modifiers::empty(), true), None);
+        assert!(is_select_all_shortcut("a", Modifiers::CONTROL));
+        assert!(is_select_all_shortcut(
+            "A",
+            Modifiers::CONTROL | Modifiers::CAPS_LOCK
+        ));
+        assert!(!is_select_all_shortcut("a", Modifiers::empty()));
+        assert!(!is_select_all_shortcut(
+            "a",
+            Modifiers::CONTROL | Modifiers::SHIFT
+        ));
+        assert!(!is_select_all_shortcut("o", Modifiers::CONTROL));
     }
 
     #[test]
