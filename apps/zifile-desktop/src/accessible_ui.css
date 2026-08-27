@@ -7,8 +7,9 @@
 body { margin: 0; min-width: 0; min-height: 560px; }
 button, input, select { font: inherit; }
 button:focus-visible, input:focus-visible, select:focus-visible, [tabindex="0"]:focus-visible {
-  outline: 3px solid #ffffff;
+  outline: 3px solid var(--focus-ring);
   outline-offset: 3px;
+  box-shadow: 0 0 0 2px var(--focus-ring-contrast);
 }
 button:disabled { cursor: not-allowed; opacity: .48; }
 .sr-only {
@@ -31,6 +32,8 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   --muted: #b8c1e4;
   --accent: #31c2df;
   --accent-text: #082832;
+  --focus-ring: #ffffff;
+  --focus-ring-contrast: #000000;
   --border: #4c536f;
   display: grid;
   grid-template-columns: 258px 1fr;
@@ -46,6 +49,8 @@ button:disabled { cursor: not-allowed; opacity: .48; }
   --text: #182033;
   --muted: #4e5b78;
   --accent-text: #07242c;
+  --focus-ring: #06324a;
+  --focus-ring-contrast: #ffffff;
   --border: #d9deea;
 }
 
@@ -154,6 +159,8 @@ footer progress { width: min(260px, 30vw); accent-color: var(--accent); }
     --muted: CanvasText;
     --accent: Highlight;
     --accent-text: HighlightText;
+    --focus-ring: Highlight;
+    --focus-ring-contrast: Canvas;
     --border: CanvasText;
     forced-color-adjust: auto;
   }

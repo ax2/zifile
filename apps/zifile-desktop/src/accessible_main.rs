@@ -1653,6 +1653,19 @@ mod tests {
         assert!(source.contains("\"aria-keyshortcuts\": \"F1\""));
         assert!(STYLES.contains(".about-details"));
     }
+
+    #[test]
+    fn focus_indicators_are_two_tone_and_theme_aware() {
+        assert!(STYLES.contains("outline: 3px solid var(--focus-ring);"));
+        assert!(STYLES.contains("box-shadow: 0 0 0 2px var(--focus-ring-contrast);"));
+        assert!(STYLES.contains("--focus-ring: #ffffff;"));
+        assert!(STYLES.contains("--focus-ring-contrast: #000000;"));
+        assert!(STYLES.contains("--focus-ring: #06324a;"));
+        assert!(STYLES.contains("--focus-ring-contrast: #ffffff;"));
+        assert!(STYLES.contains("--focus-ring: Highlight;"));
+        assert!(STYLES.contains("--focus-ring-contrast: Canvas;"));
+    }
+
     #[test]
     fn conflict_values_round_trip() {
         for policy in [

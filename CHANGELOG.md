@@ -8,6 +8,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Fixed
 
+- Use a two-tone, theme-aware keyboard focus indicator in the accessible desktop
+  candidate so focus remains visible on both light surfaces and cyan active controls,
+  while forced-colors mode continues to use Windows system colors.
 - Require WACK readiness to compare the package audit against all three exact Partner Center identity fields and persist structured failures for incomplete audits, preventing a signed or malformed test identity from entering formal certification preflight.
 - Keep WinGet file-extension metadata synchronized with all 24 archive extensions accepted by the desktop open workflow, including RAR, CAB, ZIPX, comic-book aliases, and TAR stream aliases.
 
