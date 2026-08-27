@@ -26,6 +26,9 @@ the generated URLs and hashes against the signed local MSIX files:
 ```
 
 The resulting directory is ready for `winget validate --manifest <directory>`.
+The installer manifest declares the same 24 open extensions as
+`OPEN_ARCHIVE_EXTENSIONS`, including RAR/CAB and comic/TAR aliases; the
+preflight rejects any metadata drift before official validation.
 Submission to `microsoft/winget-pkgs`
 remains a deliberate release action after package signing and installation
 testing; the generator never opens a pull request by itself.

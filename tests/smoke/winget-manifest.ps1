@@ -40,6 +40,13 @@ try {
     if (-not $preflight.ready_for_winget_validate -or -not $preflight.local_installers_verified) {
         throw 'ZiFile preflight did not accept the deterministic WinGet candidate.'
     }
+    if (@($preflight.file_extensions).Count -ne 24 -or
+        $preflight.file_extensions -cnotcontains 'rar' -or
+        $preflight.file_extensions -cnotcontains 'cab' -or
+        $preflight.file_extensions -cnotcontains 'zipx' -or
+        $preflight.file_extensions -cnotcontains 'cbr') {
+        throw 'ZiFile preflight did not preserve the complete open-extension contract.'
+    }
 
     $wingetVersion = (& $winget.Source --version | Out-String).Trim()
     $validationOutput = & $winget.Source validate `
@@ -49,14 +56,39 @@ try {
         throw "Official winget $wingetVersion validate rejected the generated candidate: $validationOutput"
     }
 
+    $installerManifest = Join-Path $manifestDirectory 'ZiCode.ZiFile.installer.yaml'
+    $installerSource = Get-Content -Raw -LiteralPath $installerManifest
+    $driftedSource = $installerSource -replace '(?m)^- rar\r?\n', ''
+    if ($driftedSource -ceq $installerSource) {
+        throw 'Could not create the WinGet file-extension drift fixture.'
+    }
+    Set-Content -LiteralPath $installerManifest -Value $driftedSource -Encoding utf8NoBOM
+    $metadataDriftRejected = $false
+    try {
+        $null = & $verifier `
+            -ManifestDirectory $manifestDirectory `
+            -Version $version `
+            -X64InstallerPath $x64 `
+            -Arm64InstallerPath $arm64
+    }
+    catch {
+        if ($_.Exception.Message -notmatch 'file extensions do not match') { throw }
+        $metadataDriftRejected = $true
+    }
+    if (-not $metadataDriftRejected) {
+        throw 'ZiFile preflight accepted WinGet metadata with a missing RAR extension.'
+    }
+
     [pscustomobject]@{
         schema_version = 1
         winget_version = $wingetVersion
         manifest_version = $preflight.manifest_version
         manifest_files = $preflight.manifest_files
         architectures = $preflight.architectures
+        file_extensions = $preflight.file_extensions
         local_installers_verified = $preflight.local_installers_verified
         official_manifest_validation_passed = $true
+        metadata_drift_rejected = $metadataDriftRejected
         public_assets_downloaded = $false
         community_repository_accepted = $false
     } | ConvertTo-Json -Depth 4

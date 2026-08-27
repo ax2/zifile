@@ -6,6 +6,10 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep WinGet file-extension metadata synchronized with all 24 archive extensions accepted by the desktop open workflow, including RAR, CAB, ZIPX, comic-book aliases, and TAR stream aliases.
+
 ### Added
 
 - Formal Partner Center packaging now injects and audits the exact Publisher

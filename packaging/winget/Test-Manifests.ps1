@@ -10,6 +10,18 @@ param(
 $ErrorActionPreference = 'Stop'
 $identifier = 'ZiCode.ZiFile'
 $manifestVersion = '1.12.0'
+$expectedFileExtensions = @(
+    'zip', 'zipx', 'cbz', 'epub',
+    '7z', 'cb7',
+    'rar', 'cbr',
+    'cab',
+    'tar', 'cbt',
+    'gz', 'tgz',
+    'zst', 'tzst',
+    'xz', 'txz', 'lzma',
+    'bz', 'bz2', 'tbz', 'tbz2',
+    'lz4', 'br'
+)
 $directory = [IO.Path]::GetFullPath($ManifestDirectory)
 $expectedSuffix = [IO.Path]::Combine([string[]]@('manifests', 'z', 'ZiCode', 'ZiFile', $Version))
 if (-not $directory.EndsWith($expectedSuffix, [StringComparison]::Ordinal)) {
@@ -71,6 +83,40 @@ foreach ($requiredLine in @(
     }
 }
 
+$extensionBlock = [Regex]::Match(
+    $installerSource,
+    '(?ms)^FileExtensions:\r?\n(?<items>(?:- [a-z0-9]+\r?\n)+)Installers:'
+)
+if (-not $extensionBlock.Success) {
+    throw 'Installer manifest does not contain a bounded FileExtensions list before Installers.'
+}
+$actualFileExtensions = @(
+    [Regex]::Matches($extensionBlock.Groups['items'].Value, '(?m)^- (?<extension>[a-z0-9]+)\r?$') |
+        ForEach-Object { $_.Groups['extension'].Value }
+)
+if ($actualFileExtensions.Count -ne $expectedFileExtensions.Count -or
+    (Compare-Object -ReferenceObject $expectedFileExtensions -DifferenceObject $actualFileExtensions -SyncWindow 0)) {
+    throw "Installer manifest file extensions do not match ZiFile's supported open extensions."
+}
+
+$repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$coreSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'crates\zifile-core\src\lib.rs')
+$coreExtensionBlock = [Regex]::Match(
+    $coreSource,
+    '(?s)pub const OPEN_ARCHIVE_EXTENSIONS: &\[&str\] = &\[(?<items>.*?)\];'
+)
+if (-not $coreExtensionBlock.Success) {
+    throw 'Could not locate the core OPEN_ARCHIVE_EXTENSIONS contract.'
+}
+$coreFileExtensions = @(
+    [Regex]::Matches($coreExtensionBlock.Groups['items'].Value, '"(?<extension>[a-z0-9]+)"') |
+        ForEach-Object { $_.Groups['extension'].Value }
+)
+if ($coreFileExtensions.Count -ne $expectedFileExtensions.Count -or
+    (Compare-Object -ReferenceObject $expectedFileExtensions -DifferenceObject $coreFileExtensions -SyncWindow 0)) {
+    throw 'WinGet file extensions have drifted from the core OPEN_ARCHIVE_EXTENSIONS contract.'
+}
+
 $installerMatches = [Regex]::Matches(
     $installerSource,
     '(?ms)^- Architecture: (?<architecture>x64|arm64)\r?\n\s+InstallerUrl: (?<url>\S+)\r?\n\s+InstallerSha256: (?<sha>[A-F0-9]{64})\r?$'
@@ -113,6 +159,7 @@ foreach ($match in $installerMatches) {
     manifest_version = $manifestVersion
     manifest_files = $expectedFiles.Count
     architectures = @($validated | Sort-Object)
+    file_extensions = $actualFileExtensions
     local_installers_verified = [bool]($X64InstallerPath -and $Arm64InstallerPath)
     community_repository_path = $directory
     ready_for_winget_validate = $true

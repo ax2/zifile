@@ -16,6 +16,19 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $identifier = 'ZiCode.ZiFile'
+$fileExtensions = @(
+    'zip', 'zipx', 'cbz', 'epub',
+    '7z', 'cb7',
+    'rar', 'cbr',
+    'cab',
+    'tar', 'cbt',
+    'gz', 'tgz',
+    'zst', 'tzst',
+    'xz', 'txz', 'lzma',
+    'bz', 'bz2', 'tbz', 'tbz2',
+    'lz4', 'br'
+)
+$fileExtensionYaml = ($fileExtensions | ForEach-Object { "- $_" }) -join "`n"
 $versionPattern = '^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$'
 if ($Version -notmatch $versionPattern) {
     throw "Version '$Version' is not a supported ZiFile release version."
@@ -59,16 +72,7 @@ InstallerType: msix
 Scope: user
 UpgradeBehavior: install
 FileExtensions:
-- zip
-- 7z
-- tar
-- gz
-- tgz
-- zst
-- xz
-- bz2
-- lz4
-- br
+$fileExtensionYaml
 Installers:
 - Architecture: x64
   InstallerUrl: $($X64InstallerUrl.AbsoluteUri)
