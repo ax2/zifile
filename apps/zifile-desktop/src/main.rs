@@ -876,8 +876,8 @@ fn view(state: &ZiFile) -> Element<'_, Message> {
             nav_button(state.locale.text(Text::Home), Page::Home, state.page),
             nav_button(state.locale.text(Text::Archive), Page::Archive, state.page),
             nav_button(state.locale.text(Text::Create), Page::Create, state.page),
-            space().height(Fill),
             nav_button(state.locale.text(Text::About), Page::About, state.page),
+            space().height(Fill),
             row![
                 button(if state.dark {
                     state.locale.text(Text::Light)
