@@ -70,6 +70,8 @@ Foreground keyboard automation checks internal WebView2 focus, bilingual forward
 
 The accessible candidate exposes every handled shortcut—`Ctrl+O`, `Ctrl+N`, `F1`, `Escape`, and archive-scoped `Ctrl+A`—on the corresponding semantic control. A source regression keeps handler behavior and `aria-keyshortcuts` metadata aligned; this wiring evidence does not replace a real screen-reader announcement check.
 
+The root keyboard handler prevents the default Escape action only when an active cancellation token exists. While idle it leaves Escape unhandled so native controls retain their close or exit behavior; the cancellation function also remains a no-op instead of publishing a false cancelling status when no token exists.
+
 The accessible candidate uses a two-tone focus ring in its normal dark and light themes: the outer tone follows the theme while an opposing inner tone keeps focus distinguishable on both content surfaces and cyan active controls. Windows forced-colors mode uses `Highlight` and `Canvas`. A Rust source regression locks all three branches and the two-layer wiring; a real foreground keyboard and high-contrast pass is still required for visual evidence.
 
 Reproducibility separately performs clean x64/ARM64 double builds. Schema-v2 evidence traced the former 4/5 result to `build-a`/`build-b` target paths embedded by generated `glutin_wgl_sys` code in the default Iced executable. The script remaps both isolated roots to one virtual path; run `32826187552` then proved 5/5 and `reproducible=true` on both architectures.

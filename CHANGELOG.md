@@ -8,6 +8,8 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Fixed
 
+- Preserve native Escape behavior while the accessible desktop is idle, and
+  intercept Escape only when an active operation has a cancellation token.
 - Expose every handled accessible-desktop shortcut (`Ctrl+O`, `Ctrl+N`, `F1`,
   `Escape`, and archive-scoped `Ctrl+A`) on its corresponding semantic control
   instead of leaving open/create shortcuts discoverable only from documentation.

@@ -247,6 +247,7 @@ fn App() -> Element {
     let progress = view.progress.as_ref().map(OperationProgress::snapshot);
     let (status_role, status_live) = status_semantics(view.status_kind);
     let queued_count = lock_operation_queue(&view.operations).pending_count();
+    let can_cancel = view.cancellation.is_some();
     let queue_summary = operation_queue_summary(locale, queued_count);
     let progress_view = progress.map(|snapshot| {
         (
@@ -274,7 +275,9 @@ fn App() -> Element {
                     return;
                 }
                 let control = event.modifiers().contains(Modifiers::CONTROL);
-                if let Some(shortcut) = accessible_shortcut(&event.key().to_string(), control) {
+                if let Some(shortcut) =
+                    accessible_shortcut(&event.key().to_string(), control, can_cancel)
+                {
                     event.prevent_default();
                     apply_accessible_shortcut(state, shortcut);
                 }
@@ -658,9 +661,13 @@ fn open_archive_dialog(mut state: Signal<UiState>) {
     }
 }
 
-fn accessible_shortcut(key: &str, control: bool) -> Option<AccessibleShortcut> {
+fn accessible_shortcut(
+    key: &str,
+    control: bool,
+    cancellation_available: bool,
+) -> Option<AccessibleShortcut> {
     if key.eq_ignore_ascii_case("escape") {
-        return Some(AccessibleShortcut::Cancel);
+        return cancellation_available.then_some(AccessibleShortcut::Cancel);
     }
     if key.eq_ignore_ascii_case("f1") {
         return Some(AccessibleShortcut::About);
@@ -1142,9 +1149,10 @@ fn clear_queued(mut state: Signal<UiState>) {
 
 fn cancel_operation(mut state: Signal<UiState>) {
     let value = state.read();
-    if let Some(cancellation) = &value.cancellation {
-        cancellation.cancel();
-    }
+    let Some(cancellation) = &value.cancellation else {
+        return;
+    };
+    cancellation.cancel();
     let locale = value.locale;
     drop(value);
     state.write().set_status(
@@ -1871,23 +1879,24 @@ mod tests {
     #[test]
     fn accessible_shortcuts_are_deliberate_and_ime_safe() {
         assert_eq!(
-            accessible_shortcut("o", true),
+            accessible_shortcut("o", true, false),
             Some(AccessibleShortcut::Open)
         );
         assert_eq!(
-            accessible_shortcut("N", true),
+            accessible_shortcut("N", true, false),
             Some(AccessibleShortcut::Create)
         );
         assert_eq!(
-            accessible_shortcut("Escape", false),
+            accessible_shortcut("Escape", false, true),
             Some(AccessibleShortcut::Cancel)
         );
         assert_eq!(
-            accessible_shortcut("F1", false),
+            accessible_shortcut("F1", false, false),
             Some(AccessibleShortcut::About)
         );
-        assert_eq!(accessible_shortcut("a", true), None);
-        assert_eq!(accessible_shortcut("o", false), None);
+        assert_eq!(accessible_shortcut("Escape", false, false), None);
+        assert_eq!(accessible_shortcut("a", true, true), None);
+        assert_eq!(accessible_shortcut("o", false, true), None);
         assert!(is_select_all_shortcut("a", true));
         assert!(is_select_all_shortcut("A", true));
         assert!(!is_select_all_shortcut("a", false));
