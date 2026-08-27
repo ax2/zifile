@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::fmt;
+use std::num::NonZeroUsize;
 
 pub const DEFAULT_QUEUE_CAPACITY: usize = 32;
 
@@ -42,12 +43,12 @@ pub struct OperationQueue<T> {
     active_id: Option<u64>,
     pending: VecDeque<Job<T>>,
     next_id: u64,
-    capacity: usize,
+    capacity: NonZeroUsize,
 }
 
 impl<T> Default for OperationQueue<T> {
     fn default() -> Self {
-        Self::with_capacity(DEFAULT_QUEUE_CAPACITY)
+        Self::with_capacity(NonZeroUsize::new(DEFAULT_QUEUE_CAPACITY).unwrap_or(NonZeroUsize::MIN))
     }
 }
 
@@ -63,8 +64,7 @@ impl<T> fmt::Debug for OperationQueue<T> {
 }
 
 impl<T> OperationQueue<T> {
-    pub fn with_capacity(capacity: usize) -> Self {
-        assert!(capacity > 0, "operation queue capacity must be positive");
+    pub fn with_capacity(capacity: NonZeroUsize) -> Self {
         Self {
             active_id: None,
             pending: VecDeque::new(),
@@ -74,10 +74,10 @@ impl<T> OperationQueue<T> {
     }
 
     pub fn submit(&mut self, payload: T) -> Result<Submission<T>, QueueFull<T>> {
-        if self.len() >= self.capacity {
+        if self.len() >= self.capacity.get() {
             return Err(QueueFull {
                 payload,
-                capacity: self.capacity,
+                capacity: self.capacity.get(),
             });
         }
         let id = self.next_id;
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn starts_first_job_and_preserves_fifo_order() {
-        let mut queue = OperationQueue::with_capacity(3);
+        let mut queue = OperationQueue::with_capacity(NonZeroUsize::new(3).unwrap());
         let first = queue.submit("first").unwrap();
         let Submission::Start(first) = first else {
             panic!("first submission must start immediately");
@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn rejects_capacity_overflow_without_losing_payload() {
-        let mut queue = OperationQueue::with_capacity(2);
+        let mut queue = OperationQueue::with_capacity(NonZeroUsize::new(2).unwrap());
         assert!(matches!(queue.submit(10), Ok(Submission::Start(_))));
         assert!(matches!(queue.submit(20), Ok(Submission::Queued { .. })));
         let error = queue.submit(30).err().expect("queue should be full");
