@@ -2,6 +2,9 @@
 param(
     [Parameter(Mandatory)][string]$PackagePath,
     [Parameter(Mandatory)][string]$AuditPath,
+    [Parameter(Mandatory)][string]$ExpectedIdentityName,
+    [Parameter(Mandatory)][string]$ExpectedPublisher,
+    [Parameter(Mandatory)][string]$ExpectedPublisherDisplayName,
     [string]$AppCertPath = (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\App Certification Kit\appcert.exe'),
     [string]$EvidencePath,
     [switch]$RequireReady
@@ -13,6 +16,15 @@ $package = [IO.Path]::GetFullPath($PackagePath)
 $auditFile = [IO.Path]::GetFullPath($AuditPath)
 $appCert = [IO.Path]::GetFullPath($AppCertPath)
 $issues = [Collections.Generic.List[object]]::new()
+$identityPreflight = Join-Path $PSScriptRoot '..\store\Test-PartnerCenterIdentity.ps1'
+$formalIdentity = & $identityPreflight `
+    -IdentityName $ExpectedIdentityName `
+    -Publisher $ExpectedPublisher `
+    -PublisherDisplayName $ExpectedPublisherDisplayName `
+    -RequireConfigured | ConvertFrom-Json
+if (-not $formalIdentity.formal_identity) {
+    throw 'WACK readiness requires the formal Partner Center identity tuple.'
+}
 
 function Add-ReadinessIssue {
     param([Parameter(Mandatory)][string]$Code, [Parameter(Mandatory)][string]$Message)
@@ -77,8 +89,14 @@ if ($null -ne $audit) {
     if (-not $audit.signature_required -or $audit.signature_status -cne 'Valid') {
         Add-ReadinessIssue 'audit_signature_invalid' 'MSIX audit does not prove a required Valid signature.'
     }
-    if ([string]$audit.identity -match '(?i)\.Dev$') {
-        Add-ReadinessIssue 'development_identity' 'Development MSIX identity cannot enter WACK release certification.'
+    if ([string]$audit.identity -cne $ExpectedIdentityName) {
+        Add-ReadinessIssue 'identity_mismatch' 'MSIX audit Identity does not match the formal Partner Center Identity.'
+    }
+    if ([string]$audit.publisher -cne $ExpectedPublisher) {
+        Add-ReadinessIssue 'publisher_mismatch' 'MSIX audit Publisher does not match the formal Partner Center Publisher.'
+    }
+    if ([string]$audit.publisher_display_name -cne $ExpectedPublisherDisplayName) {
+        Add-ReadinessIssue 'publisher_display_name_mismatch' 'MSIX audit Publisher Display Name does not match the formal Partner Center value.'
     }
     if ([string]$audit.publisher -match 'OID\.2\.25\.311729368913984317654407730594956997722=1') {
         Add-ReadinessIssue 'unsigned_publisher' 'Unsigned development publisher namespace cannot enter WACK release certification.'
@@ -112,6 +130,9 @@ $evidence = [pscustomobject]@{
     package_sha256 = $actualPackageHash
     package_signature_status = $actualSignatureStatus
     audit = if ($auditExists) { [IO.Path]::GetFileName($auditFile) } else { $null }
+    expected_identity = $ExpectedIdentityName
+    expected_publisher = $ExpectedPublisher
+    expected_publisher_display_name = $ExpectedPublisherDisplayName
     issues = @($issues)
 }
 $json = $evidence | ConvertTo-Json -Depth 5

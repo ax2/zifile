@@ -47,4 +47,4 @@ Windows Release 使用仓库固定的 Rust 1.93.0、锁文件、单作业 Cargo 
 
 ## 发布门禁
 
-只有当单元、互操作、安全、性能、包安装、升级和文档检查全部通过，且 Stage 工作日志已同步，才允许创建稳定版本。`Test-WackReadiness.ps1` 会先无副作用核对当前管理员交互会话、WACK 工具、主机/包架构、schema v2 审计与包哈希、正式 Identity/Publisher、build 19041、禁用文件和双重 `Valid` 签名，并可保存失败证据。它不安装包或运行 WACK。WACK CLI 仍必须在当前用户的管理员交互式会话运行；普通权限的自动化终端不能把“预检通过”或“工具已安装”写成“认证已通过”。
+只有当单元、互操作、安全、性能、包安装、升级和文档检查全部通过，且 Stage 工作日志已同步，才允许创建稳定版本。`Test-WackReadiness.ps1` 会先无副作用核对当前管理员交互会话、WACK 工具、主机/包架构、schema v2 审计与包哈希、Partner Center 的 Identity/Publisher/Publisher Display Name 精确三元组、build 19041、禁用文件和双重 `Valid` 签名，并可保存失败证据。它不安装包或运行 WACK。WACK CLI 仍必须在当前用户的管理员交互式会话运行；普通权限的自动化终端不能把“预检通过”或“工具已安装”写成“认证已通过”。

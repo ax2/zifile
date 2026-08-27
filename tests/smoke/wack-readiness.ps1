@@ -14,12 +14,16 @@ try {
     $package = Join-Path $testRoot 'ZiFile-test-x64.msix'
     Set-Content -LiteralPath $package -Value 'not a signed package' -Encoding utf8
     $auditPath = Join-Path $testRoot 'ZiFile-test-x64.audit.json'
+    $formalIdentity = 'ZiCode.ZiFile'
+    $formalPublisher = 'CN=ZiCode Official, O=ZiCode'
+    $formalPublisherDisplayName = 'ZiCode'
     $audit = [ordered]@{
         schema_version = 2
         package = [IO.Path]::GetFileName($package)
         sha256 = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash
         identity = 'ZiCode.ZiFile.Dev'
         publisher = 'CN=ZiCode Development, OID.2.25.311729368913984317654407730594956997722=1'
+        publisher_display_name = 'ZiCode Development'
         architecture = 'x64'
         minimum_windows_version = '10.0.26100.0'
         forbidden_file_count = 0
@@ -28,14 +32,22 @@ try {
     }
     $audit | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $auditPath -Encoding utf8
     $missingAppCert = Join-Path $testRoot 'missing-appcert.exe'
-    $result = & $readiness -PackagePath $package -AuditPath $auditPath -AppCertPath $missingAppCert | ConvertFrom-Json
+    $result = & $readiness `
+        -PackagePath $package `
+        -AuditPath $auditPath `
+        -ExpectedIdentityName $formalIdentity `
+        -ExpectedPublisher $formalPublisher `
+        -ExpectedPublisherDisplayName $formalPublisherDisplayName `
+        -AppCertPath $missingAppCert | ConvertFrom-Json
     if ($result.ready) { throw 'Unsigned development WACK fixture was incorrectly marked ready.' }
     $codes = @($result.issues.code)
     foreach ($requiredCode in @(
         'appcert_missing',
         'package_signature_invalid',
         'audit_signature_invalid',
-        'development_identity',
+        'identity_mismatch',
+        'publisher_mismatch',
+        'publisher_display_name_mismatch',
         'unsigned_publisher',
         'minimum_windows_mismatch'
     )) {
@@ -47,6 +59,9 @@ try {
         & $readiness `
             -PackagePath $package `
             -AuditPath $auditPath `
+            -ExpectedIdentityName $formalIdentity `
+            -ExpectedPublisher $formalPublisher `
+            -ExpectedPublisherDisplayName $formalPublisherDisplayName `
             -AppCertPath $missingAppCert `
             -EvidencePath $evidencePath `
             -RequireReady | Out-Null
@@ -62,7 +77,13 @@ try {
 
     $audit.sha256 = '0' * 64
     $audit | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $auditPath -Encoding utf8
-    $tampered = & $readiness -PackagePath $package -AuditPath $auditPath -AppCertPath $missingAppCert | ConvertFrom-Json
+    $tampered = & $readiness `
+        -PackagePath $package `
+        -AuditPath $auditPath `
+        -ExpectedIdentityName $formalIdentity `
+        -ExpectedPublisher $formalPublisher `
+        -ExpectedPublisherDisplayName $formalPublisherDisplayName `
+        -AppCertPath $missingAppCert | ConvertFrom-Json
     if (@($tampered.issues.code) -cnotcontains 'audit_hash_mismatch') {
         throw 'WACK readiness accepted a mismatched package/audit hash.'
     }
@@ -70,7 +91,9 @@ try {
     [pscustomobject]@{
         schema_version = 1
         unsigned_package_rejected = $true
-        development_identity_rejected = $true
+        partner_center_identity_mismatch_rejected = $true
+        partner_center_publisher_mismatch_rejected = $true
+        partner_center_publisher_display_name_mismatch_rejected = $true
         missing_appcert_reported = $true
         failure_evidence_persisted = $true
         audit_hash_mismatch_rejected = $true

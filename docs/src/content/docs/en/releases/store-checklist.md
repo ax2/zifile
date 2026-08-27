@@ -42,4 +42,4 @@ These items are also tracked in machine-readable [`release/readiness.json`](http
 
 Until these external gates pass, no Alpha artifact may be called Store-ready or signed.
 
-Before WACK, run `Test-WackReadiness.ps1 -RequireReady` against the target MSIX and adjacent `.audit.json`. Passing readiness only proves the tool, session, architecture, identity, hash, minimum OS, and signature preconditions; the generated WACK report remains authoritative.
+Before WACK, run `Test-WackReadiness.ps1 -ExpectedIdentityName $env:ZIFILE_MSIX_IDENTITY -ExpectedPublisher $env:ZIFILE_MSIX_PUBLISHER -ExpectedPublisherDisplayName $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME -RequireReady` against the target MSIX and adjacent `.audit.json`. Passing readiness only proves the tool, session, architecture, exact Partner Center tuple, hash, minimum OS, and signature preconditions; the generated WACK report remains authoritative.

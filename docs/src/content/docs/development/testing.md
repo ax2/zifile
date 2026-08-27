@@ -94,6 +94,6 @@ RAR 校验基准使用确定性的 8 MiB RAR 5 method-3 归档，并加入低频
 
 `tests/helpers/msix-repair` 是测试专用的 C# 控制台辅助程序，主产品仍以 Rust 实现。CI 以锁定的 Windows App SDK 1.8 依赖编译，并由不加载 Windows App SDK 的 PowerShell 监护脚本启动无副作用 `--probe`；因此即使 App SDK 在 helper 入口前阻塞，监护脚本仍会在 15 秒后直接终止该进程，工作流另有 2 分钟外层上限。Runner 不返回时明确记录查询未完成/不支持，不会一直挂起或伪报 Repair 通过；1 秒阻塞夹具持续验证这条硬超时路径。可信包生命周期支持 Repair 时，在包 LocalState 写入随机哨兵，调用 `RepairPackageAsync` 后要求内容不变，再要求 `Reset-AppxPackage` 删除哨兵；不支持时证据明确记为 `unsupported`。
 
-`tests/smoke/wack-readiness.ps1` 用不签名开发包夹具证明 readiness 会报告 WACK 缺失、签名无效、开发 Identity、未签名 Publisher、最低系统版本错误和包/审计哈希不一致，并验证 `-RequireReady` 失败时仍保存结构化证据。该测试不运行 WACK，也不替代正式签名候选的认证报告。
+`tests/smoke/wack-readiness.ps1` 用不签名开发包夹具证明 readiness 会报告 WACK 缺失、签名无效、Partner Center Identity/Publisher/Publisher Display Name 三项不匹配、未签名 Publisher、最低系统版本错误和包/审计哈希不一致，并验证 `-RequireReady` 失败时仍保存结构化证据。该测试不运行 WACK，也不替代正式签名候选的认证报告。
 
 `tests/performance/desktop-baseline.ps1` 对优化后的两个桌面程序各启动五次，计时到原生窗口可响应，并在 1.5 秒稳定期后汇总根进程与后代进程内存。参考机器为 Windows 11 build 26200、i9-14900HX：Iced 启动中位数 668.79 ms、工作集 225.87 MiB、私有内存 265.05 MiB；Dioxus/WebView2 候选分别为 294.25 ms、405.91 MiB、206.62 MiB。首轮冷启动包含在 p95 中（Iced 1785.51 ms、候选 644.20 ms）。工作集与私有内存口径不同，该数据是同机回归基线，不代表完整内容就绪、真实十万项归档的精确首屏/滚动延迟或跨机器门禁。

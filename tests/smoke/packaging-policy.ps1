@@ -992,6 +992,19 @@ foreach ($requiredWackToken in @(
         throw "CI does not exercise WACK readiness policy: $requiredWackToken"
     }
 }
+$wackReadinessSource = Get-Content -Raw -LiteralPath $wackReadiness
+foreach ($requiredWackIdentityToken in @(
+    '[Parameter(Mandatory)][string]$ExpectedIdentityName',
+    '[Parameter(Mandatory)][string]$ExpectedPublisher',
+    '[Parameter(Mandatory)][string]$ExpectedPublisherDisplayName',
+    "Add-ReadinessIssue 'identity_mismatch'",
+    "Add-ReadinessIssue 'publisher_mismatch'",
+    "Add-ReadinessIssue 'publisher_display_name_mismatch'"
+)) {
+    if ($wackReadinessSource -notmatch [Regex]::Escape($requiredWackIdentityToken)) {
+        throw "WACK readiness does not require the exact Partner Center tuple: $requiredWackIdentityToken"
+    }
+}
 $docsPagesSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\docs-pages.yml')
 Assert-WorkflowJobTimeout -Source $docsPagesSource -Job 'build' -Minutes 20 -Workflow 'Docs Pages'
 Assert-WorkflowJobTimeout -Source $docsPagesSource -Job 'deploy' -Minutes 15 -Workflow 'Docs Pages'
@@ -1042,6 +1055,7 @@ foreach ($requiredLivePrivacyToken in @(
     zip_legacy_corpus_wired = $true
     zip_zstd_corpus_wired = $true
     wack_readiness_wired = $true
+    wack_partner_center_tuple_required = $true
     version_consistency_wired = $true
     release_notes_wired = $true
     contributor_docs_wired = $true

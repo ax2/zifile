@@ -107,13 +107,17 @@ Before launching WACK, evaluate the exact package/audit pair without installing 
 ./packaging/msix/Test-WackReadiness.ps1 `
   -PackagePath ./ZiFile-1.0.0.0-windows-x64.msix `
   -AuditPath ./ZiFile-1.0.0.0-windows-x64.audit.json `
+  -ExpectedIdentityName $env:ZIFILE_MSIX_IDENTITY `
+  -ExpectedPublisher $env:ZIFILE_MSIX_PUBLISHER `
+  -ExpectedPublisherDisplayName $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME `
   -EvidencePath ./wack-readiness-x64.json `
   -RequireReady
 ```
 
 The readiness gate requires an interactive administrator session, an installed Windows App
 Certification Kit, matching host/package architecture, a matching schema-v2 audit and package
-SHA-256, formal identity/publisher, Windows 10 build 19041 minimum support, zero forbidden files,
+SHA-256, the exact formal Partner Center Identity/Publisher/Publisher Display Name tuple,
+Windows 10 build 19041 minimum support, zero forbidden files,
 and a trusted `Valid` signature in both the package and its audit. It does not run WACK, install the
 package, or replace the certification report.
 

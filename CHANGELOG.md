@@ -8,6 +8,7 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Fixed
 
+- Require WACK readiness to compare the package audit against all three exact Partner Center identity fields, preventing a signed test identity from entering formal certification preflight.
 - Keep WinGet file-extension metadata synchronized with all 24 archive extensions accepted by the desktop open workflow, including RAR, CAB, ZIPX, comic-book aliases, and TAR stream aliases.
 
 ### Added
