@@ -206,6 +206,9 @@ try {
         throw 'The reviewed MSIX asset catalog is unavailable during package audit.'
     }
     $assetCatalog = Get-Content -Raw -LiteralPath $assetCatalogPath | ConvertFrom-Json
+    if ($assetCatalog.schema_version -ne 2) {
+        throw 'The reviewed MSIX asset catalog schema is unsupported during package audit.'
+    }
     $packagedAssetEvidence = @()
     foreach ($asset in @($assetCatalog.assets)) {
         $packagedAssetPath = Join-Path $auditRoot (Join-Path 'Assets' ([string]$asset.name))
@@ -223,6 +226,20 @@ try {
     }
     if ($packagedAssetEvidence.Count -ne 58) {
         throw "MSIX package must contain 58 reviewed PNG assets, found $($packagedAssetEvidence.Count)."
+    }
+    $reviewedIcon = $assetCatalog.icon
+    $packagedIconPath = Join-Path $auditRoot (Join-Path 'Assets' ([string]$reviewedIcon.name))
+    if (-not (Test-Path -LiteralPath $packagedIconPath -PathType Leaf)) {
+        throw "MSIX package is missing reviewed desktop icon: $($reviewedIcon.name)"
+    }
+    $packagedIconHash = (Get-FileHash -LiteralPath $packagedIconPath -Algorithm SHA256).Hash
+    if ($packagedIconHash -cne [string]$reviewedIcon.sha256) {
+        throw "MSIX package desktop icon differs from its reviewed hash: $($reviewedIcon.name)"
+    }
+    $packagedIconEvidence = [pscustomobject]@{
+        name = [string]$reviewedIcon.name
+        frames = @($reviewedIcon.frames)
+        sha256 = $packagedIconHash
     }
 
     $forbiddenFiles = @(Get-ChildItem -LiteralPath $auditRoot -Recurse -File | Where-Object {
@@ -250,6 +267,7 @@ try {
         pe_machines = $machineEvidence
         file_associations = $declaredExtensions
         reviewed_visual_assets = $packagedAssetEvidence
+        reviewed_desktop_icon = $packagedIconEvidence
         app_execution_alias = 'zifile.exe'
         shell_extension = [pscustomobject]@{
             clsid = $shellClsid

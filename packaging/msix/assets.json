@@ -1,7 +1,12 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "reviewed_on": "2026-08-28",
   "specification": "https://learn.microsoft.com/en-us/windows/apps/design/iconography/app-icon-construction",
+  "icon": {
+    "name": "ZiFile.ico",
+    "frames": [16, 24, 32, 48, 256],
+    "sha256": "F9A7FC3C76DB0D62BCA55488F50D8053AEA359F834118CB529B556FD1E382516"
+  },
   "assets": [
     {
       "name": "Square150x150Logo.png",

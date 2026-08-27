@@ -24,6 +24,93 @@ foreach ($file in @($catalog, $manifest, $generator)) {
 }
 
 Add-Type -AssemblyName System.Drawing
+
+function Read-BigEndianUInt32 {
+    param(
+        [Parameter(Mandatory)][byte[]]$Bytes,
+        [Parameter(Mandatory)][int]$Offset
+    )
+
+    return [uint32]((([uint32]$Bytes[$Offset]) -shl 24) -bor
+        (([uint32]$Bytes[$Offset + 1]) -shl 16) -bor
+        (([uint32]$Bytes[$Offset + 2]) -shl 8) -bor
+        [uint32]$Bytes[$Offset + 3])
+}
+
+function Get-ReviewedIconEvidence {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][int[]]$ExpectedFrames,
+        [Parameter(Mandatory)][string]$ExpectedHash
+    )
+
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 6 -or [BitConverter]::ToUInt16($bytes, 0) -ne 0 -or
+        [BitConverter]::ToUInt16($bytes, 2) -ne 1) {
+        throw 'ZiFile.ico has an invalid ICONDIR header.'
+    }
+    $count = [int][BitConverter]::ToUInt16($bytes, 4)
+    if ($count -ne $ExpectedFrames.Count) {
+        throw "ZiFile.ico must contain exactly $($ExpectedFrames.Count) frames, found $count."
+    }
+    $directoryEnd = 6 + (16 * $count)
+    if ($bytes.Length -lt $directoryEnd) {
+        throw 'ZiFile.ico has a truncated frame directory.'
+    }
+
+    $frames = @()
+    for ($index = 0; $index -lt $count; $index++) {
+        $entryOffset = 6 + (16 * $index)
+        $width = if ($bytes[$entryOffset] -eq 0) { 256 } else { [int]$bytes[$entryOffset] }
+        $height = if ($bytes[$entryOffset + 1] -eq 0) { 256 } else { [int]$bytes[$entryOffset + 1] }
+        $planes = [BitConverter]::ToUInt16($bytes, $entryOffset + 4)
+        $bitsPerPixel = [BitConverter]::ToUInt16($bytes, $entryOffset + 6)
+        $length = [uint64][BitConverter]::ToUInt32($bytes, $entryOffset + 8)
+        $imageOffset = [uint64][BitConverter]::ToUInt32($bytes, $entryOffset + 12)
+        $expectedSize = $ExpectedFrames[$index]
+        if ($width -ne $expectedSize -or $height -ne $expectedSize) {
+            throw "ZiFile.ico frame $index must be ${expectedSize}x${expectedSize}, found ${width}x${height}."
+        }
+        if ($planes -ne 1 -or $bitsPerPixel -ne 32) {
+            throw "ZiFile.ico frame $expectedSize must use one 32-bit color plane."
+        }
+        if ($imageOffset -lt $directoryEnd -or $length -lt 24 -or
+            ($imageOffset + $length) -gt [uint64]$bytes.Length) {
+            throw "ZiFile.ico frame $expectedSize has invalid payload bounds."
+        }
+        $pngSignature = [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        for ($signatureIndex = 0; $signatureIndex -lt $pngSignature.Count; $signatureIndex++) {
+            if ($bytes[[int]$imageOffset + $signatureIndex] -ne $pngSignature[$signatureIndex]) {
+                throw "ZiFile.ico frame $expectedSize is not PNG encoded."
+            }
+        }
+        $chunkType = [Text.Encoding]::ASCII.GetString($bytes, [int]$imageOffset + 12, 4)
+        $ihdrLength = Read-BigEndianUInt32 -Bytes $bytes -Offset ([int]$imageOffset + 8)
+        $pngWidth = Read-BigEndianUInt32 -Bytes $bytes -Offset ([int]$imageOffset + 16)
+        $pngHeight = Read-BigEndianUInt32 -Bytes $bytes -Offset ([int]$imageOffset + 20)
+        if ($chunkType -cne 'IHDR' -or $ihdrLength -ne 13 -or
+            $pngWidth -ne $expectedSize -or $pngHeight -ne $expectedSize) {
+            throw "ZiFile.ico frame $expectedSize has invalid PNG geometry."
+        }
+        $frames += [pscustomobject]@{
+            size = $expectedSize
+            bits_per_pixel = $bitsPerPixel
+            encoding = 'png'
+            payload_bytes = $length
+        }
+    }
+
+    $actualHash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+    if ($actualHash -cne $ExpectedHash) {
+        throw 'ZiFile.ico hash does not match its reviewed pinned value.'
+    }
+    return [pscustomobject]@{
+        name = [IO.Path]::GetFileName($Path)
+        sha256 = $actualHash
+        frames = $frames
+    }
+}
+
 $expectedGeometry = [ordered]@{
     'Square44x44Logo.png' = 44
     'Square50x50Logo.png' = 50
@@ -51,9 +138,16 @@ foreach ($size in $targetSizes) {
 }
 
 $catalogData = Get-Content -Raw -LiteralPath $catalog | ConvertFrom-Json
-if ($catalogData.schema_version -ne 1 -or
+if ($catalogData.schema_version -ne 2 -or
     $catalogData.specification -cne 'https://learn.microsoft.com/en-us/windows/apps/design/iconography/app-icon-construction') {
     throw 'MSIX asset catalog has an unsupported schema or specification source.'
+}
+$expectedIconFrames = @(16, 24, 32, 48, 256)
+if ([string]$catalogData.icon.name -cne 'ZiFile.ico' -or
+    [string]$catalogData.icon.sha256 -notmatch '^[A-F0-9]{64}$' -or
+    @($catalogData.icon.frames).Count -ne $expectedIconFrames.Count -or
+    (Compare-Object -ReferenceObject $expectedIconFrames -DifferenceObject @($catalogData.icon.frames))) {
+    throw 'MSIX asset catalog has an invalid reviewed Win32 icon definition.'
 }
 $catalogEntries = @($catalogData.assets)
 if ($catalogEntries.Count -ne $expectedGeometry.Count) {
@@ -137,15 +231,10 @@ $iconPath = Join-Path $assets 'ZiFile.ico'
 if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
     throw 'Required desktop icon is missing: ZiFile.ico'
 }
-$icon = [Drawing.Icon]::new($iconPath)
-try {
-    if ($icon.Width -ne 256 -or $icon.Height -ne 256) {
-        throw "ZiFile.ico must expose a 256x256 icon, found $($icon.Width)x$($icon.Height)."
-    }
-}
-finally {
-    $icon.Dispose()
-}
+$iconEvidence = Get-ReviewedIconEvidence `
+    -Path $iconPath `
+    -ExpectedFrames $expectedIconFrames `
+    -ExpectedHash ([string]$catalogData.icon.sha256)
 
 [xml]$manifestXml = Get-Content -Raw -LiteralPath $manifest
 $namespace = [Xml.XmlNamespaceManager]::new($manifestXml.NameTable)
@@ -214,7 +303,9 @@ if ($VerifyGenerator) {
     app_list_target_asset_count = @($assetEvidence | Where-Object name -Match '\.targetsize-').Count
     app_list_target_sizes = $targetSizes
     app_list_theme_variants = $targetForms.Count
-    icon_size = '256x256'
+    icon_frames = $expectedIconFrames
+    icon_sha256 = $iconEvidence.sha256
+    icon = $iconEvidence
     manifest_logo_references = $references.Count
     hashes_pinned = $true
     generator_matches_on_current_host = $generatorMatches

@@ -86,6 +86,7 @@ Goal: distribution, accessibility, localization, and hardening.
 - [x] Add repeatable bilingual keyboard traversal for candidate navigation and the native create form, including disabled-control skipping and foreground-window protection.
 - [x] Cross-build, package, attest and checksum the candidate MSIX and executables for x64 and ARM64.
 - [x] Ship and machine-audit the complete minimum Windows high-DPI icon matrix: Store scale variants, 100/200/400 percent package logos, and all app-list target sizes in default, dark-unplated, and light-unplated forms.
+- [x] Embed and machine-audit a reviewed 16/24/32/48/256 multi-resolution Win32 icon for title bars, Explorer, and shell surfaces.
 - [ ] Run the candidate MSIX and runnable directory on physical ARM64 Windows hardware ([#13](https://github.com/ax2/zifile/issues/13)).
 - [x] Complete equivalent Simplified Chinese and English product documentation.
 - [ ] Complete full keyboard traversal, Narrator, Accessibility Insights, high-contrast, IME and per-monitor DPI verification before replacing Iced ([#14](https://github.com/ax2/zifile/issues/14)).

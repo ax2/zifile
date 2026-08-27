@@ -28,6 +28,10 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Replace the single-resolution desktop icon with a deterministic Win32 ICO
+  containing 16, 24, 32, 48, and 256 pixel 32-bit PNG frames. The reviewed
+  catalog pins its hash, binary validation rejects malformed frame directories,
+  and package audit rechecks the icon after unpacking each MSIX.
 - Add the complete reviewed MSIX high-DPI icon matrix: required Store scale
   variants, 100/200/400 percent application and medium-tile assets, and 14
   taskbar/Start target sizes in default, dark-unplated, and light-unplated forms.

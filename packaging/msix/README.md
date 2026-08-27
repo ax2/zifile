@@ -3,13 +3,17 @@
 `Test-Assets.ps1` validates the complete reviewed Windows icon matrix: 58 PNGs,
 including 11 scale-qualified package assets and all 14 app-list target sizes in
 default, dark-unplated, and light-unplated forms. It also checks exact dimensions,
-alpha, the 256-pixel desktop icon, all required manifest logo references, and the
-pinned SHA-256 catalog in `assets.json`. x64 CI additionally checks byte-for-byte output
+alpha, a five-frame 16/24/32/48/256 Win32 desktop icon, all required manifest logo
+references, and the pinned SHA-256 catalog in `assets.json`. The icon gate parses
+ICONDIR entries, payload bounds, PNG signatures, IHDR dimensions, color planes, and
+bit depth instead of trusting only the largest frame exposed by a platform decoder.
+x64 CI additionally checks byte-for-byte output
 from `Generate-Assets.ps1`; package builds intentionally skip that host-specific
 redraw because System.Drawing rasterization can differ across CPU architectures.
 CI and `Build-Package.ps1` run the portable gate before packaging, and
-`Test-Package.ps1` verifies all 58 reviewed hashes again after unpacking the built
-MSIX, so a stale, blurred, missing, or substituted visual asset cannot enter a candidate.
+`Test-Package.ps1` verifies all 58 reviewed PNG hashes and the desktop ICO hash again
+after unpacking the built MSIX, so a stale, blurred, missing, or substituted visual
+asset cannot enter a candidate.
 
 MSIX is the primary Microsoft Store package target. `Build-Package.ps1` creates
 both a complete runnable Windows directory and an MSIX without making a ZIP

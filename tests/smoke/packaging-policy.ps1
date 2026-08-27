@@ -73,6 +73,9 @@ if (-not $assetResult.validated -or -not $assetResult.hashes_pinned -or
     $assetResult.app_list_target_asset_count -ne 42 -or
     $assetResult.app_list_target_sizes.Count -ne 14 -or
     $assetResult.app_list_theme_variants -ne 3 -or
+    $assetResult.icon_frames.Count -ne 5 -or
+    ($assetResult.icon_frames -join ',') -cne '16,24,32,48,256' -or
+    $assetResult.icon_sha256 -notmatch '^[A-F0-9]{64}$' -or
     $assetResult.manifest_logo_references -ne 4) {
     throw 'MSIX visual assets did not pass completeness, manifest, and reproducibility validation.'
 }
@@ -124,6 +127,18 @@ try {
     Copy-Item `
         -LiteralPath (Join-Path $repoRoot 'packaging\msix\Assets\Square44x44Logo.targetsize-96_altform-lightunplated.png') `
         -Destination $missingQualifiedAsset
+
+    $changedIcon = Join-Path $fixtureAssets 'ZiFile.ico'
+    $changedIconBytes = [IO.File]::ReadAllBytes($changedIcon)
+    $changedIconBytes[4] = 1
+    $changedIconBytes[5] = 0
+    [IO.File]::WriteAllBytes($changedIcon, $changedIconBytes)
+    $null = Get-ExpectedFailure -Pattern 'must contain exactly 5 frames' -Action {
+        & $msixAssets -AssetsDirectory $fixtureAssets -ManifestPath $fixtureManifest
+    }
+    Copy-Item `
+        -LiteralPath (Join-Path $repoRoot 'packaging\msix\Assets\ZiFile.ico') `
+        -Destination $changedIcon -Force
 
     Add-Type -AssemblyName System.Drawing
     $changedAsset = Join-Path $fixtureAssets 'Square50x50Logo.png'
@@ -683,7 +698,10 @@ foreach ($requiredVisualAssetAuditToken in @(
     "Join-Path `$PSScriptRoot 'assets.json'",
     'MSIX package is missing reviewed visual asset',
     'MSIX package visual asset differs from its reviewed hash',
-    'reviewed_visual_assets'
+    'reviewed_visual_assets',
+    'MSIX package is missing reviewed desktop icon',
+    'MSIX package desktop icon differs from its reviewed hash',
+    'reviewed_desktop_icon'
 )) {
     if ($packageAuditSource -notmatch [Regex]::Escape($requiredVisualAssetAuditToken)) {
         throw "The package audit omits reviewed high-DPI asset evidence: $requiredVisualAssetAuditToken"
@@ -1128,6 +1146,8 @@ foreach ($requiredLivePrivacyToken in @(
 [pscustomobject]@{
     schema_version = 1
     parser_checks = $scriptsToParse.Count
+    multiresolution_icon_accepted = $true
+    truncated_icon_directory_rejected = $true
     missing_inputs_rejected = $true
     development_identity_rejected = $true
     unsigned_publisher_rejected = $true

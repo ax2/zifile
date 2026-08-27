@@ -61,6 +61,54 @@ function New-ZiFileBitmap {
     return $bitmap
 }
 
+function New-ZiFileIcon {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $sizes = @(16, 24, 32, 48, 256)
+    $frames = @()
+    foreach ($size in $sizes) {
+        $bitmap = New-ZiFileBitmap -Size $size
+        $memory = [IO.MemoryStream]::new()
+        try {
+            $bitmap.Save($memory, [Drawing.Imaging.ImageFormat]::Png)
+            $frames += ,$memory.ToArray()
+        }
+        finally {
+            $memory.Dispose()
+            $bitmap.Dispose()
+        }
+    }
+
+    $stream = [IO.File]::Create($Path)
+    $writer = [IO.BinaryWriter]::new($stream)
+    try {
+        $writer.Write([uint16]0) # reserved
+        $writer.Write([uint16]1) # icon
+        $writer.Write([uint16]$frames.Count)
+        $offset = 6 + (16 * $frames.Count)
+        for ($index = 0; $index -lt $frames.Count; $index++) {
+            $size = $sizes[$index]
+            $encodedSize = if ($size -eq 256) { [byte]0 } else { [byte]$size }
+            $writer.Write($encodedSize)
+            $writer.Write($encodedSize)
+            $writer.Write([byte]0) # color count
+            $writer.Write([byte]0) # reserved
+            $writer.Write([uint16]1) # planes
+            $writer.Write([uint16]32) # bits per pixel
+            $writer.Write([uint32]$frames[$index].Length)
+            $writer.Write([uint32]$offset)
+            $offset += $frames[$index].Length
+        }
+        foreach ($frame in $frames) {
+            $writer.Write([byte[]]$frame)
+        }
+    }
+    finally {
+        $writer.Dispose()
+        $stream.Dispose()
+    }
+}
+
 $assets = [ordered]@{
     'Square44x44Logo.png' = 44
     'Square50x50Logo.png' = 50
@@ -108,14 +156,7 @@ if (-not $SkipStoreListingAsset) {
     $storeBitmap.Dispose()
 }
 
-$iconBitmap = New-ZiFileBitmap -Size 256
-$iconHandle = $iconBitmap.GetHicon()
-$icon = [System.Drawing.Icon]::FromHandle($iconHandle)
-$stream = [System.IO.File]::Create((Join-Path $OutputDirectory 'ZiFile.ico'))
-$icon.Save($stream)
-$stream.Dispose()
-$icon.Dispose()
-$iconBitmap.Dispose()
+New-ZiFileIcon -Path (Join-Path $OutputDirectory 'ZiFile.ico')
 
 Write-Host "Generated ZiFile package assets in $OutputDirectory"
 if (-not $SkipStoreListingAsset) {

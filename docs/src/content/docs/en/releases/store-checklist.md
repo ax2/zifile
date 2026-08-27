@@ -7,6 +7,7 @@ description: External distribution gates, required material, and repeatable chec
 
 - x64/ARM64 runnable directories, standalone EXEs, and MSIX builds.
 - The MSIX contains Microsoft's complete minimum high-DPI icon matrix: 58 hash-pinned PNGs covering Store scale variants, 100/200/400 percent 44px and 150px resources, and 14 target sizes in default, dark-unplated, and light-unplated forms for taskbar, Start, and Search. The post-build package audit rechecks every hash from the unpacked candidate.
+- The desktop EXE and Explorer shell entry share one reviewed multi-resolution Win32 ICO with 16, 24, 32, 48, and 256 pixel 32-bit PNG frames. Machine gates verify generation, directory structure, dimensions, and the unpacked package hash.
 - Release has removed PFX and includes protected DigiCert Binary Signing simple signing, operating-system verification, timestamp enforcement, and post-signing audit; a real-account rehearsal still awaits external credentials.
 - `Test-PartnerCenterIdentity.ps1` rejects a missing or partial identity tuple, malformed Name, `.Dev`, unsigned OID, invalid X.500 Publisher, and invalid Publisher Display Name before a tag or real-signing rehearsal compiles. All three formal values must come from Partner Center.
 - SHA-256 files, CycloneDX JSON SBOMs, and GitHub build provenance.
