@@ -28,6 +28,11 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Add the complete reviewed MSIX high-DPI icon matrix: required Store scale
+  variants, 100/200/400 percent application and medium-tile assets, and 14
+  taskbar/Start target sizes in default, dark-unplated, and light-unplated forms.
+  CI pins all 58 PNG hashes, verifies x64 generator output, rejects missing or
+  modified qualified resources, and rechecks the assets inside built packages.
 - Add a reviewed 300x300 Microsoft Store app tile listing icon with a
   machine-readable manifest, pinned hash, generator check, and negative policy
   fixtures for missing, resized, or modified assets.

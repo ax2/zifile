@@ -61,12 +61,35 @@ function New-ZiFileBitmap {
     return $bitmap
 }
 
-$assets = @{
+$assets = [ordered]@{
     'Square44x44Logo.png' = 44
     'Square50x50Logo.png' = 50
     'Square150x150Logo.png' = 150
     'Square310x310Logo.png' = 310
     'StoreLogo.png' = 50
+
+    # Microsoft recommends 100%, 200%, and 400% package visual assets for
+    # Square44x44Logo and Square150x150Logo. StoreLogo requires all five
+    # published Store scale variants.
+    'Square44x44Logo.scale-100.png' = 44
+    'Square44x44Logo.scale-200.png' = 88
+    'Square44x44Logo.scale-400.png' = 176
+    'Square150x150Logo.scale-100.png' = 150
+    'Square150x150Logo.scale-200.png' = 300
+    'Square150x150Logo.scale-400.png' = 600
+    'StoreLogo.scale-100.png' = 50
+    'StoreLogo.scale-125.png' = 63
+    'StoreLogo.scale-150.png' = 75
+    'StoreLogo.scale-200.png' = 100
+    'StoreLogo.scale-400.png' = 200
+}
+
+$appListTargetSizes = @(16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256)
+$appListForms = @('', '_altform-unplated', '_altform-lightunplated')
+foreach ($size in $appListTargetSizes) {
+    foreach ($form in $appListForms) {
+        $assets["Square44x44Logo.targetsize-$size$form.png"] = $size
+    }
 }
 
 foreach ($asset in $assets.GetEnumerator()) {

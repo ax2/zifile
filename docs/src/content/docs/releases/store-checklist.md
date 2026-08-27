@@ -6,6 +6,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 ## 自动化已具备
 
 - x64 与 ARM64 的完整可运行目录、独立 EXE 和 MSIX 构建。
+- MSIX 已包含微软要求的完整高 DPI 图标最小集合：58 张经哈希锁定的 PNG，覆盖 Store 多缩放资源、44/150 基础图的 100/200/400% 版本，以及任务栏、开始菜单和搜索使用的 14 个 target size × 默认/深色无背板/浅色无背板三套资源；构建后审计会从成品包重新核对全部哈希。
 - Release 已移除 PFX，具备受保护的 DigiCert Binary Signing simple-signing、签后系统验签、时间戳检查和签后审计路径；真实账号演练仍待外部凭据。
 - `Test-PartnerCenterIdentity.ps1` 在标签/真实签名演练编译前拒绝缺失、部分三元组、非法 Name、`.Dev`、未签名 OID、无效 X.500 Publisher 和非法 Publisher Display Name；三个正式值仍必须由 Partner Center 提供。
 - SHA-256、CycloneDX JSON SBOM 和 GitHub 构建来源证明。
@@ -37,7 +38,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 2. 将 Partner Center 分配的 Package Identity Name、Publisher 与开发者账户 Publisher Display Name 原样写入 GitHub Repository Variables。
 3. 完成 DigiCert 组织验证与代码签名证书配置，在受保护 Environment 配置 Host、Keypair Alias、API Key 和客户端认证材料，执行双架构手动签名演练；Store 分发包由 Microsoft Store 签名。
 4. 用正式 Identity 重建 x64 与 ARM64 包，分别验证安装、启动、文件关联、升级和卸载。
-5. 在当前用户的管理员交互式会话中运行 Windows App Certification Kit，并完成键盘、讲述人、高对比度、DPI 与中文输入法检查。
+5. 在当前用户的管理员交互式会话中运行 Windows App Certification Kit，并在 100%、150%、200% 和 400% 缩放下检查任务栏、开始菜单、搜索、文件关联图标，再完成键盘、讲述人、高对比度与中文输入法检查。
 6. 复核已准备的双语商店说明、隐私说明和认证备注，部署公开隐私页，采集正式候选包的双语桌面截图，并填写年龄分级与市场。
 7. 上传通过验证的 MSIX 包并提交认证；公开 Release 附带已通过本地签后一致性门禁的 WinGet 清单，再运行官方 `winget validate` 并提交社区仓库 PR。
 

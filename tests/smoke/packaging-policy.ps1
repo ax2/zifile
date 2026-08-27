@@ -69,7 +69,11 @@ function Get-ExpectedFailure {
 $assetResult = & $msixAssets -VerifyGenerator | ConvertFrom-Json
 if (-not $assetResult.validated -or -not $assetResult.hashes_pinned -or
     -not $assetResult.generator_matches_on_current_host -or
-    $assetResult.png_count -ne 5 -or $assetResult.manifest_logo_references -ne 4) {
+    $assetResult.png_count -ne 58 -or $assetResult.scale_asset_count -ne 11 -or
+    $assetResult.app_list_target_asset_count -ne 42 -or
+    $assetResult.app_list_target_sizes.Count -ne 14 -or
+    $assetResult.app_list_theme_variants -ne 3 -or
+    $assetResult.manifest_logo_references -ne 4) {
     throw 'MSIX visual assets did not pass completeness, manifest, and reproducibility validation.'
 }
 $storeAssetResult = & $storeListingAssetSmoke | ConvertFrom-Json
@@ -112,6 +116,15 @@ try {
     }
 
     Copy-Item -LiteralPath (Join-Path $repoRoot 'packaging\msix\AppxManifest.xml') -Destination $fixtureManifest -Force
+    $missingQualifiedAsset = Join-Path $fixtureAssets 'Square44x44Logo.targetsize-96_altform-lightunplated.png'
+    Remove-Item -LiteralPath $missingQualifiedAsset -Force
+    $null = Get-ExpectedFailure -Pattern 'incomplete or unexpected PNG set' -Action {
+        & $msixAssets -AssetsDirectory $fixtureAssets -ManifestPath $fixtureManifest
+    }
+    Copy-Item `
+        -LiteralPath (Join-Path $repoRoot 'packaging\msix\Assets\Square44x44Logo.targetsize-96_altform-lightunplated.png') `
+        -Destination $missingQualifiedAsset
+
     Add-Type -AssemblyName System.Drawing
     $changedAsset = Join-Path $fixtureAssets 'Square50x50Logo.png'
     $loadedBitmap = [Drawing.Bitmap]::new($changedAsset)
@@ -666,6 +679,16 @@ foreach ($requiredExtractAuditToken in @('$extractShellClsid', 'extract_item_typ
         throw "The package audit omits Explorer extract evidence: $requiredExtractAuditToken"
     }
 }
+foreach ($requiredVisualAssetAuditToken in @(
+    "Join-Path `$PSScriptRoot 'assets.json'",
+    'MSIX package is missing reviewed visual asset',
+    'MSIX package visual asset differs from its reviewed hash',
+    'reviewed_visual_assets'
+)) {
+    if ($packageAuditSource -notmatch [Regex]::Escape($requiredVisualAssetAuditToken)) {
+        throw "The package audit omits reviewed high-DPI asset evidence: $requiredVisualAssetAuditToken"
+    }
+}
 $shellSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'apps\zifile-shell\src\lib.rs')
 foreach ($requiredExtractShellToken in @(
     'EXTRACT_COMMAND_CLSID',
@@ -1166,6 +1189,9 @@ foreach ($requiredLivePrivacyToken in @(
     malformed_msix_asset_rejected = $true
     missing_manifest_asset_rejected = $true
     pinned_asset_drift_rejected = $true
+    missing_qualified_msix_asset_rejected = $true
+    high_dpi_msix_asset_matrix_locked = $true
+    packaged_visual_asset_hashes_wired = $true
     store_listing_asset_validated = $true
     malformed_store_listing_assets_rejected = $true
 } | ConvertTo-Json

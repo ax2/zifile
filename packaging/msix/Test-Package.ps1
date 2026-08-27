@@ -201,6 +201,30 @@ try {
         }
     }
 
+    $assetCatalogPath = Join-Path $PSScriptRoot 'assets.json'
+    if (-not (Test-Path -LiteralPath $assetCatalogPath -PathType Leaf)) {
+        throw 'The reviewed MSIX asset catalog is unavailable during package audit.'
+    }
+    $assetCatalog = Get-Content -Raw -LiteralPath $assetCatalogPath | ConvertFrom-Json
+    $packagedAssetEvidence = @()
+    foreach ($asset in @($assetCatalog.assets)) {
+        $packagedAssetPath = Join-Path $auditRoot (Join-Path 'Assets' ([string]$asset.name))
+        if (-not (Test-Path -LiteralPath $packagedAssetPath -PathType Leaf)) {
+            throw "MSIX package is missing reviewed visual asset: $($asset.name)"
+        }
+        $packagedAssetHash = (Get-FileHash -LiteralPath $packagedAssetPath -Algorithm SHA256).Hash
+        if ($packagedAssetHash -cne [string]$asset.sha256) {
+            throw "MSIX package visual asset differs from its reviewed hash: $($asset.name)"
+        }
+        $packagedAssetEvidence += [pscustomobject]@{
+            name = [string]$asset.name
+            sha256 = $packagedAssetHash
+        }
+    }
+    if ($packagedAssetEvidence.Count -ne 58) {
+        throw "MSIX package must contain 58 reviewed PNG assets, found $($packagedAssetEvidence.Count)."
+    }
+
     $forbiddenFiles = @(Get-ChildItem -LiteralPath $auditRoot -Recurse -File | Where-Object {
         $_.Extension -in @('.pfx', '.p12', '.pem', '.key', '.zip')
     })
@@ -225,6 +249,7 @@ try {
         minimum_windows_version = $targetFamily.MinVersion
         pe_machines = $machineEvidence
         file_associations = $declaredExtensions
+        reviewed_visual_assets = $packagedAssetEvidence
         app_execution_alias = 'zifile.exe'
         shell_extension = [pscustomobject]@{
             clsid = $shellClsid

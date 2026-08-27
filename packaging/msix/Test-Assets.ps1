@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$AssetsDirectory = (Join-Path $PSScriptRoot 'Assets'),
+    [string]$AssetCatalogPath = (Join-Path $PSScriptRoot 'assets.json'),
     [string]$ManifestPath = (Join-Path $PSScriptRoot 'AppxManifest.xml'),
     [string]$GeneratorPath = (Join-Path $PSScriptRoot 'Generate-Assets.ps1'),
     [switch]$VerifyGenerator
@@ -10,24 +11,82 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $assets = [IO.Path]::GetFullPath($AssetsDirectory)
+$catalog = [IO.Path]::GetFullPath($AssetCatalogPath)
 $manifest = [IO.Path]::GetFullPath($ManifestPath)
 $generator = [IO.Path]::GetFullPath($GeneratorPath)
 if (-not (Test-Path -LiteralPath $assets -PathType Container)) {
     throw "MSIX asset directory does not exist: $assets"
 }
-foreach ($file in @($manifest, $generator)) {
+foreach ($file in @($catalog, $manifest, $generator)) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
         throw "Required MSIX asset input does not exist: $file"
     }
 }
 
 Add-Type -AssemblyName System.Drawing
-$expectedPngs = [ordered]@{
-    'Square44x44Logo.png' = @{ Size = 44; Sha256 = '978CB7376053C8206AEE12344A5EEBB79C6BCCA86BA5B8847873AF4F80F276CF' }
-    'Square50x50Logo.png' = @{ Size = 50; Sha256 = 'EAD53C9C242F8A0AD22552747BC3129DA6CB4FDD7184FA9295178559EF3EA948' }
-    'StoreLogo.png' = @{ Size = 50; Sha256 = 'EAD53C9C242F8A0AD22552747BC3129DA6CB4FDD7184FA9295178559EF3EA948' }
-    'Square150x150Logo.png' = @{ Size = 150; Sha256 = '1439408F47BE6F1882A59B6A92460F1CC45DB181EED3EBA88A1E002072277BA3' }
-    'Square310x310Logo.png' = @{ Size = 310; Sha256 = '38088D8B5AF1A70B49C5FC7F26A101163167CD6EF54F29E49617B4908C6571C6' }
+$expectedGeometry = [ordered]@{
+    'Square44x44Logo.png' = 44
+    'Square50x50Logo.png' = 50
+    'StoreLogo.png' = 50
+    'Square150x150Logo.png' = 150
+    'Square310x310Logo.png' = 310
+    'Square44x44Logo.scale-100.png' = 44
+    'Square44x44Logo.scale-200.png' = 88
+    'Square44x44Logo.scale-400.png' = 176
+    'Square150x150Logo.scale-100.png' = 150
+    'Square150x150Logo.scale-200.png' = 300
+    'Square150x150Logo.scale-400.png' = 600
+    'StoreLogo.scale-100.png' = 50
+    'StoreLogo.scale-125.png' = 63
+    'StoreLogo.scale-150.png' = 75
+    'StoreLogo.scale-200.png' = 100
+    'StoreLogo.scale-400.png' = 200
+}
+$targetSizes = @(16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256)
+$targetForms = @('', '_altform-unplated', '_altform-lightunplated')
+foreach ($size in $targetSizes) {
+    foreach ($form in $targetForms) {
+        $expectedGeometry["Square44x44Logo.targetsize-$size$form.png"] = $size
+    }
+}
+
+$catalogData = Get-Content -Raw -LiteralPath $catalog | ConvertFrom-Json
+if ($catalogData.schema_version -ne 1 -or
+    $catalogData.specification -cne 'https://learn.microsoft.com/en-us/windows/apps/design/iconography/app-icon-construction') {
+    throw 'MSIX asset catalog has an unsupported schema or specification source.'
+}
+$catalogEntries = @($catalogData.assets)
+if ($catalogEntries.Count -ne $expectedGeometry.Count) {
+    throw "MSIX asset catalog must contain exactly $($expectedGeometry.Count) reviewed PNG entries."
+}
+$catalogByName = @{}
+foreach ($entry in $catalogEntries) {
+    if ([string]::IsNullOrWhiteSpace($entry.name) -or $catalogByName.ContainsKey([string]$entry.name)) {
+        throw "MSIX asset catalog contains an empty or duplicate name: $($entry.name)"
+    }
+    $catalogByName[[string]$entry.name] = $entry
+}
+
+$expectedPngs = [ordered]@{}
+foreach ($geometry in $expectedGeometry.GetEnumerator()) {
+    if (-not $catalogByName.ContainsKey($geometry.Key)) {
+        throw "MSIX asset catalog omits required qualified asset: $($geometry.Key)"
+    }
+    $entry = $catalogByName[$geometry.Key]
+    if ($entry.width -ne $geometry.Value -or $entry.height -ne $geometry.Value -or
+        [string]$entry.sha256 -notmatch '^[A-F0-9]{64}$') {
+        throw "MSIX asset catalog has invalid geometry or SHA-256 for $($geometry.Key)."
+    }
+    $expectedPngs[$geometry.Key] = @{ Size = $geometry.Value; Sha256 = [string]$entry.sha256 }
+}
+$unexpectedCatalogEntries = @($catalogEntries | Where-Object { -not $expectedGeometry.Contains([string]$_.name) })
+if ($unexpectedCatalogEntries.Count -gt 0) {
+    throw "MSIX asset catalog contains unexpected entries: $($unexpectedCatalogEntries.name -join ', ')"
+}
+$actualPngNames = @(Get-ChildItem -LiteralPath $assets -File -Filter '*.png' | ForEach-Object Name)
+$unexpectedPngs = @($actualPngNames | Where-Object { -not $expectedGeometry.Contains($_) })
+if ($actualPngNames.Count -ne $expectedGeometry.Count -or $unexpectedPngs.Count -gt 0) {
+    throw "MSIX asset directory contains an incomplete or unexpected PNG set: $($unexpectedPngs -join ', ')"
 }
 $assetEvidence = @()
 foreach ($entry in $expectedPngs.GetEnumerator()) {
@@ -148,9 +207,13 @@ if ($VerifyGenerator) {
 }
 
 [pscustomobject]@{
-    schema_version = 1
+    schema_version = 2
     validated = $true
     png_count = $assetEvidence.Count
+    scale_asset_count = @($assetEvidence | Where-Object name -Match '\.scale-').Count
+    app_list_target_asset_count = @($assetEvidence | Where-Object name -Match '\.targetsize-').Count
+    app_list_target_sizes = $targetSizes
+    app_list_theme_variants = $targetForms.Count
     icon_size = '256x256'
     manifest_logo_references = $references.Count
     hashes_pinned = $true

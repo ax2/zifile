@@ -6,6 +6,7 @@ description: External distribution gates, required material, and repeatable chec
 ## Automated foundation
 
 - x64/ARM64 runnable directories, standalone EXEs, and MSIX builds.
+- The MSIX contains Microsoft's complete minimum high-DPI icon matrix: 58 hash-pinned PNGs covering Store scale variants, 100/200/400 percent 44px and 150px resources, and 14 target sizes in default, dark-unplated, and light-unplated forms for taskbar, Start, and Search. The post-build package audit rechecks every hash from the unpacked candidate.
 - Release has removed PFX and includes protected DigiCert Binary Signing simple signing, operating-system verification, timestamp enforcement, and post-signing audit; a real-account rehearsal still awaits external credentials.
 - `Test-PartnerCenterIdentity.ps1` rejects a missing or partial identity tuple, malformed Name, `.Dev`, unsigned OID, invalid X.500 Publisher, and invalid Publisher Display Name before a tag or real-signing rehearsal compiles. All three formal values must come from Partner Center.
 - SHA-256 files, CycloneDX JSON SBOMs, and GitHub build provenance.
@@ -36,7 +37,7 @@ These items are also tracked in machine-readable [`release/readiness.json`](http
 2. Store the assigned Package Identity Name, Publisher, and developer-account Publisher Display Name verbatim as GitHub Repository Variables.
 3. Complete DigiCert organization validation and certificate provisioning; configure host, keypair alias, API key, and client-authentication material in the protected Environment and run a dual-architecture manual signing rehearsal. Store distribution is signed by Microsoft.
 4. Rebuild both architectures with official identity and test install, launch, association, upgrade, repair, and uninstall.
-5. Run WACK in an administrator's interactive session and complete keyboard, Narrator, high-contrast, DPI, and Chinese IME checks.
+5. Run WACK in an administrator's interactive session; inspect taskbar, Start, Search, and association icons at 100%, 150%, 200%, and 400% scale; then complete keyboard, Narrator, high-contrast, and Chinese IME checks.
 6. Review the prepared bilingual listing copy, privacy statements, and certification notes; deploy the public privacy pages, capture localized desktop screenshots from the signed candidate, and complete age rating and markets.
 7. Submit validated MSIX packages; the public Release includes the locally post-signing-verified WinGet candidate, which must then pass official `winget validate` before the community-repository PR is submitted.
 
