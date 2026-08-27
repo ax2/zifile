@@ -192,7 +192,7 @@ enum Message {
     KeyboardShortcut(Shortcut),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Shortcut {
     Open,
     Create,
@@ -688,22 +688,36 @@ fn ui_event(
             repeat: false,
             ..
         }) if status == iced::event::Status::Ignored => {
-            if key == iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape) {
-                return Some(Message::KeyboardShortcut(Shortcut::Cancel));
-            }
-            if key == iced::keyboard::Key::Named(iced::keyboard::key::Named::F1) {
-                return Some(Message::KeyboardShortcut(Shortcut::About));
-            }
-            if !modifiers.control() {
-                return None;
-            }
-            match key.to_latin(physical_key) {
-                Some('o') => Some(Message::KeyboardShortcut(Shortcut::Open)),
-                Some('n') => Some(Message::KeyboardShortcut(Shortcut::Create)),
-                Some('a') => Some(Message::KeyboardShortcut(Shortcut::SelectAll)),
-                _ => None,
-            }
+            default_shortcut(&key, physical_key, modifiers).map(Message::KeyboardShortcut)
         }
+        _ => None,
+    }
+}
+
+fn default_shortcut(
+    key: &iced::keyboard::Key,
+    physical_key: iced::keyboard::key::Physical,
+    modifiers: iced::keyboard::Modifiers,
+) -> Option<Shortcut> {
+    if modifiers == iced::keyboard::Modifiers::NONE {
+        if *key == iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape) {
+            return Some(Shortcut::Cancel);
+        }
+        if *key == iced::keyboard::Key::Named(iced::keyboard::key::Named::F1) {
+            return Some(Shortcut::About);
+        }
+        return None;
+    }
+    if modifiers != iced::keyboard::Modifiers::CTRL {
+        return None;
+    }
+    match key
+        .to_latin(physical_key)
+        .map(|value| value.to_ascii_lowercase())
+    {
+        Some('o') => Some(Shortcut::Open),
+        Some('n') => Some(Shortcut::Create),
+        Some('a') => Some(Shortcut::SelectAll),
         _ => None,
     }
 }
@@ -1606,6 +1620,40 @@ mod tests {
         assert!(source.contains("https://github.com/ax2/zifile"));
         assert!(source.contains("key::Named::F1"));
         assert!(source.contains("KeyboardShortcut(Shortcut::About)"));
+    }
+
+    #[test]
+    fn default_shortcuts_require_exact_modifiers() {
+        use iced::keyboard::Key;
+        use iced::keyboard::Modifiers;
+        use iced::keyboard::key::{Code, Named, NativeCode, Physical};
+
+        let key_n = Key::Character("n".into());
+        let physical_n = Physical::Code(Code::KeyN);
+        assert_eq!(
+            default_shortcut(&key_n, physical_n, Modifiers::CTRL),
+            Some(Shortcut::Create)
+        );
+        assert_eq!(
+            default_shortcut(&key_n, physical_n, Modifiers::CTRL | Modifiers::SHIFT),
+            None
+        );
+        assert_eq!(
+            default_shortcut(
+                &Key::Named(Named::F1),
+                Physical::Unidentified(NativeCode::Unidentified),
+                Modifiers::ALT
+            ),
+            None
+        );
+        assert_eq!(
+            default_shortcut(
+                &Key::Named(Named::Escape),
+                Physical::Unidentified(NativeCode::Unidentified),
+                Modifiers::NONE
+            ),
+            Some(Shortcut::Cancel)
+        );
     }
 
     #[test]

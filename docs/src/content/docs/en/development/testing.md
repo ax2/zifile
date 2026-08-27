@@ -74,6 +74,8 @@ The root keyboard handler prevents the default Escape action only when an active
 
 Shortcut matching ignores lock states such as Caps Lock and Num Lock but requires every other modifier to match the published contract exactly. Consequently, `Ctrl+Shift+N`, `Alt+F1`, and `Ctrl+Shift+A` are not downgraded to `Ctrl+N`, `F1`, or `Ctrl+A`. Regression coverage includes positive combinations, lock-state compatibility, and Shift/Alt negative cases.
 
+The default Iced desktop follows the same exact functional-modifier rule for `Ctrl+O`, `Ctrl+N`, archive-scoped `Ctrl+A`, `F1`, and `Escape`. Its modifier type contains only Shift, Control, Alt, and Logo, so unmodified commands require `NONE` and Control commands require exactly `CTRL`; a pure event-mapping regression covers positive and extra-modifier cases.
+
 When the accessible candidate changes between Home, Archive, Create, and About, it moves focus to the stable main region and labels that region with the active page heading. The effect is guarded by the page identity, so progress polling, queue updates, filtering, selection, and other same-page renders do not steal focus. Source and unit regressions lock the page-to-heading mapping and focus trigger; real Narrator and foreground keyboard validation remain required.
 
 The accessible candidate uses a two-tone focus ring in its normal dark and light themes: the outer tone follows the theme while an opposing inner tone keeps focus distinguishable on both content surfaces and cyan active controls. Windows forced-colors mode uses `Highlight` and `Canvas`. A Rust source regression locks all three branches and the two-layer wiring; a real foreground keyboard and high-contrast pass is still required for visual evidence.

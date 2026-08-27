@@ -10,6 +10,8 @@ All notable changes to ZiFile are documented here. The format follows
 
 - Move keyboard focus to the labelled main region after accessible-desktop page
   changes, while leaving focus untouched during progress and status-only renders.
+- Require exact modifier combinations for default Iced desktop shortcuts so
+  extra Shift, Alt, or Windows modifiers retain their native behavior.
 - Match accessible-desktop shortcuts against their exact non-lock modifiers so
   combinations such as `Ctrl+Shift+N`, `Alt+F1`, and `Ctrl+Shift+A` retain their
   native behavior instead of invoking ZiFile's simpler declared commands.
