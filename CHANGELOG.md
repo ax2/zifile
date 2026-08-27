@@ -8,6 +8,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Fixed
 
+- Expose every handled accessible-desktop shortcut (`Ctrl+O`, `Ctrl+N`, `F1`,
+  `Escape`, and archive-scoped `Ctrl+A`) on its corresponding semantic control
+  instead of leaving open/create shortcuts discoverable only from documentation.
 - Use a two-tone, theme-aware keyboard focus indicator in the accessible desktop
   candidate so focus remains visible on both light surfaces and cyan active controls,
   while forced-colors mode continues to use Windows system colors.

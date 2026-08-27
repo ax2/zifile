@@ -45,6 +45,11 @@ use zifile_desktop::startup::{self, StartupRequest};
 const STYLES: &str = include_str!("accessible_ui.css");
 const ARCHIVE_FILTER_LIVE: &str = "off";
 const OPERATION_PROGRESS_LIVE: &str = "off";
+const ARIA_SHORTCUT_OPEN: &str = "Control+O";
+const ARIA_SHORTCUT_CREATE: &str = "Control+N";
+const ARIA_SHORTCUT_ABOUT: &str = "F1";
+const ARIA_SHORTCUT_CANCEL: &str = "Escape";
+const ARIA_SHORTCUT_SELECT_ALL: &str = "Control+A";
 const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src dioxus: ws://127.0.0.1:* http://dioxus.index.html https://dioxus.index.html ipc:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
 const CREATE_FORMATS: [ArchiveFormat; 13] = [
     ArchiveFormat::Zip,
@@ -285,8 +290,8 @@ fn App() -> Element {
                 nav {
                     NavButton { label: locale.text(Text::Home), active: page == Page::Home, onclick: move |_| state.write().page = Page::Home }
                     NavButton { label: locale.text(Text::Archive), active: page == Page::Archive, onclick: move |_| state.write().page = Page::Archive }
-                    NavButton { label: locale.text(Text::Create), active: page == Page::Create, onclick: move |_| state.write().page = Page::Create }
-                    button { class: if page == Page::About { "nav-item active" } else { "nav-item" }, "aria-current": if page == Page::About { "page" } else { "false" }, "aria-keyshortcuts": "F1", onclick: move |_| state.write().page = Page::About, {locale.text(Text::About)} }
+                    button { class: if page == Page::Create { "nav-item active" } else { "nav-item" }, "aria-current": if page == Page::Create { "page" } else { "false" }, "aria-keyshortcuts": ARIA_SHORTCUT_CREATE, onclick: move |_| state.write().page = Page::Create, {locale.text(Text::Create)} }
+                    button { class: if page == Page::About { "nav-item active" } else { "nav-item" }, "aria-current": if page == Page::About { "page" } else { "false" }, "aria-keyshortcuts": ARIA_SHORTCUT_ABOUT, onclick: move |_| state.write().page = Page::About, {locale.text(Text::About)} }
                 }
                 div { class: "preferences",
                     button { onclick: move |_| { let mut value = state.write(); value.dark = !value.dark; save_settings(&value); },
@@ -312,7 +317,7 @@ fn App() -> Element {
                         progress { max: "100", value: "{percent}", "aria-label": choose(locale, "Operation progress", "操作进度"), "aria-valuetext": progress_text, "aria-describedby": "operation-status", "aria-live": OPERATION_PROGRESS_LIVE }
                     }
                     button { class: "queue-clear", disabled: queued_count == 0, "aria-describedby": "operation-queue-summary", onclick: move |_| clear_queued(state), {choose(locale, "Clear queue", "清空队列")} }
-                    button { disabled: !view.busy, "aria-describedby": "operation-status", "aria-keyshortcuts": "Escape", onclick: move |_| cancel_operation(state), {locale.text(Text::Cancel)} }
+                    button { disabled: !view.busy, "aria-describedby": "operation-status", "aria-keyshortcuts": ARIA_SHORTCUT_CANCEL, onclick: move |_| cancel_operation(state), {locale.text(Text::Cancel)} }
                 }
             }
         }
@@ -332,9 +337,9 @@ fn Home(mut state: Signal<UiState>) -> Element {
         h2 { id: "home-title", {locale.text(Text::Hero)} } p { class: "lead", {locale.text(Text::HeroSub)} }
         div { class: "actions",
             article { h3 { {locale.text(Text::OpenArchive)} } p { {locale.text(Text::OpenDescription)} }
-                button { class: "primary", onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} } }
+                button { class: "primary", "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} } }
             article { h3 { {locale.text(Text::CreateArchive)} } p { {locale.text(Text::CreateDescription)} }
-                button { class: "primary", onclick: move |_| state.write().page = Page::Create, {locale.text(Text::StartCreating)} } }
+                button { class: "primary", "aria-keyshortcuts": ARIA_SHORTCUT_CREATE, onclick: move |_| state.write().page = Page::Create, {locale.text(Text::StartCreating)} } }
         }
         section { class: "privacy", "aria-labelledby": "privacy-title", h3 { id: "privacy-title", {locale.text(Text::Privacy)} } p { {locale.text(Text::PrivacyDescription)} } }
     } }
@@ -386,7 +391,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
             }
             div { class: "button-row",
                 button { class: "primary", disabled: pending.is_none() || view.busy, onclick: move |_| reload_archive(state), {locale.text(Text::UnlockArchive)} }
-                button { onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} }
+                button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} }
             }
         } };
     };
@@ -429,7 +434,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
 
     rsx! { section { class: "archive-page", "aria-labelledby": "archive-title",
         div { class: "page-heading", div { h2 { id: "archive-title", {archive_name} } p { "{archive.format} · {archive.entries.len()} · {format_bytes(archive.total_size)}" } }
-            div { class: "button-row", button { onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
+            div { class: "button-row", button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
                 button { onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} } } }
         div { class: "toolbar",
             label { span { {locale.text(Text::PasswordEncrypted)} } input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() } }
@@ -452,7 +457,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
             }
         }
         div { class: "selection-bar",
-            label { input { r#type: "checkbox", checked: all_selected, "aria-label": select_all_label, "aria-describedby": "archive-selection-summary", "aria-keyshortcuts": "Control+A", onchange: move |event| select_all(state, event.checked()) }
+            label { input { r#type: "checkbox", checked: all_selected, "aria-label": select_all_label, "aria-describedby": "archive-selection-summary", "aria-keyshortcuts": ARIA_SHORTCUT_SELECT_ALL, onchange: move |event| select_all(state, event.checked()) }
                 output { id: "archive-selection-summary", role: "status", "aria-live": "polite", "aria-atomic": "true", {selection_summary.clone()} }
             }
             div { class: "button-row",
@@ -468,7 +473,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 button { "aria-current": if path == view.entry_directory { "page" } else { "false" }, onclick: move |_| navigate_archive_directory(state, path.clone()), {label} }
             }
         }
-        div { class: "table-wrap", tabindex: "0", role: "region", "aria-label": choose(locale, "Archive entries", "压缩文件项目"), "aria-describedby": "archive-selection-summary archive-filter-summary", "aria-keyshortcuts": "Control+A",
+        div { class: "table-wrap", tabindex: "0", role: "region", "aria-label": choose(locale, "Archive entries", "压缩文件项目"), "aria-describedby": "archive-selection-summary archive-filter-summary", "aria-keyshortcuts": ARIA_SHORTCUT_SELECT_ALL,
             onkeydown: move |event: KeyboardEvent| {
                 let control = event.modifiers().contains(Modifiers::CONTROL);
                 if !event.is_composing()
@@ -1650,7 +1655,7 @@ mod tests {
         assert!(source.contains("dt { {locale.text(Text::Version)} }"));
         assert!(source.contains("dd { {env!(\"CARGO_PKG_VERSION\")} }"));
         assert!(source.contains("https://github.com/ax2/zifile"));
-        assert!(source.contains("\"aria-keyshortcuts\": \"F1\""));
+        assert!(source.contains("\"aria-keyshortcuts\": ARIA_SHORTCUT_ABOUT"));
         assert!(STYLES.contains(".about-details"));
     }
 
@@ -1887,6 +1892,29 @@ mod tests {
         assert!(is_select_all_shortcut("A", true));
         assert!(!is_select_all_shortcut("a", false));
         assert!(!is_select_all_shortcut("o", true));
+    }
+
+    #[test]
+    fn handled_shortcuts_are_exposed_to_assistive_technology() {
+        assert_eq!(ARIA_SHORTCUT_OPEN, "Control+O");
+        assert_eq!(ARIA_SHORTCUT_CREATE, "Control+N");
+        assert_eq!(ARIA_SHORTCUT_ABOUT, "F1");
+        assert_eq!(ARIA_SHORTCUT_CANCEL, "Escape");
+        assert_eq!(ARIA_SHORTCUT_SELECT_ALL, "Control+A");
+
+        let source = include_str!("accessible_main.rs");
+        for shortcut in [
+            "ARIA_SHORTCUT_OPEN",
+            "ARIA_SHORTCUT_CREATE",
+            "ARIA_SHORTCUT_ABOUT",
+            "ARIA_SHORTCUT_CANCEL",
+            "ARIA_SHORTCUT_SELECT_ALL",
+        ] {
+            assert!(
+                source.contains(&format!("\"aria-keyshortcuts\": {shortcut}")),
+                "missing semantic shortcut metadata for {shortcut}"
+            );
+        }
     }
 
     #[test]
