@@ -221,6 +221,7 @@ impl ProcessJob {
             SetInformationJobObject,
         };
 
+        // SAFETY: null security/name pointers request an unnamed Job Object with default security.
         let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
         if handle.is_null() {
             let _ = child.kill();
@@ -229,12 +230,14 @@ impl ProcessJob {
                 std::io::Error::last_os_error()
             ));
         }
+        // SAFETY: this Windows POD structure permits an all-zero initial state before fields are set.
         let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { zeroed() };
         info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
             | JOB_OBJECT_LIMIT_PROCESS_MEMORY
             | JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
         info.BasicLimitInformation.ActiveProcessLimit = 1;
         info.ProcessMemoryLimit = 4 * 1024 * 1024 * 1024usize;
+        // SAFETY: `handle` is live and the pointer/size describe the initialized structure exactly.
         let configured = unsafe {
             SetInformationJobObject(
                 handle,
@@ -243,9 +246,12 @@ impl ProcessJob {
                 size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
             )
         };
-        let assigned = configured != 0
-            && unsafe { AssignProcessToJobObject(handle, child.as_raw_handle() as _) } != 0;
+        let assigned = configured != 0 && {
+            // SAFETY: both handles are live; `child` remains owned until assignment completes.
+            (unsafe { AssignProcessToJobObject(handle, child.as_raw_handle() as _) }) != 0
+        };
         if !assigned {
+            // SAFETY: this branch still owns the live Job Object handle and closes it exactly once.
             unsafe { CloseHandle(handle) };
             let _ = child.kill();
             return Err(format!(
@@ -260,6 +266,7 @@ impl ProcessJob {
 #[cfg(windows)]
 impl Drop for ProcessJob {
     fn drop(&mut self) {
+        // SAFETY: `ProcessJob` uniquely owns this live handle and Drop runs exactly once.
         unsafe { windows_sys::Win32::Foundation::CloseHandle(self.0) };
     }
 }

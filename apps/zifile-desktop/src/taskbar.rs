@@ -89,13 +89,16 @@ mod platform {
         fn new() -> windows::core::Result<Self> {
             let window = find_process_window().ok_or_else(windows::core::Error::from_thread)?;
             initialize_com()?;
+            // SAFETY: COM is initialized on this thread and the class/interface pair is fixed.
             let taskbar: ITaskbarList3 =
                 unsafe { CoCreateInstance(&TaskbarList, None, CLSCTX_INPROC_SERVER)? };
+            // SAFETY: `taskbar` is a newly created live ITaskbarList3 interface.
             unsafe { taskbar.HrInit()? };
             Ok(Self { taskbar, window })
         }
 
         fn apply(&self, indicator: Indicator) -> windows::core::Result<()> {
+            // SAFETY: `self.taskbar` and the process-owned window handle remain live in this client.
             unsafe {
                 match indicator {
                     Indicator::Hidden => {
@@ -124,6 +127,7 @@ mod platform {
             if initialized.get() {
                 return Ok(());
             }
+            // SAFETY: called once per thread before using taskbar COM interfaces.
             let result = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
             if result.is_ok() || result == RPC_E_CHANGED_MODE {
                 initialized.set(true);
@@ -141,9 +145,12 @@ mod platform {
         }
 
         unsafe extern "system" fn visit(window: HWND, parameter: LPARAM) -> BOOL {
+            // SAFETY: `EnumWindows` receives a pointer to `Search` that lives for the entire call.
             let search = unsafe { &mut *(parameter.0 as *mut Search) };
             let mut process_id = 0;
+            // SAFETY: Windows supplied `window` and `process_id` is writable for this call.
             unsafe { GetWindowThreadProcessId(window, Some(&mut process_id)) };
+            // SAFETY: `window` is supplied by the active `EnumWindows` callback.
             if process_id == search.process_id && unsafe { IsWindowVisible(window).as_bool() } {
                 search.window = window;
                 false.into()
@@ -153,9 +160,11 @@ mod platform {
         }
 
         let mut search = Search {
+            // SAFETY: this parameterless API returns the identifier of the calling process.
             process_id: unsafe { GetCurrentProcessId() },
             window: HWND(ptr::null_mut()),
         };
+        // SAFETY: `search` remains pinned on this stack until synchronous enumeration returns.
         let _ = unsafe { EnumWindows(Some(visit), LPARAM(ptr::from_mut(&mut search) as isize)) };
         (!search.window.0.is_null()).then_some(search.window)
     }

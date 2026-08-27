@@ -5,7 +5,8 @@
         clippy::unwrap_used,
         clippy::expect_used,
         clippy::panic,
-        clippy::indexing_slicing
+        clippy::indexing_slicing,
+        clippy::undocumented_unsafe_blocks
     )
 )]
 
@@ -71,7 +72,10 @@ impl IExplorerCommand_Impl for ZiFileCreateCommand_Impl {
     fn GetState(&self, items: Ref<IShellItemArray>, _ok_to_be_slow: BOOL) -> Result<u32> {
         let enabled = items
             .as_ref()
-            .and_then(|items| unsafe { items.GetCount().ok() })
+            .and_then(|items| {
+                // SAFETY: `items` is a live COM interface borrowed for this call.
+                unsafe { items.GetCount().ok() }
+            })
             .is_some_and(create_selection_enabled);
         Ok(if enabled {
             ECS_ENABLED.0
@@ -185,6 +189,7 @@ impl IClassFactory_Impl for ZiFileCreateClassFactory_Impl {
             return Err(E_POINTER.into());
         }
         let unknown: IUnknown = ZiFileCreateCommand.into();
+        // SAFETY: both output pointers were checked above and `unknown` owns a live COM object.
         unsafe { unknown.query(iid, object).ok() }
     }
 
@@ -210,6 +215,7 @@ impl IClassFactory_Impl for ZiFileExtractClassFactory_Impl {
             return Err(E_POINTER.into());
         }
         let unknown: IUnknown = ZiFileExtractCommand.into();
+        // SAFETY: both output pointers were checked above and `unknown` owns a live COM object.
         unsafe { unknown.query(iid, object).ok() }
     }
 
@@ -249,28 +255,36 @@ fn dll_get_class_object(
     if object.is_null() {
         return E_POINTER;
     }
+    // SAFETY: the caller supplied a non-null writable COM output slot.
     unsafe { object.write(std::ptr::null_mut()) };
     if class_id.is_null() || interface_id.is_null() {
         return E_POINTER;
     }
+    // SAFETY: `class_id` was checked for null and COM requires it to point to a GUID.
     let factory: IClassFactory = match unsafe { *class_id } {
         CREATE_COMMAND_CLSID => ZiFileCreateClassFactory.into(),
         EXTRACT_COMMAND_CLSID => ZiFileExtractClassFactory.into(),
         _ => return CLASS_E_CLASSNOTAVAILABLE,
     };
+    // SAFETY: `interface_id` and `object` were validated and `factory` is a live COM object.
     unsafe { factory.query(interface_id, object) }
 }
 
 fn collect_paths(items: &IShellItemArray, command_flag: &str) -> Result<Vec<PathBuf>> {
+    // SAFETY: `items` is a live COM interface borrowed by the command invocation.
     let count = unsafe { items.GetCount()? };
     if count == 0 || count > MAX_SELECTED_ITEMS {
         return Err(E_FAIL.into());
     }
     let mut paths = Vec::with_capacity(count as usize);
     for index in 0..count {
+        // SAFETY: the index is strictly below the count returned by this same COM array.
         let item = unsafe { items.GetItemAt(index)? };
+        // SAFETY: `item` is live and requests a COM-allocated filesystem-path string.
         let display_name = unsafe { item.GetDisplayName(SIGDN_FILESYSPATH)? };
+        // SAFETY: a successful `GetDisplayName` returns a valid NUL-terminated UTF-16 string.
         let path_result = unsafe { display_name.to_string() }.map(PathBuf::from);
+        // SAFETY: `display_name` came from the COM task allocator and is freed exactly once here.
         unsafe { CoTaskMemFree(Some(display_name.0.cast())) };
         let path = path_result?;
         paths.push(path);
@@ -316,6 +330,7 @@ fn command_line_within_limit(command_flag: &str, paths: &[PathBuf]) -> bool {
 
 fn sibling_desktop_path() -> Result<PathBuf> {
     let mut module = HMODULE::default();
+    // SAFETY: the function address belongs to this loaded DLL and `module` is a writable output.
     unsafe {
         GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -324,6 +339,7 @@ fn sibling_desktop_path() -> Result<PathBuf> {
         )?;
     }
     let mut buffer = vec![0_u16; 32_768];
+    // SAFETY: `module` was resolved above and `buffer` provides writable storage for the path.
     let length = unsafe { GetModuleFileNameW(Some(module), &mut buffer) } as usize;
     if length == 0 || length >= buffer.len() {
         return Err(E_FAIL.into());
@@ -345,6 +361,7 @@ fn icon_resource_string(desktop: &std::path::Path) -> String {
 
 fn user_locale_is_chinese() -> bool {
     let mut locale = [0_u16; 85];
+    // SAFETY: `locale` is a writable buffer sized to Windows' maximum locale-name length.
     let length = unsafe { GetUserDefaultLocaleName(&mut locale) };
     let Some(end) = usize::try_from(length)
         .ok()
@@ -362,10 +379,12 @@ fn allocate_shell_string(value: &str) -> Result<PWSTR> {
     let mut wide = value.encode_utf16().collect::<Vec<_>>();
     wide.push(0);
     let bytes = wide.len() * size_of::<u16>();
+    // SAFETY: the requested byte count exactly represents the UTF-16 buffer including its NUL.
     let destination = unsafe { CoTaskMemAlloc(bytes) }.cast::<u16>();
     if destination.is_null() {
         return Err(E_FAIL.into());
     }
+    // SAFETY: allocation succeeded for `wide.len()` u16 values and the regions do not overlap.
     unsafe { destination.copy_from_nonoverlapping(wide.as_ptr(), wide.len()) };
     Ok(PWSTR(destination))
 }
