@@ -70,8 +70,9 @@ enum Command {
         sources: Vec<PathBuf>,
         #[arg(long, value_enum)]
         format: Option<FormatArg>,
-        #[arg(long, default_value_t = 6, value_parser = clap::value_parser!(u8).range(0..=22))]
-        level: u8,
+        /// Compression level; defaults to 6 for adjustable formats (see `zifile formats`).
+        #[arg(long, value_parser = clap::value_parser!(u8).range(0..=22))]
+        level: Option<u8>,
         /// Read the archive password from one line of standard input.
         #[arg(long)]
         password_stdin: bool,
@@ -218,12 +219,13 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 .map(ArchiveFormat::from)
                 .or_else(|| detect_format_from_path(&destination))
                 .ok_or("cannot infer output format; pass --format")?;
+            let compression_level = resolve_compression_level(format, level)?;
             let summary = create_archive(
                 &sources,
                 destination,
                 format,
                 &CreateOptions {
-                    compression_level: level,
+                    compression_level,
                     password,
                     ..CreateOptions::default()
                 },
@@ -270,22 +272,58 @@ fn print_formats() {
 }
 
 fn format_matrix() -> String {
-    let mut output =
-        String::from("FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tENCRYPTION\tSTAGE\n");
+    let mut output = String::from(
+        "FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tCOMPRESSION_LEVEL\tENCRYPTION\tSTAGE\n",
+    );
     for format in ArchiveFormat::ALL {
         let capabilities = format.capabilities();
         output.push_str(&format!(
-            "{format}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{format}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             yes_no(capabilities.list),
             yes_no(capabilities.extract),
             yes_no(capabilities.create),
             create_input_label(format.create_input()),
+            compression_level_label(format),
             yes_no(capabilities.encryption),
             capabilities.stage
         ));
         output.push('\n');
     }
     output
+}
+
+fn resolve_compression_level(format: ArchiveFormat, requested: Option<u8>) -> io::Result<u8> {
+    let default = CreateOptions::default().compression_level;
+    match (format.compression_level_range(), requested) {
+        (Some((minimum, maximum)), requested) => {
+            let level = requested.unwrap_or(default);
+            if (minimum..=maximum).contains(&level) {
+                Ok(level)
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "compression level for {format} must be between {minimum} and {maximum}; received {level}"
+                    ),
+                ))
+            }
+        }
+        (None, Some(level)) if format.capabilities().create => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "compression level is fixed for {format}; omit --level instead of passing {level}"
+            ),
+        )),
+        (None, _) => Ok(default),
+    }
+}
+
+fn compression_level_label(format: ArchiveFormat) -> String {
+    match format.compression_level_range() {
+        Some((minimum, maximum)) => format!("{minimum}-{maximum}"),
+        None if format.capabilities().create => "fixed".to_owned(),
+        None => "none".to_owned(),
+    }
 }
 
 const fn create_input_label(input: Option<CreateInputKind>) -> &'static str {
@@ -308,7 +346,9 @@ mod tests {
 
     use super::{
         Cli, ConflictArg, FormatArg, RUNTIME_ERROR_EXIT_CODE, format_matrix, read_password_from,
+        resolve_compression_level,
     };
+    use zifile_core::ArchiveFormat;
 
     #[test]
     fn public_cli_surface_and_usage_exit_code_are_stable() {
@@ -364,15 +404,48 @@ mod tests {
     }
 
     #[test]
-    fn format_matrix_exposes_creation_input_contract() {
+    fn format_matrix_exposes_creation_contract() {
         let matrix = format_matrix();
-        assert!(
-            matrix.starts_with("FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tENCRYPTION\tSTAGE\n")
+        assert!(matrix.starts_with(
+            "FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tCOMPRESSION_LEVEL\tENCRYPTION\tSTAGE\n"
+        ));
+        assert!(matrix.contains("gzip\tyes\tyes\tyes\tsingle-file\t0-9\tno\tAlpha"));
+        assert!(matrix.contains("ZIP\tyes\tyes\tyes\tfiles-or-directories\t0-9\tyes\tAlpha"));
+        assert!(matrix.contains("Zstandard\tyes\tyes\tyes\tsingle-file\t0-22\tno\tAlpha"));
+        assert!(matrix.contains("Bzip2\tyes\tyes\tyes\tsingle-file\t1-9\tno\tAlpha"));
+        assert!(matrix.contains("Brotli\tyes\tyes\tyes\tsingle-file\t0-11\tno\tAlpha"));
+        assert!(matrix.contains("TAR\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha"));
+        assert!(matrix.contains("LZ4\tyes\tyes\tyes\tsingle-file\tfixed\tno\tAlpha"));
+        assert!(matrix.contains("RAR\tyes\tyes\tno\tnone\tnone\tyes\tBeta"));
+        assert!(matrix.contains("CAB\tyes\tyes\tno\tnone\tnone\tno\tBeta"));
+    }
+
+    #[test]
+    fn compression_level_validation_is_format_specific() {
+        assert_eq!(
+            resolve_compression_level(ArchiveFormat::Zip, None).unwrap(),
+            6
         );
-        assert!(matrix.contains("gzip\tyes\tyes\tyes\tsingle-file\tno\tAlpha"));
-        assert!(matrix.contains("ZIP\tyes\tyes\tyes\tfiles-or-directories\tyes\tAlpha"));
-        assert!(matrix.contains("RAR\tyes\tyes\tno\tnone\tyes\tBeta"));
-        assert!(matrix.contains("CAB\tyes\tyes\tno\tnone\tno\tBeta"));
+        assert_eq!(
+            resolve_compression_level(ArchiveFormat::Zip, Some(9)).unwrap(),
+            9
+        );
+        assert!(resolve_compression_level(ArchiveFormat::Zip, Some(10)).is_err());
+        assert!(resolve_compression_level(ArchiveFormat::Zstandard, Some(22)).is_ok());
+        assert!(resolve_compression_level(ArchiveFormat::Bzip2, Some(0)).is_err());
+        assert!(resolve_compression_level(ArchiveFormat::Bzip2, Some(1)).is_ok());
+        assert!(resolve_compression_level(ArchiveFormat::Brotli, Some(11)).is_ok());
+        assert!(resolve_compression_level(ArchiveFormat::Brotli, Some(12)).is_err());
+        assert_eq!(
+            resolve_compression_level(ArchiveFormat::Tar, None).unwrap(),
+            6
+        );
+        assert!(resolve_compression_level(ArchiveFormat::Tar, Some(6)).is_err());
+        assert_eq!(
+            resolve_compression_level(ArchiveFormat::Lz4, None).unwrap(),
+            6
+        );
+        assert!(resolve_compression_level(ArchiveFormat::Lz4, Some(6)).is_err());
     }
 
     #[test]

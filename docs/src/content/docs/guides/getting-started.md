@@ -39,8 +39,10 @@ zifile formats
 zifile list archive.zip
 zifile test archive.7z
 zifile extract archive.zip output --conflict rename
-zifile create output.7z files --format seven-zip
+zifile create output.7z files --format seven-zip --level 9
 ```
+
+`zifile formats` 的 `COMPRESSION_LEVEL` 列会列出每种格式允许的闭区间；`fixed` 表示编码器没有可调等级，必须省略 `--level`。可调格式省略该参数时默认使用等级 6；越界时会明确报错，不会用另一个等级继续创建。
 
 加密操作只接受标准输入，不接受会进入进程参数和普通命令历史的明文密码参数：
 

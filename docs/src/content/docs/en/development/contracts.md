@@ -17,7 +17,7 @@ Password input is available only through explicit `--password-stdin`. The CLI do
 | `1` | A file, format, password, policy, backend, or other runtime error occurred |
 | `2` | Clap rejected command-line syntax or an argument |
 
-Runtime errors go to standard error with an `error: ` prefix. Ordinary success prose is human-facing and may improve without changing command semantics; automation must not parse those sentences. `zifile formats` is the stable tab-separated capability table and includes `CREATE_INPUT`: `files-or-directories`, `single-file`, or `none`.
+Runtime errors go to standard error with an `error: ` prefix. Ordinary success prose is human-facing and may improve without changing command semantics; automation must not parse those sentences. `zifile formats` is the stable tab-separated capability table and includes `CREATE_INPUT` (`files-or-directories`, `single-file`, or `none`) and `COMPRESSION_LEVEL` (an inclusive range, `fixed`, or `none`). Adjustable formats default to level 6 when `create --level` is omitted; an explicit value is validated against the resolved format, and an out-of-range value is a runtime input error with exit code `1`. A `fixed` format requires `--level` to be omitted. The CLI neither silently clamps nor ignores explicit input.
 
 ## Core provider contract
 

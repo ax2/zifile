@@ -17,10 +17,15 @@ All notable changes to ZiFile are documented here. The format follows
 - Iced desktop technology shell.
 - Astro Starlight documentation, roadmap, ADRs, and Stage 0 work log.
 - Unit, benchmark, smoke, CI, documentation, and release foundations.
+- Packaging-policy smoke coverage locks the x64/ARM64 reproducibility workflow's
+  hard timeout, stale-run cancellation, independent matrix results, and retained
+  failure evidence so a long double build cannot wait without a bounded outcome.
 - Real ZIP/ZIP64/AES and 7z/AES create, list, verify, and extraction operations.
 - Format-aware compression controls: 7z creation now applies the selected LZMA2
   level, Zstandard and Brotli expose their full ranges, Bzip2 enforces its valid
-  minimum, and fixed-level TAR/LZ4 creation no longer presents an inert slider.
+  minimum, fixed-level TAR/LZ4 creation no longer presents an inert slider, and
+  the CLI advertises format-specific ranges, rejects out-of-range values, and
+  refuses explicit levels for fixed-setting formats.
 - Encrypted 7z/RAR header retry views in both desktop interfaces, including correct
   7z AES entry flags after a password-protected archive is unlocked.
 - TAR, tar.gz, tar.zst, tar.xz and tar.bz2 archive compositions.
@@ -103,7 +108,8 @@ All notable changes to ZiFile are documented here. The format follows
 - Store listing, privacy, screenshot-import, WACK-readiness, signed-package lifecycle,
   package-audit, and release-signing policy gates with structured evidence.
 - Candidate CLI and core-provider compatibility documentation with exact regression
-  coverage for commands, value names, exit codes, and creation-input capabilities.
+  coverage for commands, value names, exit codes, creation-input capabilities, and
+  compression-level ranges, including executable CLI smoke coverage.
 
 ### Changed
 

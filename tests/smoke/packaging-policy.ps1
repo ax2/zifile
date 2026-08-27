@@ -28,6 +28,7 @@ $wingetVerifier = Join-Path $repoRoot 'packaging\winget\Test-Manifests.ps1'
 $wingetClientInstaller = Join-Path $repoRoot 'packaging\winget\Install-ValidationClient.ps1'
 $wingetSmoke = Join-Path $repoRoot 'tests\smoke\winget-manifest.ps1'
 $userDocs = Join-Path $repoRoot 'scripts\Test-UserDocs.ps1'
+$reproducibilityWorkflow = Join-Path $repoRoot '.github\workflows\reproducibility.yml'
 
 $scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
 foreach ($script in $scriptsToParse) {
@@ -736,6 +737,20 @@ if ($toolchainIndex -lt 0 -or $packagingPolicyIndex -lt 0 -or $wingetSetupIndex 
     throw 'Packaging policy and official WinGet validation must fail fast before Rust toolchain setup.'
 }
 $releaseWorkflowSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\release.yml')
+$reproducibilityWorkflowSource = Get-Content -Raw -LiteralPath $reproducibilityWorkflow
+foreach ($requiredReproducibilityToken in @(
+    'cancel-in-progress: true',
+    'timeout-minutes: 120',
+    'fail-fast: false',
+    'architecture: [x64, arm64]',
+    'if: always()',
+    'if-no-files-found: error',
+    'retention-days: 30'
+)) {
+    if ($reproducibilityWorkflowSource -notmatch [Regex]::Escape($requiredReproducibilityToken)) {
+        throw "The reproducibility workflow omits required bounded-execution token: $requiredReproducibilityToken"
+    }
+}
 foreach ($requiredWingetToken in @(
     './packaging/winget/Generate-Manifests.ps1',
     './packaging/winget/Test-Manifests.ps1',
@@ -965,6 +980,7 @@ foreach ($requiredLivePrivacyToken in @(
     least_privilege_release_permissions = $true
     signing_timeout_wired = $true
     signing_concurrency_wired = $true
+    reproducibility_execution_bounded = $true
     partner_center_identity_preflight_wired = $true
     partial_partner_center_identity_rejected = $true
     malformed_partner_center_identity_rejected = $true

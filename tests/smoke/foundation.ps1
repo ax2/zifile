@@ -12,11 +12,25 @@ try {
         throw 'Workspace build failed.'
     }
 
-    $formats = (cargo run --quiet -p zifile-cli -- formats) -join "`n"
-    if ($LASTEXITCODE -ne 0 -or $formats -notmatch 'ZIP' -or $formats -notmatch '7z' -or $formats -notmatch 'CAB') {
+    $cliPath = Join-Path $repoRoot 'target\debug\zifile.exe'
+    if (-not (Test-Path -LiteralPath $cliPath)) {
+        throw 'CLI executable was not produced.'
+    }
+    $formats = (& $cliPath formats) -join "`n"
+    if (
+        $LASTEXITCODE -ne 0 -or
+        $formats -notmatch '(?m)^FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tCOMPRESSION_LEVEL\tENCRYPTION\tSTAGE$' -or
+        $formats -notmatch '(?m)^ZIP\tyes\tyes\tyes\tfiles-or-directories\t0-9\tyes\tAlpha$' -or
+        $formats -notmatch '(?m)^Zstandard\tyes\tyes\tyes\tsingle-file\t0-22\tno\tAlpha$' -or
+        $formats -notmatch '(?m)^Bzip2\tyes\tyes\tyes\tsingle-file\t1-9\tno\tAlpha$' -or
+        $formats -notmatch '(?m)^TAR\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha$' -or
+        $formats -notmatch '(?m)^LZ4\tyes\tyes\tyes\tsingle-file\tfixed\tno\tAlpha$' -or
+        $formats -notmatch '(?m)^RAR\tyes\tyes\tno\tnone\tnone\tyes\tBeta$' -or
+        $formats -notmatch '(?m)^CAB\tyes\tyes\tno\tnone\tnone\tno\tBeta$'
+    ) {
         throw 'CLI format registry smoke test failed.'
     }
-    $createHelp = (cargo run --quiet -p zifile-cli -- create --help) -join "`n"
+    $createHelp = (& $cliPath create --help) -join "`n"
     if (
         $LASTEXITCODE -ne 0 -or
         $createHelp -notmatch '--password-stdin' -or
@@ -34,6 +48,34 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $smokeRoot 'input\nested') -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $smokeRoot 'input\hello.txt') -Value 'hello ZiFile' -NoNewline
     Set-Content -LiteralPath (Join-Path $smokeRoot 'input\nested\unicode-测试.txt') -Value 'archive smoke' -NoNewline
+
+    $invalidLevelArchive = Join-Path $smokeRoot 'invalid-level.zip'
+    $invalidLevelError = (& $cliPath create $invalidLevelArchive `
+        (Join-Path $smokeRoot 'input\hello.txt') --format zip --level 10 2>&1) -join "`n"
+    if (
+        $LASTEXITCODE -ne 1 -or
+        $invalidLevelError -notmatch 'compression level for ZIP must be between 0 and 9; received 10' -or
+        (Test-Path -LiteralPath $invalidLevelArchive)
+    ) {
+        throw "CLI format-specific compression-level rejection failed: $invalidLevelError"
+    }
+
+    $fixedLevelArchive = Join-Path $smokeRoot 'fixed-level.tar'
+    $fixedLevelError = (& $cliPath create $fixedLevelArchive `
+        (Join-Path $smokeRoot 'input\hello.txt') --format tar --level 6 2>&1) -join "`n"
+    if (
+        $LASTEXITCODE -ne 1 -or
+        $fixedLevelError -notmatch 'compression level is fixed for TAR; omit --level instead of passing 6' -or
+        (Test-Path -LiteralPath $fixedLevelArchive)
+    ) {
+        throw "CLI fixed compression-level rejection failed: $fixedLevelError"
+    }
+
+    $defaultLevelArchive = Join-Path $smokeRoot 'default-level.tar'
+    & $cliPath create $defaultLevelArchive (Join-Path $smokeRoot 'input\hello.txt') --format tar
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $defaultLevelArchive)) {
+        throw 'CLI fixed-format creation without --level failed.'
+    }
 
     $archivePath = Join-Path $smokeRoot 'smoke.tar.gz'
     cargo run --quiet -p zifile-cli -- create $archivePath (Join-Path $smokeRoot 'input') --format tar-gzip

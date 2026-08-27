@@ -39,8 +39,10 @@ zifile formats
 zifile list archive.zip
 zifile test archive.7z
 zifile extract archive.zip output --conflict rename
-zifile create output.7z files --format seven-zip
+zifile create output.7z files --format seven-zip --level 9
 ```
+
+The `COMPRESSION_LEVEL` column in `zifile formats` gives each format's inclusive range; `fixed` means the encoder has no adjustable level and `--level` must be omitted. Adjustable formats default to level 6 when the option is omitted; an out-of-range value is reported instead of continuing with a different level.
 
 Encrypted operations read a password from standard input. ZiFile does not accept a plaintext password argument that would enter process arguments or ordinary shell history:
 
