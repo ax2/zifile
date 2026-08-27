@@ -50,6 +50,8 @@ const ARIA_SHORTCUT_CREATE: &str = "Control+N";
 const ARIA_SHORTCUT_ABOUT: &str = "F1";
 const ARIA_SHORTCUT_CANCEL: &str = "Escape";
 const ARIA_SHORTCUT_SELECT_ALL: &str = "Control+A";
+const FOCUS_MAIN_SCRIPT: &str =
+    "requestAnimationFrame(() => document.getElementById('main-content')?.focus())";
 const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src dioxus: ws://127.0.0.1:* http://dioxus.index.html https://dioxus.index.html ipc:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
 const CREATE_FORMATS: [ArchiveFormat; 13] = [
     ArchiveFormat::Zip,
@@ -211,6 +213,7 @@ fn App() -> Element {
     let mut state = use_signal(UiState::default);
     let startup_request = use_hook(|| startup::parse(std::env::args_os().skip(1)));
     let mut startup_processed = use_signal(|| false);
+    let mut focused_page = use_signal(|| Page::Home);
     use_effect(move || {
         if !startup_processed() {
             startup_processed.set(true);
@@ -230,6 +233,13 @@ fn App() -> Element {
             }
         }
     });
+    use_effect(move || {
+        let page = state.read().page;
+        if focused_page() != page {
+            focused_page.set(page);
+            let _ = dioxus_document::eval(FOCUS_MAIN_SCRIPT);
+        }
+    });
     use_future(move || async move {
         loop {
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -244,6 +254,7 @@ fn App() -> Element {
     let locale = view.locale;
     let page = view.page;
     let theme = if view.dark { "dark" } else { "light" };
+    let main_title = main_title_id(page, view.archive.is_some());
     let progress = view.progress.as_ref().map(OperationProgress::snapshot);
     let (status_role, status_live) = status_semantics(view.status_kind);
     let queued_count = lock_operation_queue(&view.operations).pending_count();
@@ -303,7 +314,7 @@ fn App() -> Element {
                         {locale.text(Text::SwitchLanguage)} }
                 }
             }
-            main { id: "main-content", tabindex: "-1",
+            main { id: "main-content", tabindex: "-1", "aria-labelledby": main_title,
                 match page {
                     Page::Home => rsx! { Home { state } },
                     Page::Archive => rsx! { ArchivePage { state } },
@@ -323,6 +334,16 @@ fn App() -> Element {
                 }
             }
         }
+    }
+}
+
+const fn main_title_id(page: Page, archive_loaded: bool) -> &'static str {
+    match page {
+        Page::Home => "home-title",
+        Page::Archive if archive_loaded => "archive-title",
+        Page::Archive => "pending-archive-title",
+        Page::Create => "create-title",
+        Page::About => "about-title",
     }
 }
 
@@ -1686,6 +1707,24 @@ mod tests {
         assert!(STYLES.contains("--focus-ring-contrast: #ffffff;"));
         assert!(STYLES.contains("--focus-ring: Highlight;"));
         assert!(STYLES.contains("--focus-ring-contrast: Canvas;"));
+    }
+
+    #[test]
+    fn page_changes_focus_a_labelled_main_region() {
+        assert_eq!(main_title_id(Page::Home, false), "home-title");
+        assert_eq!(main_title_id(Page::Archive, false), "pending-archive-title");
+        assert_eq!(main_title_id(Page::Archive, true), "archive-title");
+        assert_eq!(main_title_id(Page::Create, false), "create-title");
+        assert_eq!(main_title_id(Page::About, false), "about-title");
+
+        let source = include_str!("accessible_main.rs");
+        assert!(source.contains("if focused_page() != page"));
+        assert!(source.contains("dioxus_document::eval(FOCUS_MAIN_SCRIPT)"));
+        assert!(
+            source.contains(
+                "id: \"main-content\", tabindex: \"-1\", \"aria-labelledby\": main_title"
+            )
+        );
     }
 
     #[test]

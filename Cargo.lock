@@ -8495,6 +8495,7 @@ version = "0.1.0-alpha.1"
 dependencies = [
  "criterion",
  "dioxus",
+ "dioxus-document",
  "dioxus-html",
  "iced",
  "rfd",
