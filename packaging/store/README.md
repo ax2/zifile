@@ -1,5 +1,12 @@
 # Microsoft Store assets
 
+`listing-assets/AppTile300x300.png` is the reviewed 1:1 app tile icon recommended
+for the Partner Center listing. `listing-assets.json` pins its purpose, exact
+dimensions, Microsoft requirements source, and SHA-256. CI runs
+`Test-ListingAssets.ps1` and negative smoke fixtures so a missing, resized, or
+modified icon cannot silently reach submission. This directory is separate from
+the signed-candidate screenshot `assets/` tree below.
+
 Formal Store and trusted-signing builds use three non-secret repository
 variables copied exactly from Partner Center: `ZIFILE_MSIX_IDENTITY`,
 `ZIFILE_MSIX_PUBLISHER`, and `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME`. The last

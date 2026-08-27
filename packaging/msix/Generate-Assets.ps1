@@ -1,5 +1,7 @@
 param(
-    [string]$OutputDirectory = (Join-Path $PSScriptRoot 'Assets')
+    [string]$OutputDirectory = (Join-Path $PSScriptRoot 'Assets'),
+    [string]$StoreOutputDirectory = (Join-Path $PSScriptRoot '..\store\listing-assets'),
+    [switch]$SkipStoreListingAsset
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,6 +75,16 @@ foreach ($asset in $assets.GetEnumerator()) {
     $bitmap.Dispose()
 }
 
+if (-not $SkipStoreListingAsset) {
+    New-Item -ItemType Directory -Path $StoreOutputDirectory -Force | Out-Null
+    $storeBitmap = New-ZiFileBitmap -Size 300
+    $storeBitmap.Save(
+        (Join-Path $StoreOutputDirectory 'AppTile300x300.png'),
+        [System.Drawing.Imaging.ImageFormat]::Png
+    )
+    $storeBitmap.Dispose()
+}
+
 $iconBitmap = New-ZiFileBitmap -Size 256
 $iconHandle = $iconBitmap.GetHicon()
 $icon = [System.Drawing.Icon]::FromHandle($iconHandle)
@@ -83,3 +95,6 @@ $icon.Dispose()
 $iconBitmap.Dispose()
 
 Write-Host "Generated ZiFile package assets in $OutputDirectory"
+if (-not $SkipStoreListingAsset) {
+    Write-Host "Generated ZiFile Store listing asset in $StoreOutputDirectory"
+}

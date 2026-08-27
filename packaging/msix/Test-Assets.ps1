@@ -125,7 +125,7 @@ if ($VerifyGenerator) {
         throw 'Refusing to create the asset fixture outside the system temporary directory.'
     }
     try {
-        & $generator -OutputDirectory $fixture | Out-Null
+        & $generator -OutputDirectory $fixture -SkipStoreListingAsset | Out-Null
         foreach ($name in @($expectedPngs.Keys) + @('ZiFile.ico')) {
             $committedHash = (Get-FileHash -LiteralPath (Join-Path $assets $name) -Algorithm SHA256).Hash
             $generatedHash = (Get-FileHash -LiteralPath (Join-Path $fixture $name) -Algorithm SHA256).Hash

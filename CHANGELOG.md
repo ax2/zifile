@@ -28,6 +28,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Add a reviewed 300x300 Microsoft Store app tile listing icon with a
+  machine-readable manifest, pinned hash, generator check, and negative policy
+  fixtures for missing, resized, or modified assets.
 - Both desktop interfaces now include a bilingual About page with the running
   package version, MIT license, supported format-family count, project address,
   and local-processing privacy boundary; the accessible candidate uses semantic
