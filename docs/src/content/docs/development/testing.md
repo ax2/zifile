@@ -38,6 +38,8 @@ CLI 密码单测覆盖显式 opt-in、CRLF/LF 删除、前后空格保留和缺�
 
 共享操作队列单元测试覆盖首项立即启动、后续严格 FIFO、32 项容量边界、满队列不丢失返回载荷、陈旧完成 ID 不推进、清空只影响等待项、等待载荷立即释放，以及 `Debug` 输出不包含载荷。Iced 与 Dioxus 均编译接入同一调度器；在真实前台回合完成“运行中提交至少两项、取消当前项、后续继续、清空等待项”前，不把路线图条目标为完成。
 
+`tests/performance/operation-queue-foreground.ps1` 使用 100,000 条目 ZIP 在真实前台会话验证 FIFO、取消当前项、继续下一项、清空等待项和 Worker 回收；它支持默认 Iced 与可访问 Dioxus 候选并同时识别中英文 UI。`tests/performance/extraction-cancellation-foreground.ps1` 使用确定大小的多条目 ZIP，通过 `--extract-here` 启动真实解压取消流程，检查 Worker 退出，并确认已提交的文件都是完整条目大小、没有部分输出文件。两者都必须在未被用户占用的交互桌面运行；缺少语义 Document UIA 树或未运行前台会话时，证据保持未完成。
+
 性能门禁需要多轮运行和稳定基线，不能用一次共享 CI 结果直接判定回归。
 
 `tests/reproducibility/windows-build.ps1` 在两个全新目标目录使用固定 Rust 1.93.0、锁文件、单作业构建与 MSVC `/Brepro`，比较默认桌面、可访问候选、CLI、Worker 和 Explorer DLL。云端 32813453959 在新工具链上得到双架构各 4/5；schema v2 运行 32822543635 进一步确认默认 Iced EXE 的 `.rdata` 首差异是 `glutin_wgl_sys` 生成绑定内嵌的 `build-a`/`build-b` target 路径。脚本现用 `CARGO_ENCODED_RUSTFLAGS` 与 `--remap-path-prefix` 把两个根映射到同一虚拟路径；修复后 32826187552 的 x64/ARM64 都达到 5/5 且 `reproducible=true`。
