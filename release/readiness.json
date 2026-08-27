@@ -3,10 +3,10 @@
   "product": "ZiFile",
   "target_release": "1.0.0",
   "overall_status": "candidate",
-  "updated": "2026-08-26",
+  "updated": "2026-08-27",
   "gates": [
     { "id": "public-contract-freeze", "status": "pending", "issue": 19, "evidence": [], "notes": "Candidate contracts are documented and tested; the final freeze belongs to the 1.0 release commit." },
-    { "id": "foreground-operation-queue", "status": "pending", "issue": 11, "evidence": [], "notes": "A complete undisturbed real-window multi-operation run is still required." },
+    { "id": "foreground-operation-queue", "status": "pending", "issue": 11, "evidence": [], "notes": "Bilingual queue and extraction-cancellation scripts plus core cancellation coverage are ready; a complete undisturbed real-window multi-operation run for both UIs is still required." },
     { "id": "trusted-msix-lifecycle", "status": "pending", "issue": 12, "evidence": [], "notes": "Trusted install, launch, association, upgrade, repair and uninstall evidence is required." },
     { "id": "physical-arm64", "status": "pending", "issue": 13, "evidence": [], "notes": "The signed candidate must run on physical ARM64 Windows hardware." },
     { "id": "accessible-default-ui", "status": "pending", "issue": 14, "evidence": [], "notes": "Narrator, keyboard, IME, high contrast and DPI gates must select the shipping UI." },
