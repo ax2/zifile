@@ -3,7 +3,7 @@ param(
     [string]$AssetsDirectory = (Join-Path $PSScriptRoot 'Assets'),
     [string]$ManifestPath = (Join-Path $PSScriptRoot 'AppxManifest.xml'),
     [string]$GeneratorPath = (Join-Path $PSScriptRoot 'Generate-Assets.ps1'),
-    [switch]$SkipReproducibility
+    [switch]$VerifyGenerator
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,11 +23,11 @@ foreach ($file in @($manifest, $generator)) {
 
 Add-Type -AssemblyName System.Drawing
 $expectedPngs = [ordered]@{
-    'Square44x44Logo.png' = 44
-    'Square50x50Logo.png' = 50
-    'StoreLogo.png' = 50
-    'Square150x150Logo.png' = 150
-    'Square310x310Logo.png' = 310
+    'Square44x44Logo.png' = @{ Size = 44; Sha256 = '978CB7376053C8206AEE12344A5EEBB79C6BCCA86BA5B8847873AF4F80F276CF' }
+    'Square50x50Logo.png' = @{ Size = 50; Sha256 = 'EAD53C9C242F8A0AD22552747BC3129DA6CB4FDD7184FA9295178559EF3EA948' }
+    'StoreLogo.png' = @{ Size = 50; Sha256 = 'EAD53C9C242F8A0AD22552747BC3129DA6CB4FDD7184FA9295178559EF3EA948' }
+    'Square150x150Logo.png' = @{ Size = 150; Sha256 = '1439408F47BE6F1882A59B6A92460F1CC45DB181EED3EBA88A1E002072277BA3' }
+    'Square310x310Logo.png' = @{ Size = 310; Sha256 = '38088D8B5AF1A70B49C5FC7F26A101163167CD6EF54F29E49617B4908C6571C6' }
 }
 $assetEvidence = @()
 foreach ($entry in $expectedPngs.GetEnumerator()) {
@@ -40,8 +40,8 @@ foreach ($entry in $expectedPngs.GetEnumerator()) {
         if ($bitmap.RawFormat.Guid -ne [Drawing.Imaging.ImageFormat]::Png.Guid) {
             throw "MSIX asset is not a PNG image: $($entry.Key)"
         }
-        if ($bitmap.Width -ne $entry.Value -or $bitmap.Height -ne $entry.Value) {
-            throw "MSIX asset $($entry.Key) must be $($entry.Value)x$($entry.Value), found $($bitmap.Width)x$($bitmap.Height)."
+        if ($bitmap.Width -ne $entry.Value.Size -or $bitmap.Height -ne $entry.Value.Size) {
+            throw "MSIX asset $($entry.Key) must be $($entry.Value.Size)x$($entry.Value.Size), found $($bitmap.Width)x$($bitmap.Height)."
         }
         if (-not [Drawing.Image]::IsAlphaPixelFormat($bitmap.PixelFormat)) {
             throw "MSIX asset must retain an alpha-capable pixel format: $($entry.Key)"
@@ -58,11 +58,15 @@ foreach ($entry in $expectedPngs.GetEnumerator()) {
         if (-not $hasTransparentPixel -or -not $hasOpaquePixel) {
             throw "MSIX asset must contain both transparent and opaque pixels: $($entry.Key)"
         }
+        $actualHash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+        if ($actualHash -cne $entry.Value.Sha256) {
+            throw "MSIX asset hash does not match its reviewed pinned value: $($entry.Key)"
+        }
         $assetEvidence += [pscustomobject]@{
             name = $entry.Key
             width = $bitmap.Width
             height = $bitmap.Height
-            sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+            sha256 = $actualHash
         }
     }
     finally {
@@ -113,8 +117,8 @@ foreach ($reference in $references) {
     }
 }
 
-$reproducible = $null
-if (-not $SkipReproducibility) {
+$generatorMatches = $null
+if ($VerifyGenerator) {
     $temporaryBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
     $fixture = [IO.Path]::GetFullPath((Join-Path $temporaryBase "zifile-msix-assets-$([Guid]::NewGuid().ToString('N'))"))
     if (-not $fixture.StartsWith($temporaryBase, [StringComparison]::OrdinalIgnoreCase)) {
@@ -129,7 +133,7 @@ if (-not $SkipReproducibility) {
                 throw "Committed MSIX asset differs from deterministic generator output: $name"
             }
         }
-        $reproducible = $true
+        $generatorMatches = $true
     }
     finally {
         if (Test-Path -LiteralPath $fixture) {
@@ -149,6 +153,7 @@ if (-not $SkipReproducibility) {
     png_count = $assetEvidence.Count
     icon_size = '256x256'
     manifest_logo_references = $references.Count
-    reproducible = $reproducible
+    hashes_pinned = $true
+    generator_matches_on_current_host = $generatorMatches
     assets = $assetEvidence
 } | ConvertTo-Json -Depth 4

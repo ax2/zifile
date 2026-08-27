@@ -64,8 +64,9 @@ function Get-ExpectedFailure {
     throw "Expected action to fail with '$Pattern'."
 }
 
-$assetResult = & $msixAssets | ConvertFrom-Json
-if (-not $assetResult.validated -or -not $assetResult.reproducible -or
+$assetResult = & $msixAssets -VerifyGenerator | ConvertFrom-Json
+if (-not $assetResult.validated -or -not $assetResult.hashes_pinned -or
+    -not $assetResult.generator_matches_on_current_host -or
     $assetResult.png_count -ne 5 -or $assetResult.manifest_logo_references -ne 4) {
     throw 'MSIX visual assets did not pass completeness, manifest, and reproducibility validation.'
 }
@@ -88,7 +89,7 @@ try {
         -LiteralPath (Join-Path $fixtureAssets 'Square50x50Logo.png') `
         -Destination (Join-Path $fixtureAssets 'Square44x44Logo.png') -Force
     $null = Get-ExpectedFailure -Pattern 'must be 44x44' -Action {
-        & $msixAssets -AssetsDirectory $fixtureAssets -ManifestPath $fixtureManifest -SkipReproducibility
+        & $msixAssets -AssetsDirectory $fixtureAssets -ManifestPath $fixtureManifest
     }
 
     Copy-Item `
@@ -98,7 +99,7 @@ try {
     $manifestSource = $manifestSource.Replace('Assets\StoreLogo.png', 'Assets\MissingStoreLogo.png')
     Set-Content -LiteralPath $fixtureManifest -Value $manifestSource -Encoding utf8
     $null = Get-ExpectedFailure -Pattern 'logo reference does not exist' -Action {
-        & $msixAssets -AssetsDirectory $fixtureAssets -ManifestPath $fixtureManifest -SkipReproducibility
+        & $msixAssets -AssetsDirectory $fixtureAssets -ManifestPath $fixtureManifest
     }
 
     Copy-Item -LiteralPath (Join-Path $repoRoot 'packaging\msix\AppxManifest.xml') -Destination $fixtureManifest -Force
@@ -112,7 +113,7 @@ try {
         $changedBitmap.Save($changedAsset, [Drawing.Imaging.ImageFormat]::Png)
     }
     finally { $changedBitmap.Dispose() }
-    $null = Get-ExpectedFailure -Pattern 'differs from deterministic generator output' -Action {
+    $null = Get-ExpectedFailure -Pattern 'hash does not match its reviewed pinned value' -Action {
         & $msixAssets -AssetsDirectory $fixtureAssets -ManifestPath $fixtureManifest
     }
 }
@@ -1155,5 +1156,5 @@ foreach ($requiredLivePrivacyToken in @(
     msix_assets_validated = $true
     malformed_msix_asset_rejected = $true
     missing_manifest_asset_rejected = $true
-    generated_asset_drift_rejected = $true
+    pinned_asset_drift_rejected = $true
 } | ConvertTo-Json
