@@ -23,7 +23,8 @@ package. Windows only supports this unsigned executable-package path on Windows
 test machine still rejected the OID publisher with deployment error `0x80080204`,
 so local unsigned installation is not yet a passed gate. Signed and
 Store packages retain the manifest's Windows 10 build 19041 minimum. A Store
-build must pass the Partner Center identity name and publisher to the script.
+build must pass the Partner Center identity name, publisher, and exact publisher
+display name to the script.
 Credentials and certificates must never be committed.
 
 When `CertificatePath` is supplied, `Publisher` must be the exact certificate
@@ -38,7 +39,7 @@ Implemented packaging features:
 - a packaged `zifile.exe` App Execution Alias for terminal and automation use;
 - deterministic app icon/tile assets;
 - optional Authenticode signing and SHA-256 generation;
-- automatic post-build audit of package identity, publisher, version, minimum Windows build,
+- automatic post-build audit of package identity, publisher, publisher display name, version, minimum Windows build,
   PE architecture, required executables, file associations, CLI alias, forbidden sensitive files,
   and required signature status;
 - a machine-readable `.audit.json` beside every MSIX, included in release checksums and provenance;
@@ -51,7 +52,8 @@ The desktop executable requires its matching Worker. GitHub release staging ther
 both architecture-suffixed files; complete runnable directories retain the canonical sibling name.
 
 Tagged GitHub releases build with formal `ZIFILE_MSIX_IDENTITY` and
-`ZIFILE_MSIX_PUBLISHER` environment variables, then enter the protected
+`ZIFILE_MSIX_PUBLISHER` plus `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME` environment
+variables, then enter the protected
 `production-signing` Environment. DigiCert Binary Signing signs the staged EXEs,
 DLL, and MSIX with the cloud-held key. `Test-SignedReleaseArtifacts.ps1` requires
 valid signatures, one exact Publisher, and timestamps before regenerating audits
@@ -83,6 +85,7 @@ Trusted signed baseline and upgrade packages can be exercised on a clean test ac
   -UpgradeVersion 1.0.1.0 `
   -IdentityName ZiCode.ZiFile `
   -Publisher 'CN=ZiCode Official' `
+  -PublisherDisplayName 'ZiCode' `
   -MinimumWindowsVersion 10.0.19041.0 `
   -ConfirmLifecycle
 ```
@@ -92,7 +95,7 @@ identity, verifies the installed CLI, upgrades in place, runs the supported `Res
 recovery operation, and uninstalls in `finally`. Reset restores initial configuration and is
 recorded separately; it is not claimed as a data-preserving Repair operation.
 
-After two manual Release workflow runs have produced signed `windows-x64` artifacts, run
+After two manual Release workflow runs have produced `signed-windows-x64` artifacts, run
 **Trusted MSIX lifecycle** with their baseline and upgrade run IDs. The workflow downloads both
 artifacts into a clean Windows Runner, derives package metadata from their audit JSON, executes the
 same lifecycle gate, and retains evidence for 30 days. ARM64 package installation still requires a

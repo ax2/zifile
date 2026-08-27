@@ -1,5 +1,13 @@
 # Microsoft Store assets
 
+Formal Store and trusted-signing builds use three non-secret repository
+variables copied exactly from Partner Center: `ZIFILE_MSIX_IDENTITY`,
+`ZIFILE_MSIX_PUBLISHER`, and `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME`. The last
+value is the developer account's Publisher Display Name, not the app's reserved
+product name. `Test-PartnerCenterIdentity.ps1 -RequireConfigured` rejects a
+partial tuple before compilation, and the package audit verifies all three
+values after unpacking the MSIX.
+
 The bilingual listing JSON is authoritative for Partner Center copy. Run the
 policy gate before publishing:
 

@@ -285,11 +285,12 @@ finally {
 }
 
 $missingFailure = Get-ExpectedFailure -Pattern 'ZIFILE_MSIX_IDENTITY' -Action {
-    & $publishingPolicy -IdentityName '' -Publisher ''
+    & $publishingPolicy -IdentityName '' -Publisher '' -PublisherDisplayName ''
 }
 foreach ($secretName in @(
     'ZIFILE_MSIX_IDENTITY',
     'ZIFILE_MSIX_PUBLISHER',
+    'ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME',
     'ZIFILE_PFX_BASE64',
     'ZIFILE_PFX_PASSWORD'
 )) {
@@ -302,6 +303,7 @@ $null = Get-ExpectedFailure -Pattern 'development MSIX identity' -Action {
     & $publishingPolicy `
         -IdentityName 'ZiCode.ZiFile.Dev' `
         -Publisher 'CN=ZiCode Official' `
+        -PublisherDisplayName 'ZiCode' `
         -SigningCertificateAvailable `
         -SigningPasswordAvailable
 }
@@ -310,44 +312,52 @@ $unconfiguredIdentity = & $partnerCenterIdentity | ConvertFrom-Json
 if ($unconfiguredIdentity.configured -or $unconfiguredIdentity.formal_identity) {
     throw 'An absent Partner Center identity was not reported as unconfigured.'
 }
-$null = Get-ExpectedFailure -Pattern 'ZIFILE_MSIX_IDENTITY and ZIFILE_MSIX_PUBLISHER' -Action {
+$null = Get-ExpectedFailure -Pattern 'ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME' -Action {
     & $partnerCenterIdentity -RequireConfigured
 }
 $null = Get-ExpectedFailure -Pattern 'configured together' -Action {
     & $partnerCenterIdentity -IdentityName 'ZiCode.ZiFile'
 }
 $null = Get-ExpectedFailure -Pattern '3-50 alphanumeric' -Action {
-    & $partnerCenterIdentity -IdentityName 'ZiCode ZiFile' -Publisher 'CN=ZiCode Official'
+    & $partnerCenterIdentity -IdentityName 'ZiCode ZiFile' -Publisher 'CN=ZiCode Official' -PublisherDisplayName 'ZiCode'
 }
 $null = Get-ExpectedFailure -Pattern 'development MSIX identity' -Action {
-    & $partnerCenterIdentity -IdentityName 'ZiCode.ZiFile.Dev' -Publisher 'CN=ZiCode Official'
+    & $partnerCenterIdentity -IdentityName 'ZiCode.ZiFile.Dev' -Publisher 'CN=ZiCode Official' -PublisherDisplayName 'ZiCode'
 }
 $null = Get-ExpectedFailure -Pattern 'unsigned development publisher' -Action {
     & $partnerCenterIdentity `
         -IdentityName 'ZiCode.ZiFile' `
-        -Publisher 'CN=ZiCode Development, OID.2.25.311729368913984317654407730594956997722=1'
+        -Publisher 'CN=ZiCode Development, OID.2.25.311729368913984317654407730594956997722=1' `
+        -PublisherDisplayName 'ZiCode'
 }
 $null = Get-ExpectedFailure -Pattern 'X.500 distinguished name' -Action {
-    & $partnerCenterIdentity -IdentityName 'ZiCode.ZiFile' -Publisher 'not a distinguished name'
+    & $partnerCenterIdentity -IdentityName 'ZiCode.ZiFile' -Publisher 'not a distinguished name' -PublisherDisplayName 'ZiCode'
+}
+$null = Get-ExpectedFailure -Pattern '1-256 printable characters' -Action {
+    & $partnerCenterIdentity -IdentityName 'ZiCode.ZiFile' -Publisher 'CN=ZiCode Official' -PublisherDisplayName "ZiCode`nOfficial"
 }
 $formalIdentity = & $partnerCenterIdentity `
     -IdentityName 'ZiCode.ZiFile' `
     -Publisher 'CN=ZiCode Official, O=ZiCode' `
+    -PublisherDisplayName 'ZiCode' `
     -RequireConfigured |
     ConvertFrom-Json
-if (-not $formalIdentity.configured -or -not $formalIdentity.formal_identity) {
+if (-not $formalIdentity.configured -or -not $formalIdentity.formal_identity -or
+    $formalIdentity.publisher_display_name -cne 'ZiCode') {
     throw 'A valid Partner Center product identity was not accepted.'
 }
 $null = Get-ExpectedFailure -Pattern 'unsigned development publisher' -Action {
     & $publishingPolicy `
         -IdentityName 'ZiCode.ZiFile' `
         -Publisher 'CN=ZiCode Development, OID.2.25.311729368913984317654407730594956997722=1' `
+        -PublisherDisplayName 'ZiCode' `
         -SigningCertificateAvailable `
         -SigningPasswordAvailable
 }
 $accepted = & $publishingPolicy `
     -IdentityName 'ZiCode.ZiFile' `
     -Publisher 'CN=ZiCode Official' `
+    -PublisherDisplayName 'ZiCode' `
     -ReleaseVersion 'v0.1.0-alpha.1' `
     -SigningCertificateAvailable `
     -SigningPasswordAvailable |
@@ -362,6 +372,7 @@ $null = Get-ExpectedFailure -Pattern 'cloud-HSM signing integration' -Action {
     & $publishingPolicy `
         -IdentityName 'ZiCode.ZiFile' `
         -Publisher 'CN=ZiCode Official' `
+        -PublisherDisplayName 'ZiCode' `
         -ReleaseVersion 'v1.0.0' `
         -SigningCertificateAvailable `
         -SigningPasswordAvailable
@@ -370,6 +381,7 @@ $null = Get-ExpectedFailure -Pattern 'supported semantic version' -Action {
     & $publishingPolicy `
         -IdentityName 'ZiCode.ZiFile' `
         -Publisher 'CN=ZiCode Official' `
+        -PublisherDisplayName 'ZiCode' `
         -ReleaseVersion 'release' `
         -SigningCertificateAvailable `
         -SigningPasswordAvailable
@@ -455,6 +467,7 @@ try {
             -ExpectedVersion 1.0.0.0 `
             -ExpectedIdentityName 'ZiCode.ZiFile' `
             -ExpectedPublisher 'CN=ZiCode Official' `
+            -ExpectedPublisherDisplayName 'ZiCode' `
             -Provider digicert-stm
     }
 }
@@ -475,6 +488,7 @@ foreach ($requiredSigningWorkflowToken in @(
     'environment: production-signing',
     'Test-CloudSigningInputs.ps1',
     'Test-PartnerCenterIdentity.ps1',
+    'ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME',
     'digicert/code-signing-software-trust-action@v1.2.1',
     'simple-signing-mode: true',
     'digest-alg: SHA-256',
@@ -499,6 +513,7 @@ foreach ($requiredVerifierToken in @(
     'SignatureStatus]::Valid',
     'TimeStamperCertificate',
     'SignerCertificate.Subject -ne $ExpectedPublisher',
+    'ExpectedPublisherDisplayName',
     'RequireSignature',
     'SHA256SUMS-$Architecture.txt',
     '*.zip'
@@ -563,6 +578,11 @@ if ($manifestSource -notmatch [Regex]::Escape('<uap:FileType>.zipx</uap:FileType
     throw 'The MSIX manifest does not associate supported ZIPX archives.'
 }
 $packageAuditSource = Get-Content -Raw -LiteralPath $packageAudit
+foreach ($requiredIdentityAuditToken in @('ExpectedPublisherDisplayName', 'publisher_display_name')) {
+    if ($packageAuditSource -notmatch [Regex]::Escape($requiredIdentityAuditToken)) {
+        throw "The package audit omits Store publisher display-name evidence: $requiredIdentityAuditToken"
+    }
+}
 if ($packageAuditSource -notmatch [Regex]::Escape("'.zipx'") -or
     $packageAuditSource -notmatch [Regex]::Escape("'.tbz2'")) {
     throw 'The package audit does not require the archive alias associations.'
@@ -698,6 +718,13 @@ foreach ($requiredProbeToken in @(
     if ($repairProbeSource -notmatch [Regex]::Escape($requiredProbeToken)) {
         throw "The external MSIX Repair probe omits required token: $requiredProbeToken"
     }
+}
+$signedLifecycleArtifactMatches = @(
+    [Regex]::Matches($lifecycleWorkflowSource, '(?m)^\s+name: signed-windows-x64\s*$')
+)
+if ($signedLifecycleArtifactMatches.Count -ne 2 -or
+    $lifecycleWorkflowSource -match '(?m)^\s+name: windows-x64\s*$') {
+    throw 'Trusted lifecycle must download exactly two signed-windows-x64 artifacts and no unsigned windows-x64 artifact.'
 }
 $operationQueueForegroundSource = Get-Content -Raw -LiteralPath $operationQueueForeground
 foreach ($requiredForegroundQueueToken in @(
@@ -1003,6 +1030,7 @@ foreach ($requiredLivePrivacyToken in @(
     shell_extract_command_wired = $true
     lifecycle_gate_wired = $true
     lifecycle_workflow_wired = $true
+    lifecycle_signed_artifacts_wired = $true
     repair_helper_wired = $true
     rar_association_wired = $true
     rar_corpus_wired = $true
@@ -1035,6 +1063,7 @@ foreach ($requiredLivePrivacyToken in @(
     reproducibility_execution_bounded = $true
     foreground_queue_ownership_wired = $true
     partner_center_identity_preflight_wired = $true
+    partner_center_publisher_display_name_wired = $true
     partial_partner_center_identity_rejected = $true
     malformed_partner_center_identity_rejected = $true
     winget_community_path_generated = $true

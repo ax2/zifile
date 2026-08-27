@@ -5,6 +5,7 @@ param(
     [string]$Architecture = 'x64',
     [string]$IdentityName = 'ZiCode.ZiFile.Dev',
     [string]$Publisher = 'CN=ZiCode Development, OID.2.25.311729368913984317654407730594956997722=1',
+    [string]$PublisherDisplayName = 'ZiCode',
     [string]$CertificatePath,
     [securestring]$CertificatePassword,
     [switch]$AccessibleUi
@@ -139,6 +140,7 @@ $identity.Name = $IdentityName
 $identity.Publisher = $Publisher
 $identity.Version = $Version
 $identity.ProcessorArchitecture = $Architecture
+$manifest.Package.Properties.PublisherDisplayName = $PublisherDisplayName
 $unsignedDevelopmentPackage = -not $CertificatePath -and $IdentityName.EndsWith('.Dev')
 if ($unsignedDevelopmentPackage) {
     $manifest.Package.Dependencies.TargetDeviceFamily.MinVersion = '10.0.26100.0'
@@ -180,6 +182,7 @@ $auditArguments = @{
     ExpectedVersion = $Version
     ExpectedIdentityName = $IdentityName
     ExpectedPublisher = $Publisher
+    ExpectedPublisherDisplayName = $PublisherDisplayName
     ExpectedMinimumVersion = if ($unsignedDevelopmentPackage) { '10.0.26100.0' } else { '10.0.19041.0' }
     EvidencePath = $auditPath
     RequireSignature = [bool]$CertificatePath

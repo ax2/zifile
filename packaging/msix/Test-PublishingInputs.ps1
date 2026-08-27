@@ -1,6 +1,7 @@
 param(
     [string]$IdentityName,
     [string]$Publisher,
+    [string]$PublisherDisplayName,
     [string]$ReleaseVersion,
     [switch]$SigningCertificateAvailable,
     [switch]$SigningPasswordAvailable
@@ -10,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 $missing = [System.Collections.Generic.List[string]]::new()
 if ([string]::IsNullOrWhiteSpace($IdentityName)) { $missing.Add('ZIFILE_MSIX_IDENTITY') }
 if ([string]::IsNullOrWhiteSpace($Publisher)) { $missing.Add('ZIFILE_MSIX_PUBLISHER') }
+if ([string]::IsNullOrWhiteSpace($PublisherDisplayName)) { $missing.Add('ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME') }
 if (-not $SigningCertificateAvailable) { $missing.Add('ZIFILE_PFX_BASE64') }
 if (-not $SigningPasswordAvailable) { $missing.Add('ZIFILE_PFX_PASSWORD') }
 if ($missing.Count -gt 0) {
@@ -36,6 +38,7 @@ if (-not [string]::IsNullOrWhiteSpace($ReleaseVersion)) {
     validated = $true
     identity = $IdentityName
     publisher = $Publisher
+    publisher_display_name = $PublisherDisplayName
     release_version = $ReleaseVersion
     signing_provider = 'pfx-scaffolding'
     signing_certificate_available = [bool]$SigningCertificateAvailable

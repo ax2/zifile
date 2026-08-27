@@ -15,6 +15,7 @@ description: DigiCert Binary Signing 的配置、审批、演练、轮换、吊�
 | --- | --- | --- | --- |
 | Repository Variable | `ZIFILE_MSIX_IDENTITY` | 非秘密 | Partner Center 分配的精确 Package Identity Name |
 | Repository Variable | `ZIFILE_MSIX_PUBLISHER` | 非秘密 | 与证书 Subject、MSIX Publisher 精确一致 |
+| Repository Variable | `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME` | 非秘密 | Partner Center 开发者账户的精确 Publisher Display Name |
 | Environment Variable | `SM_HOST` | 非秘密 | DigiCert 服务端点 |
 | Environment Variable | `SM_KEYPAIR_ALIAS` | 非秘密 | 获准用于 ZiFile 生产发布的 Keypair Alias |
 | Environment Secret | `SM_API_KEY` | 秘密 | 最小权限自动化 API Key |
@@ -26,7 +27,7 @@ description: DigiCert Binary Signing 的配置、审批、演练、轮换、吊�
 ## 首次真实演练
 
 1. 在 Release workflow 手动选择 `signing_provider=digicert-stm`，核对源提交与工作区版本后批准 Environment deployment。
-2. 要求 x64、ARM64 两个 `Sign Windows` Job 均成功；任何缺参、Action 非零退出、无效签名、无时间戳或 Publisher 不一致都必须终止。
+2. 要求 x64、ARM64 两个 `Sign Windows` Job 均成功；任何缺参、Action 非零退出、无效签名、无时间戳、Publisher 或 Publisher Display Name 不一致都必须终止。
 3. 下载 `signed-windows-x64` 与 `signed-windows-arm64`。核对 `.signing.json` 的五项签名、`.audit.json` 的 `Valid` 状态、`SHA256SUMS-*` 和 GitHub provenance；不得保留 artifact ZIP，档案只保存解包后的证据或完整可运行目录。
 4. 在干净 x64 机器执行可信安装、启动、Explorer、升级、Repair/Reset 和卸载门禁；ARM64 在物理 Windows ARM64 设备重复。随后执行 WACK readiness 与正式 WACK。
 5. 只有双架构签名、生命周期、吊销演练和证据 URL 都通过，才可更新 `release/readiness.json`；CI 接线本身不能解除门禁。
@@ -49,4 +50,4 @@ description: DigiCert Binary Signing 的配置、审批、演练、轮换、吊�
 
 ## 最小证据集
 
-每次生产演练或发布保留：源提交/tree、workflow/job URL、架构、版本、Identity、Publisher、signer/timestamp thumbprint、五个文件 SHA-256、签名 JSON、包审计、provenance、生命周期/WACK 结果和 reviewer。不得保留 API Key、密码、客户端证书内容、Cookie、令牌或代码签名私钥。
+每次生产演练或发布保留：源提交/tree、workflow/job URL、架构、版本、Identity、Publisher、Publisher Display Name、signer/timestamp thumbprint、五个文件 SHA-256、签名 JSON、包审计、provenance、生命周期/WACK 结果和 reviewer。不得保留 API Key、密码、客户端证书内容、Cookie、令牌或代码签名私钥。

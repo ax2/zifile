@@ -15,6 +15,7 @@ The code-signing private key must remain in the cloud HSM. `SM_CLIENT_CERT_FILE_
 | --- | --- | --- | --- |
 | Repository Variable | `ZIFILE_MSIX_IDENTITY` | Non-secret | Exact Package Identity Name assigned by Partner Center |
 | Repository Variable | `ZIFILE_MSIX_PUBLISHER` | Non-secret | Exact certificate Subject and MSIX Publisher |
+| Repository Variable | `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME` | Non-secret | Exact Publisher Display Name from the Partner Center developer account |
 | Environment Variable | `SM_HOST` | Non-secret | DigiCert service endpoint |
 | Environment Variable | `SM_KEYPAIR_ALIAS` | Non-secret | Keypair approved for ZiFile production releases |
 | Environment Secret | `SM_API_KEY` | Secret | Least-privilege automation API key |
@@ -26,7 +27,7 @@ Initial provisioning requires organization validation, confirmed certificate pur
 ## First real rehearsal
 
 1. Manually run Release with `signing_provider=digicert-stm`. Verify the source commit and workspace version, then approve the Environment deployment.
-2. Require both x64 and ARM64 `Sign Windows` jobs to succeed. Missing input, nonzero Action exit, invalid signature, missing timestamp, or Publisher mismatch must stop the run.
+2. Require both x64 and ARM64 `Sign Windows` jobs to succeed. Missing input, nonzero Action exit, invalid signature, missing timestamp, Publisher mismatch, or Publisher Display Name mismatch must stop the run.
 3. Download `signed-windows-x64` and `signed-windows-arm64`. Verify five entries in `.signing.json`, `Valid` in `.audit.json`, `SHA256SUMS-*`, and GitHub provenance. Do not retain artifact ZIPs; archive only extracted evidence or complete runnable directories.
 4. Run trusted install, launch, Explorer, upgrade, Repair/Reset, and uninstall gates on a clean x64 machine and repeat on physical Windows ARM64 hardware. Then run WACK readiness and formal WACK.
 5. Update `release/readiness.json` only after dual-architecture signing, lifecycle, revocation rehearsal, and evidence URLs pass. CI wiring alone cannot clear the gate.
@@ -49,4 +50,4 @@ Preserve non-secret audit logs and affected hashes, then correlate GitHub Action
 
 ## Minimum evidence set
 
-Retain source commit/tree, workflow and job URLs, architecture, version, Identity, Publisher, signer/timestamp thumbprints, SHA-256 for all five files, signing JSON, package audit, provenance, lifecycle/WACK results, and reviewer. Never retain API keys, passwords, client-certificate contents, cookies, tokens, or a code-signing private key.
+Retain source commit/tree, workflow and job URLs, architecture, version, Identity, Publisher, Publisher Display Name, signer/timestamp thumbprints, SHA-256 for all five files, signing JSON, package audit, provenance, lifecycle/WACK results, and reviewer. Never retain API keys, passwords, client-certificate contents, cookies, tokens, or a code-signing private key.

@@ -23,17 +23,17 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 
 推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE，然后在受保护的 `production-signing` Environment 中签署桌面/CLI/Worker EXE、Explorer DLL 和 MSIX。签后门禁要求所有文件具有同一 Publisher、有效系统信任链和时间戳，并重新生成包审计、SHA-256 与来源证明；发布任务只下载 `signed-windows-*` 产物，再生成 WinGet 1.12 多文件清单候选和 GitHub Release。WinGet 候选使用社区仓库的标准目录，并在上传前把正式 URL、版本、架构和清单 SHA-256 与两份签后本地 MSIX 精确核对；官方 `winget validate` 与社区接受仍是发布后的独立证据。没有正式凭据时只能手动选择 `signing_provider=none` 生成开发用途的未签名包，不得提交 WinGet 或 Store。未签名 `.Dev` 包使用微软固定 OID Publisher 并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
 
-手动 Release 可选择 `digicert-stm` 做完整签名演练。构建阶段要求仓库 Variables `ZIFILE_MSIX_IDENTITY`、`ZIFILE_MSIX_PUBLISHER`；受保护 Environment 提供 Variables `SM_HOST`、`SM_KEYPAIR_ALIAS` 和 Secrets `SM_API_KEY`、`SM_CLIENT_CERT_FILE_B64`、`SM_CLIENT_CERT_PASSWORD`。客户端认证证书只用于登录签名服务，写入 Runner 临时目录并在作业结束前删除；代码签名私钥始终留在云 HSM。
+手动 Release 可选择 `digicert-stm` 做完整签名演练。构建阶段要求仓库 Variables `ZIFILE_MSIX_IDENTITY`、`ZIFILE_MSIX_PUBLISHER`、`ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME`；受保护 Environment 提供 Variables `SM_HOST`、`SM_KEYPAIR_ALIAS` 和 Secrets `SM_API_KEY`、`SM_CLIENT_CERT_FILE_B64`、`SM_CLIENT_CERT_PASSWORD`。客户端认证证书只用于登录签名服务，写入 Runner 临时目录并在作业结束前删除；代码签名私钥始终留在云 HSM。
 
-正式标签或 `digicert-stm` 演练会在编译前运行 `Test-PartnerCenterIdentity.ps1 -RequireConfigured`。它要求 Name/Publisher 同时存在，Name 符合 MSIX 的 3–50 位字母数字/点/横线边界，Publisher 是有效 X.500 distinguished name，并拒绝 `.Dev` 与未签名 OID。数值必须从 Partner Center 的 [Product identity](https://learn.microsoft.com/windows/apps/publish/view-app-identity-details) 原样复制；预检只证明结构和来源约束，不证明账号或名称已经预留。
+正式标签或 `digicert-stm` 演练会在编译前运行 `Test-PartnerCenterIdentity.ps1 -RequireConfigured`。它要求 Name、Publisher 与 Publisher Display Name 同时存在，Name 符合 MSIX 的 3–50 位字母数字/点/横线边界，Publisher 是有效 X.500 distinguished name，并拒绝 `.Dev` 与未签名 OID；Display Name 必须是 Partner Center 开发者账户中的精确值。三个值必须从 Partner Center 原样复制；预检只证明结构和来源约束，不证明账号或名称已经预留。
 
 生产配置、审批、轮换、应急停止、吊销和最小证据集见[生产签名运维](/zifile/development/signing-operations/)。签名 Job 按架构串行化不同发布运行、设置 30 分钟硬超时，并使用 Job 级最小权限；任何超时都作为失败处理，不能绕过签后验签直接发布。
 
-每次打包都会重新解包 MSIX，并核对 Identity、Publisher、版本、最低 Windows build、桌面/CLI/Worker 三枚 EXE 与 Explorer DLL 的 PE 架构、主要文件关联、`zifile.exe` alias、敏感文件/ZIP 缺失和签名状态。审计 JSON 随对应架构进入校验和、来源证明和 Release artifact；它不能替代安装、升级、卸载或 WACK 实机门禁。
+每次打包都会重新解包 MSIX，并核对 Identity、Publisher、Publisher Display Name、版本、最低 Windows build、桌面/CLI/Worker 三枚 EXE 与 Explorer DLL 的 PE 架构、主要文件关联、`zifile.exe` alias、敏感文件/ZIP 缺失和签名状态。审计 JSON 随对应架构进入校验和、来源证明和 Release artifact；它不能替代安装、升级、卸载或 WACK 实机门禁。
 
 `tests/smoke/msix-lifecycle.ps1` 为可信签名的基线包和升级包提供显式实机门禁。它先运行包审计并拒绝任何既有同 Identity 安装，然后依次验证安装、包内 CLI、版本升级、`Reset-AppxPackage` 和卸载；无论中途是否失败，都会尝试清理本次测试安装并写出 JSON。微软将 Reset 定义为恢复初始配置，因此脚本不会把它误记为保留数据的 Repair；正式 Repair 仍是独立门禁。参见 [Appx 模块](https://learn.microsoft.com/powershell/module/appx/)与 [Reset-AppxPackage](https://learn.microsoft.com/powershell/module/appx/reset-appxpackage)。
 
-手动 **Trusted MSIX lifecycle** 工作流接收两个 Release 验证运行 ID，从各自的 `windows-x64` artifact 读取默认包和审计 JSON，并在干净 Windows Runner 执行同一门禁、保存 30 天证据。ARM64 包的真实安装仍必须在物理 ARM64 Windows 环境完成。
+手动 **Trusted MSIX lifecycle** 工作流接收两个 Release 签名运行 ID，从各自的 `signed-windows-x64` artifact 读取默认包和审计 JSON，并在干净 Windows Runner 执行同一门禁、保存 30 天证据。它明确拒绝签名前的 `windows-x64` 产物；ARM64 包的真实安装仍必须在物理 ARM64 Windows 环境完成。
 
 Windows Release 使用仓库固定的 Rust 1.93.0、锁文件、单作业 Cargo 构建和 MSVC `/Brepro` 确定性链接。x64/ARM64 测试与打包 Job 各有 90 分钟硬超时；超时按失败处理，不能跳过包审计或产物上传。独立的双构建工作流会在两个隔离目标目录比较五个裸 PE 文件的 SHA-256；方法与证据边界见[可复现 Windows 构建](/zifile/development/reproducible-builds/)。
 

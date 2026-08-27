@@ -6,6 +6,7 @@ param(
     [Parameter(Mandatory)][string]$ExpectedVersion,
     [Parameter(Mandatory)][string]$ExpectedIdentityName,
     [Parameter(Mandatory)][string]$ExpectedPublisher,
+    [Parameter(Mandatory)][string]$ExpectedPublisherDisplayName,
     [Parameter(Mandatory)][string]$ExpectedMinimumVersion,
     [string]$EvidencePath,
     [switch]$RequireSignature
@@ -96,6 +97,14 @@ try {
     }
     if ($identity.Publisher -cne $ExpectedPublisher) {
         throw "Publisher mismatch: expected '$ExpectedPublisher', found '$($identity.Publisher)'."
+    }
+    $publisherDisplayName = $manifest.SelectSingleNode(
+        '/f:Package/f:Properties/f:PublisherDisplayName',
+        $namespace
+    )
+    if (-not $publisherDisplayName) { throw 'MSIX manifest has no PublisherDisplayName.' }
+    if ($publisherDisplayName.InnerText -cne $ExpectedPublisherDisplayName) {
+        throw "PublisherDisplayName mismatch: expected '$ExpectedPublisherDisplayName', found '$($publisherDisplayName.InnerText)'."
     }
     if ($identity.Version -cne $ExpectedVersion) {
         throw "Version mismatch: expected '$ExpectedVersion', found '$($identity.Version)'."
@@ -210,6 +219,7 @@ try {
         sha256 = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash
         identity = $identity.Name
         publisher = $identity.Publisher
+        publisher_display_name = $publisherDisplayName.InnerText
         version = $identity.Version
         architecture = $identity.ProcessorArchitecture
         minimum_windows_version = $targetFamily.MinVersion

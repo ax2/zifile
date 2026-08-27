@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       baseline_run_id:
-        description: Release workflow run ID containing the signed baseline windows-x64 artifact
+        description: Release workflow run ID containing the signed baseline signed-windows-x64 artifact
         required: true
       upgrade_run_id:
-        description: Release workflow run ID containing the signed upgrade windows-x64 artifact
+        description: Release workflow run ID containing the signed upgrade signed-windows-x64 artifact
         required: true
 
 permissions:
@@ -37,14 +37,14 @@ jobs:
       - name: Download baseline package artifact
         uses: actions/download-artifact@v7
         with:
-          name: windows-x64
+          name: signed-windows-x64
           path: baseline
           run-id: ${{ inputs.baseline_run_id }}
           github-token: ${{ github.token }}
       - name: Download upgrade package artifact
         uses: actions/download-artifact@v7
         with:
-          name: windows-x64
+          name: signed-windows-x64
           path: upgrade
           run-id: ${{ inputs.upgrade_run_id }}
           github-token: ${{ github.token }}
@@ -69,7 +69,7 @@ jobs:
 
           $baseline = Get-ReleasePair -Root baseline
           $upgrade = Get-ReleasePair -Root upgrade
-          foreach ($field in @('identity', 'publisher', 'architecture', 'minimum_windows_version')) {
+          foreach ($field in @('identity', 'publisher', 'publisher_display_name', 'architecture', 'minimum_windows_version')) {
             if ($baseline.audit.$field -cne $upgrade.audit.$field) {
               throw "Baseline and upgrade audit field differs: $field"
             }
@@ -85,6 +85,7 @@ jobs:
             -UpgradeVersion $upgrade.audit.version `
             -IdentityName $baseline.audit.identity `
             -Publisher $baseline.audit.publisher `
+            -PublisherDisplayName $baseline.audit.publisher_display_name `
             -MinimumWindowsVersion $baseline.audit.minimum_windows_version `
             -RepairHelper "$env:RUNNER_TEMP\msix-repair-helper\MsixRepair.exe" `
             -EvidencePath "$env:RUNNER_TEMP\msix-lifecycle.json" `

@@ -34,6 +34,7 @@ jobs:
       CARGO_BUILD_JOBS: 1
       ZIFILE_MSIX_IDENTITY: ${{ vars.ZIFILE_MSIX_IDENTITY }}
       ZIFILE_MSIX_PUBLISHER: ${{ vars.ZIFILE_MSIX_PUBLISHER }}
+      ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME }}
     strategy:
       fail-fast: false
       matrix:
@@ -62,6 +63,7 @@ jobs:
           $identityArguments = @{
             IdentityName = $env:ZIFILE_MSIX_IDENTITY
             Publisher = $env:ZIFILE_MSIX_PUBLISHER
+            PublisherDisplayName = $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME
           }
           if ('${{ github.event_name }}' -ne 'workflow_dispatch' -or
               '${{ inputs.signing_provider }}' -eq 'digicert-stm') {
@@ -86,6 +88,9 @@ jobs:
           }
           if ($env:ZIFILE_MSIX_IDENTITY) { $arguments.IdentityName = $env:ZIFILE_MSIX_IDENTITY }
           if ($env:ZIFILE_MSIX_PUBLISHER) { $arguments.Publisher = $env:ZIFILE_MSIX_PUBLISHER }
+          if ($env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME) {
+            $arguments.PublisherDisplayName = $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME
+          }
           ./packaging/msix/Build-Package.ps1 @arguments
       - name: Build accessible UI candidate package
         if: github.event_name == 'workflow_dispatch'
@@ -151,6 +156,7 @@ jobs:
       ZIFILE_SIGNING_PROVIDER: digicert-stm
       ZIFILE_MSIX_IDENTITY: ${{ vars.ZIFILE_MSIX_IDENTITY }}
       ZIFILE_MSIX_PUBLISHER: ${{ vars.ZIFILE_MSIX_PUBLISHER }}
+      ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME }}
       SM_HOST: ${{ vars.SM_HOST }}
       SM_API_KEY: ${{ secrets.SM_API_KEY }}
       SM_CLIENT_CERT_FILE_B64: ${{ secrets.SM_CLIENT_CERT_FILE_B64 }}
@@ -229,6 +235,7 @@ jobs:
             -ExpectedVersion '${{ steps.version.outputs.msix }}' `
             -ExpectedIdentityName $env:ZIFILE_MSIX_IDENTITY `
             -ExpectedPublisher $env:ZIFILE_MSIX_PUBLISHER `
+            -ExpectedPublisherDisplayName $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME `
             -Provider $env:ZIFILE_SIGNING_PROVIDER
       - name: Remove ephemeral client authentication certificate
         if: always()

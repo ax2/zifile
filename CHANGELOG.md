@@ -8,6 +8,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Formal Partner Center packaging now injects and audits the exact Publisher
+  Display Name in addition to Identity and Publisher; the trusted lifecycle
+  workflow downloads signed rather than pre-signing x64 artifacts.
 - Bilingual end-user getting-started and troubleshooting guides covering safe
   extraction, format input rules, queue/cancellation behavior, CLI passwords,
   Worker failures, development-package trust, and responsible issue reporting.
