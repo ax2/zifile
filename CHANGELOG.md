@@ -18,6 +18,9 @@ All notable changes to ZiFile are documented here. The format follows
 - Astro Starlight documentation, roadmap, ADRs, and Stage 0 work log.
 - Unit, benchmark, smoke, CI, documentation, and release foundations.
 - Real ZIP/ZIP64/AES and 7z/AES create, list, verify, and extraction operations.
+- Format-aware compression controls: 7z creation now applies the selected LZMA2
+  level, Zstandard and Brotli expose their full ranges, Bzip2 enforces its valid
+  minimum, and fixed-level TAR/LZ4 creation no longer presents an inert slider.
 - Encrypted 7z/RAR header retry views in both desktop interfaces, including correct
   7z AES entry flags after a password-protected archive is unlocked.
 - TAR, tar.gz, tar.zst, tar.xz and tar.bz2 archive compositions.

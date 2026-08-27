@@ -534,13 +534,16 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::ClearSources => state.create_sources.clear(),
         Message::CreateFormatChanged(format) => {
             state.create_format = format;
+            state.compression_level = format.clamp_compression_level(state.compression_level);
             if !format.capabilities().encryption {
                 state.create_password.clear();
             }
             state.status = create_input_help(state.locale, format).to_owned();
         }
         Message::CreatePasswordChanged(password) => state.create_password = password,
-        Message::CompressionLevelChanged(level) => state.compression_level = level,
+        Message::CompressionLevelChanged(level) => {
+            state.compression_level = state.create_format.clamp_compression_level(level);
+        }
         Message::Create => {
             if let Some(issue) = create_source_issue(state.create_format, &state.create_sources) {
                 state.status = create_source_issue_text(state.locale, issue).to_owned();
@@ -1336,6 +1339,30 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
     let source_issue = create_source_issue(state.create_format, &state.create_sources);
     let single_file_format =
         state.create_format.create_input() == Some(CreateInputKind::SingleFile);
+    let compression_control: Element<'_, Message> =
+        if let Some((minimum, maximum)) = state.create_format.compression_level_range() {
+            column![
+                text(format!(
+                    "{} · {}",
+                    state.locale.text(Text::CompressionLevel),
+                    state.compression_level
+                ))
+                .size(13),
+                slider(
+                    minimum..=maximum,
+                    state.compression_level,
+                    Message::CompressionLevelChanged
+                )
+            ]
+            .spacing(8)
+            .width(Fill)
+            .into()
+        } else {
+            text(state.locale.text(Text::CompressionFixed))
+                .size(13)
+                .width(Fill)
+                .into()
+        };
 
     column![
         text(state.locale.text(Text::CreateHeading)).size(32),
@@ -1368,21 +1395,7 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
                     ]
                     .spacing(6)
                     .width(240),
-                    column![
-                        text(format!(
-                            "{} · {}",
-                            state.locale.text(Text::CompressionLevel),
-                            state.compression_level
-                        ))
-                        .size(13),
-                        slider(
-                            0..=9,
-                            state.compression_level,
-                            Message::CompressionLevelChanged
-                        )
-                    ]
-                    .spacing(8)
-                    .width(Fill),
+                    compression_control,
                 ]
                 .spacing(20),
                 text(create_input_help(state.locale, state.create_format)).size(13),

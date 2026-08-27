@@ -25,6 +25,8 @@ Legacy ZIP Shrink, Reduce 1–4, and Implode methods are also decoded read-only.
 
 ZIP, 7z, and TAR compositions accept multiple files and folders when created. Single-stream gzip, Zstandard, XZ, Bzip2, LZ4, and Brotli require exactly one existing file; use the corresponding TAR composition for folders or multiple items. The desktop validates this before opening the destination dialog.
 
+The creation UI derives its compression-level range from the selected encoder: ZIP, 7z, gzip, and XZ use 0–9; Zstandard uses 0–22; Bzip2 uses 1–9; and Brotli uses 0–11. Plain TAR is uncompressed and the current LZ4 encoder has a fixed setting, so those formats do not expose an inert level control. 7z writes the selected level into its LZMA2 parameters and preserves it when AES encryption is enabled instead of falling back to the backend default.
+
 RAR creation is out of scope. Read-only browsing, integrity testing and selective extraction use the pure-Rust `rars` provider (MIT OR Apache-2.0). ZiFile rejects unsafe paths, links and RAR 5+ redirections, applies declared and decoded-size limits, writes to temporary files, and runs archive work in the isolated Worker. Password-protected RAR archives are supported without persisting passwords.
 
 CAB uses the pure-Rust, MIT-licensed `cab` provider. Browsing, integrity testing, and selective safe extraction currently cover None, MSZIP, and LZX content. Quantum compression and multi-cabinet sets are not supported; multi-cabinet headers are explicitly rejected before browsing, and CAB creation is not exposed.

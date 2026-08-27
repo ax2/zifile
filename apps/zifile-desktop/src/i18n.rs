@@ -114,6 +114,10 @@ impl Locale {
             Text::Remove => ("Remove", "移除"),
             Text::Format => ("Format", "格式"),
             Text::CompressionLevel => ("Compression level", "压缩等级"),
+            Text::CompressionFixed => (
+                "Compression level · fixed for this format",
+                "压缩等级 · 此格式使用固定设置",
+            ),
             Text::PasswordOptional => ("Password · optional", "密码 · 可选"),
             Text::PasswordUnavailable => (
                 "Password · unavailable for this format",
@@ -217,6 +221,7 @@ pub enum Text {
     Remove,
     Format,
     CompressionLevel,
+    CompressionFixed,
     PasswordOptional,
     PasswordUnavailable,
     NoEncryption,

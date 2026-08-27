@@ -1665,17 +1665,22 @@ fn create_seven_zip(
     set_source_totals(&entries, &options.progress);
     let mut temporary = temporary_archive(destination)?;
     let mut writer = SevenZWriter::new(temporary.as_file_mut())?;
+    let mut content_methods = Vec::new();
     if let Some(password) = options
         .password
         .as_deref()
         .filter(|value| !value.is_empty())
     {
         use sevenz_rust2::encoder_options::AesEncoderOptions;
-        writer.set_content_methods(vec![
-            AesEncoderOptions::new(Password::new(password)).into(),
-            sevenz_rust2::EncoderMethod::LZMA2.into(),
-        ]);
+        content_methods.push(AesEncoderOptions::new(Password::new(password)).into());
     }
+    content_methods.push(
+        sevenz_rust2::encoder_options::Lzma2Options::from_level(u32::from(
+            ArchiveFormat::SevenZip.clamp_compression_level(options.compression_level),
+        ))
+        .into(),
+    );
+    writer.set_content_methods(content_methods);
     let mut summary = OperationSummary::default();
     for source in entries {
         options.cancellation.check()?;

@@ -588,6 +588,7 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
     let source_issue = create_source_issue(view.create_format, &view.create_sources);
     let single_file_format = view.create_format.create_input() == Some(CreateInputKind::SingleFile);
     let input_help = create_input_help(locale, view.create_format);
+    let compression_range = view.create_format.compression_level_range();
     rsx! { section { class: "create-page", "aria-labelledby": "create-title",
         div { class: "page-heading", div { h2 { id: "create-title", {locale.text(Text::CreateHeading)} } p { {locale.text(Text::CreateHelp)} } }
             div { class: "button-row", button { onclick: move |_| add_files(state), {locale.text(Text::AddFiles)} }
@@ -601,10 +602,14 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
         }
         div { class: "form-grid",
             label { span { {locale.text(Text::Format)} } select { value: format_value(view.create_format), "aria-describedby": "create-format-help",
-                onchange: move |event| { let mut value = state.write(); value.create_format = parse_format(&event.value()); if !value.create_format.capabilities().encryption { value.create_password.clear(); } },
+                onchange: move |event| { let mut value = state.write(); let format = parse_format(&event.value()); value.create_format = format; value.compression_level = format.clamp_compression_level(value.compression_level); if !format.capabilities().encryption { value.create_password.clear(); } },
                 for format in CREATE_FORMATS { option { value: format_value(format), "{format}" } } } }
-            label { span { "{locale.text(Text::CompressionLevel)} · {view.compression_level}" } input { r#type: "range", min: "0", max: "9", value: "{view.compression_level}",
-                oninput: move |event| state.write().compression_level = event.value().parse().unwrap_or(6) } }
+            if let Some((minimum, maximum)) = compression_range {
+                label { span { "{locale.text(Text::CompressionLevel)} · {view.compression_level}" } input { r#type: "range", min: "{minimum}", max: "{maximum}", value: "{view.compression_level}",
+                    oninput: move |event| { let mut value = state.write(); value.compression_level = value.create_format.clamp_compression_level(event.value().parse().unwrap_or(6)); } } }
+            } else {
+                p { class: "muted", {locale.text(Text::CompressionFixed)} }
+            }
             label { span { if encrypted { {locale.text(Text::PasswordOptional)} } else { {locale.text(Text::PasswordUnavailable)} } }
                 input { r#type: "password", autocomplete: "off", spellcheck: "false", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: !encrypted, oninput: move |event| state.write().create_password = event.value() } }
         }

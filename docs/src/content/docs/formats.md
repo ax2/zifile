@@ -25,6 +25,8 @@ ZIP 读取支持 Store、Deflate、Deflate64、BZip2、LZMA、XZ、Zstandard 与
 
 创建 ZIP、7z 和 TAR 组合时可以选择多个文件或文件夹。单流 gzip、Zstandard、XZ、Bzip2、LZ4 和 Brotli 必须恰好选择一个现有文件；若要压缩目录或多个项目，请选择对应的 TAR 组合格式。桌面端会在打开保存对话框前检查这一要求。
 
+创建界面的压缩等级范围由所选编码器决定：ZIP、7z、gzip 和 XZ 为 0–9，Zstandard 为 0–22，Bzip2 为 1–9，Brotli 为 0–11。纯 TAR 不压缩，当前 LZ4 编码器使用固定设置，因此这两种格式不会显示无效的等级滑块。7z 会把所选等级写入 LZMA2 参数，加密时仍沿用相同等级而不是退回后端默认值。
+
 RAR 创建不在计划内。只读浏览、完整性测试和选择性解压使用纯 Rust 的 `rars` Provider（MIT OR Apache-2.0）。ZiFile 会拒绝不安全路径、链接和 RAR 5+ 重定向，执行声明大小与实际解码大小限制，先写临时文件，并在隔离 Worker 中处理归档。密码保护的 RAR 可以读取，密码不会持久化。
 
 CAB 使用纯 Rust、MIT 许可的 `cab` Provider。当前支持浏览、完整性校验和选择性安全解压 None、MSZIP 与 LZX 内容；Quantum 压缩和跨多个 Cabinet 的集合暂不支持，多 Cabinet 头部会在浏览前被明确拒绝，CAB 创建也不对外开放。

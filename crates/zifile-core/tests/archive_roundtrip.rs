@@ -312,6 +312,60 @@ fn seven_zip_round_trip() {
 }
 
 #[test]
+fn seven_zip_creation_applies_the_requested_compression_level() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("payload.txt");
+    fs::write(&source, "ZiFile compression level\n".repeat(16_384)).unwrap();
+
+    for password in [None, Some("level-test-password")] {
+        let mut properties = Vec::new();
+        for level in [0, 9] {
+            let suffix = if password.is_some() {
+                "encrypted"
+            } else {
+                "plain"
+            };
+            let archive = temp.path().join(format!("{suffix}-level-{level}.7z"));
+            create_archive(
+                std::slice::from_ref(&source),
+                &archive,
+                ArchiveFormat::SevenZip,
+                &CreateOptions {
+                    compression_level: level,
+                    password: password.map(str::to_owned),
+                    ..CreateOptions::default()
+                },
+            )
+            .unwrap();
+
+            let reader = sevenz_rust2::ArchiveReader::open(
+                &archive,
+                password.map_or_else(sevenz_rust2::Password::empty, sevenz_rust2::Password::new),
+            )
+            .unwrap();
+            let coders = reader
+                .archive()
+                .blocks
+                .iter()
+                .flat_map(|block| block.coders.iter())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                coders.iter().any(|coder| {
+                    coder.encoder_method_id() == sevenz_rust2::EncoderMethod::ID_AES256_SHA256
+                }),
+                password.is_some()
+            );
+            let lzma2 = coders
+                .iter()
+                .find(|coder| coder.encoder_method_id() == sevenz_rust2::EncoderMethod::ID_LZMA2)
+                .unwrap();
+            properties.push(lzma2.properties().to_vec());
+        }
+        assert_ne!(properties[0], properties[1]);
+    }
+}
+
+#[test]
 fn tar_family_round_trips() {
     for format in [
         ArchiveFormat::Tar,

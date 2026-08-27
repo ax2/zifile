@@ -114,6 +114,33 @@ impl ArchiveFormat {
         }
     }
 
+    /// Inclusive compression-level bounds exposed to callers when the selected
+    /// encoder has a user-adjustable level. Formats with fixed compression or
+    /// no compression return `None` so UIs do not present a control that has no
+    /// effect.
+    pub const fn compression_level_range(self) -> Option<(u8, u8)> {
+        match self {
+            Self::Zip | Self::SevenZip | Self::TarGzip | Self::TarXz | Self::Gzip | Self::Xz => {
+                Some((0, 9))
+            }
+            Self::TarZstd | Self::Zstandard => Some((0, 22)),
+            Self::TarBzip2 | Self::Bzip2 => Some((1, 9)),
+            Self::Brotli => Some((0, 11)),
+            Self::Tar | Self::Lz4 | Self::Rar | Self::Cab => None,
+        }
+    }
+
+    /// Clamp a persisted or externally supplied level to this format's
+    /// supported range. Fixed-level formats preserve the value because their
+    /// encoders intentionally ignore it.
+    pub const fn clamp_compression_level(self, level: u8) -> u8 {
+        match self.compression_level_range() {
+            Some((minimum, _)) if level < minimum => minimum,
+            Some((_, maximum)) if level > maximum => maximum,
+            _ => level,
+        }
+    }
+
     pub const fn canonical_extension(self) -> &'static str {
         match self {
             Self::Zip => "zip",
@@ -477,6 +504,37 @@ mod tests {
         }
         assert_eq!(ArchiveFormat::Rar.create_input(), None);
         assert_eq!(ArchiveFormat::Cab.create_input(), None);
+    }
+
+    #[test]
+    fn compression_level_contract_matches_each_encoder() {
+        for format in [
+            ArchiveFormat::Zip,
+            ArchiveFormat::SevenZip,
+            ArchiveFormat::TarGzip,
+            ArchiveFormat::TarXz,
+            ArchiveFormat::Gzip,
+            ArchiveFormat::Xz,
+        ] {
+            assert_eq!(format.compression_level_range(), Some((0, 9)));
+            assert_eq!(format.clamp_compression_level(22), 9);
+        }
+        for format in [ArchiveFormat::TarZstd, ArchiveFormat::Zstandard] {
+            assert_eq!(format.compression_level_range(), Some((0, 22)));
+            assert_eq!(format.clamp_compression_level(22), 22);
+        }
+        for format in [ArchiveFormat::TarBzip2, ArchiveFormat::Bzip2] {
+            assert_eq!(format.compression_level_range(), Some((1, 9)));
+            assert_eq!(format.clamp_compression_level(0), 1);
+        }
+        assert_eq!(
+            ArchiveFormat::Brotli.compression_level_range(),
+            Some((0, 11))
+        );
+        assert_eq!(ArchiveFormat::Brotli.clamp_compression_level(22), 11);
+        for format in [ArchiveFormat::Tar, ArchiveFormat::Lz4] {
+            assert_eq!(format.compression_level_range(), None);
+        }
     }
 
     #[test]
