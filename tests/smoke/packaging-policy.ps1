@@ -29,8 +29,9 @@ $wingetClientInstaller = Join-Path $repoRoot 'packaging\winget\Install-Validatio
 $wingetSmoke = Join-Path $repoRoot 'tests\smoke\winget-manifest.ps1'
 $userDocs = Join-Path $repoRoot 'scripts\Test-UserDocs.ps1'
 $reproducibilityWorkflow = Join-Path $repoRoot '.github\workflows\reproducibility.yml'
+$operationQueueForeground = Join-Path $repoRoot 'tests\performance\operation-queue-foreground.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -541,6 +542,20 @@ foreach ($requiredShellToken in @(
 if ($manifestSource -notmatch [Regex]::Escape('<uap:FileType>.rar</uap:FileType>')) {
     throw 'The MSIX manifest does not associate supported RAR archives.'
 }
+
+function Assert-WorkflowJobTimeout {
+    param(
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Job,
+        [Parameter(Mandatory)][int]$Minutes,
+        [Parameter(Mandatory)][string]$Workflow
+    )
+    $pattern = '(?ms)^  {0}:\r?\n(?:(?!^  [A-Za-z0-9_-]+:\r?$).)*?^    timeout-minutes: {1}\r?$' -f
+        [Regex]::Escape($Job), $Minutes
+    if ($Source -notmatch $pattern) {
+        throw "$Workflow job '$Job' does not have the required $Minutes-minute hard timeout."
+    }
+}
 if ($manifestSource -notmatch [Regex]::Escape('<uap:FileType>.cab</uap:FileType>')) {
     throw 'The MSIX manifest does not associate supported CAB archives.'
 }
@@ -684,7 +699,31 @@ foreach ($requiredProbeToken in @(
         throw "The external MSIX Repair probe omits required token: $requiredProbeToken"
     }
 }
+$operationQueueForegroundSource = Get-Content -Raw -LiteralPath $operationQueueForeground
+foreach ($requiredForegroundQueueToken in @(
+    'SetForegroundWindow',
+    'GetForegroundWindow',
+    'ForegroundTimeoutSeconds = 3',
+    'Refusing to run the foreground queue smoke because ZiFile is not the foreground window.',
+    'foreground_window_verified = $true',
+    '<no UI Automation document text observed>',
+    '[Math]::Min(500, $normalized.Length)'
+)) {
+    if ($operationQueueForegroundSource -notmatch [Regex]::Escape($requiredForegroundQueueToken)) {
+        throw "The foreground operation-queue smoke omits required ownership token: $requiredForegroundQueueToken"
+    }
+}
 $ciSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\ci.yml')
+foreach ($ciTimeout in @(
+    @{ Job = 'rust'; Minutes = 45 },
+    @{ Job = 'rar-interoperability'; Minutes = 30 },
+    @{ Job = 'licenses'; Minutes = 15 },
+    @{ Job = 'fuzz'; Minutes = 20 },
+    @{ Job = 'repair-helper'; Minutes = 15 },
+    @{ Job = 'docs'; Minutes = 15 }
+)) {
+    Assert-WorkflowJobTimeout -Source $ciSource -Job $ciTimeout.Job -Minutes $ciTimeout.Minutes -Workflow 'CI'
+}
 if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-VersionConsistency.ps1')) {
     throw 'CI does not enforce version consistency.'
 }
@@ -737,6 +776,15 @@ if ($toolchainIndex -lt 0 -or $packagingPolicyIndex -lt 0 -or $wingetSetupIndex 
     throw 'Packaging policy and official WinGet validation must fail fast before Rust toolchain setup.'
 }
 $releaseWorkflowSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\release.yml')
+$releaseWindowsJobIndex = $releaseWorkflowSource.IndexOf("  windows:`n", [StringComparison]::Ordinal)
+$releaseWindowsTimeoutIndex = $releaseWorkflowSource.IndexOf('    timeout-minutes: 90', [StringComparison]::Ordinal)
+$releaseSignJobIndex = $releaseWorkflowSource.IndexOf("  sign:`n", [StringComparison]::Ordinal)
+if ($releaseWindowsJobIndex -lt 0 -or $releaseWindowsTimeoutIndex -lt 0 -or $releaseSignJobIndex -lt 0 -or
+    $releaseWindowsTimeoutIndex -lt $releaseWindowsJobIndex -or $releaseWindowsTimeoutIndex -gt $releaseSignJobIndex) {
+    throw 'Release Windows packaging jobs do not have the required 90-minute hard timeout.'
+}
+Assert-WorkflowJobTimeout -Source $releaseWorkflowSource -Job 'sbom' -Minutes 20 -Workflow 'Release'
+Assert-WorkflowJobTimeout -Source $releaseWorkflowSource -Job 'publish' -Minutes 30 -Workflow 'Release'
 $reproducibilityWorkflowSource = Get-Content -Raw -LiteralPath $reproducibilityWorkflow
 foreach ($requiredReproducibilityToken in @(
     'cancel-in-progress: true',
@@ -918,6 +966,8 @@ foreach ($requiredWackToken in @(
     }
 }
 $docsPagesSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\docs-pages.yml')
+Assert-WorkflowJobTimeout -Source $docsPagesSource -Job 'build' -Minutes 20 -Workflow 'Docs Pages'
+Assert-WorkflowJobTimeout -Source $docsPagesSource -Job 'deploy' -Minutes 15 -Workflow 'Docs Pages'
 foreach ($requiredPrivacyToken in @(
     'Validate generated Store privacy routes',
     './packaging/store/Test-PublicPrivacy.ps1 -DocumentationOutput ./docs/dist'
@@ -980,7 +1030,10 @@ foreach ($requiredLivePrivacyToken in @(
     least_privilege_release_permissions = $true
     signing_timeout_wired = $true
     signing_concurrency_wired = $true
+    release_packaging_timeout_wired = $true
+    workflow_job_timeouts_wired = $true
     reproducibility_execution_bounded = $true
+    foreground_queue_ownership_wired = $true
     partner_center_identity_preflight_wired = $true
     partial_partner_center_identity_rejected = $true
     malformed_partner_center_identity_rejected = $true

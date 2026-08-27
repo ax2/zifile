@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][string]$ExecutablePath,
     [string]$FixturePath,
     [ValidateRange(1000, 1000000)][int]$EntryCount = 100000,
-    [ValidateRange(5, 120)][int]$TimeoutSeconds = 45
+    [ValidateRange(5, 120)][int]$TimeoutSeconds = 45,
+    [ValidateRange(1, 10)][int]$ForegroundTimeoutSeconds = 3
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,6 +11,26 @@ $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+
+if (-not ('ZiFileQueueForeground.NativeMethods' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+namespace ZiFileQueueForeground
+{
+    public static class NativeMethods
+    {
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetForegroundWindow(IntPtr windowHandle);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetForegroundWindow();
+    }
+}
+'@
+}
 
 function Resolve-RepoPath {
     param([Parameter(Mandatory)][string]$Path)
@@ -60,6 +81,23 @@ function Wait-WindowElement {
         Start-Sleep -Milliseconds 20
     } while ([DateTime]::UtcNow -lt $Deadline)
     throw "Timed out waiting for process $ProcessId to expose a UI Automation window."
+}
+
+function Set-TestWindowForeground {
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Window,
+        [Parameter(Mandatory)][DateTime]$Deadline
+    )
+    $handle = [IntPtr]$Window.Current.NativeWindowHandle
+    if ($handle -eq [IntPtr]::Zero) { throw 'ZiFile exposed a zero native window handle.' }
+    do {
+        $null = [ZiFileQueueForeground.NativeMethods]::SetForegroundWindow($handle)
+        if ([ZiFileQueueForeground.NativeMethods]::GetForegroundWindow() -eq $handle) { return }
+        try { $Window.SetFocus() } catch { }
+        if ([ZiFileQueueForeground.NativeMethods]::GetForegroundWindow() -eq $handle) { return }
+        Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $Deadline)
+    throw 'Refusing to run the foreground queue smoke because ZiFile is not the foreground window.'
 }
 
 function Find-Button {
@@ -124,16 +162,24 @@ function Wait-DocumentText {
 
 function Wait-DocumentAnyText {
     param([Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Root, [Parameter(Mandatory)][string[]]$AnyOf, [Parameter(Mandatory)][DateTime]$Deadline)
+    $lastText = $null
     do {
         try {
             $text = Get-DocumentText -Root $Root
+            if ($text) { $lastText = $text }
             if ($text -and @($AnyOf | Where-Object { $text.Contains($_) }).Count -gt 0) { return $text }
         }
         catch [System.Windows.Automation.ElementNotAvailableException] { }
         catch [System.InvalidOperationException] { }
         Start-Sleep -Milliseconds 20
     } while ([DateTime]::UtcNow -lt $Deadline)
-    throw "Timed out waiting for document text: $($AnyOf -join ' | ')"
+    $diagnostic = if ([string]::IsNullOrWhiteSpace($lastText)) {
+        '<no UI Automation document text observed>'
+    } else {
+        $normalized = ($lastText -replace '\s+', ' ').Trim()
+        $normalized.Substring(0, [Math]::Min(500, $normalized.Length))
+    }
+    throw "Timed out waiting for document text: $($AnyOf -join ' | '). Last document text: $diagnostic"
 }
 
 function Get-WorkerChildren {
@@ -165,6 +211,9 @@ try {
     $process = Start-Process -FilePath $executable -ArgumentList @("`"$archive`"") -PassThru
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     $window = Wait-WindowElement -ProcessId $process.Id -Deadline $deadline
+    $foregroundDeadline = [DateTime]::UtcNow.AddSeconds($ForegroundTimeoutSeconds)
+    if ($foregroundDeadline -gt $deadline) { $foregroundDeadline = $deadline }
+    Set-TestWindowForeground -Window $window -Deadline $foregroundDeadline
     Wait-DocumentAnyText -Root $window -AnyOf @("Opened $EntryCount entries", "已打开 $EntryCount 个项目") -Deadline $deadline | Out-Null
 
     $testButton = Wait-Button -Root $window -Names @('Test archive', '校验压缩文件') -Deadline $deadline
@@ -202,6 +251,7 @@ try {
         executable = [System.IO.Path]::GetFileName($executable)
         fixture_entries = $EntryCount
         fixture_generated = $generatedFixture
+        foreground_window_verified = $true
         test_operations_submitted = $testInvocationCount
         active_cancelled = $true
         next_operation_started = $true

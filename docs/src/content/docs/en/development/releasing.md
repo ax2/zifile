@@ -23,7 +23,7 @@ Each MSIX is unpacked and audited for identity, publisher, version, minimum Wind
 
 The manual **Trusted MSIX lifecycle** workflow accepts two Release validation run IDs, reads the default package and audit JSON from each `windows-x64` artifact, and executes the same gate on a clean Windows Runner with 30-day evidence retention. Real ARM64 installation remains a physical ARM64 Windows gate.
 
-Windows Release uses pinned Rust 1.93.0, `Cargo.lock`, a single Cargo job, and MSVC `/Brepro`. The separate double-build gate compares five raw PE files; see [Reproducible Windows builds](/zifile/en/development/reproducible-builds/).
+Windows Release uses pinned Rust 1.93.0, `Cargo.lock`, a single Cargo job, and MSVC `/Brepro`. Each x64/ARM64 test-and-package job has a 90-minute hard timeout; a timeout fails the job and cannot bypass package audit or artifact upload. The separate double-build gate compares five raw PE files; see [Reproducible Windows builds](/zifile/en/development/reproducible-builds/).
 
 Before tagging, the Release workflow can be run manually. It accepts no second version input and uses the workspace version from `Cargo.toml`. `none` saves unsigned dual-architecture artifacts and SBOMs; `digicert-stm` additionally enters the protected environment and saves signed artifacts plus signature audits. Both skip public publishing. Normal CI and Release enforce version consistency, and a tag must exactly match `v<workspace-version>`. See [Public contracts and version policy](/zifile/en/development/contracts/) for the CLI, core-provider, and IPC compatibility boundaries. Manual validation also packages the `-accessible` candidate; tags continue to publish only the default UI until accessibility and physical-architecture gates pass.
 

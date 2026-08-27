@@ -35,7 +35,7 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 
 手动 **Trusted MSIX lifecycle** 工作流接收两个 Release 验证运行 ID，从各自的 `windows-x64` artifact 读取默认包和审计 JSON，并在干净 Windows Runner 执行同一门禁、保存 30 天证据。ARM64 包的真实安装仍必须在物理 ARM64 Windows 环境完成。
 
-Windows Release 使用仓库固定的 Rust 1.93.0、锁文件、单作业 Cargo 构建和 MSVC `/Brepro` 确定性链接。独立的双构建工作流会在两个隔离目标目录比较五个裸 PE 文件的 SHA-256；方法与证据边界见[可复现 Windows 构建](/zifile/development/reproducible-builds/)。
+Windows Release 使用仓库固定的 Rust 1.93.0、锁文件、单作业 Cargo 构建和 MSVC `/Brepro` 确定性链接。x64/ARM64 测试与打包 Job 各有 90 分钟硬超时；超时按失败处理，不能跳过包审计或产物上传。独立的双构建工作流会在两个隔离目标目录比较五个裸 PE 文件的 SHA-256；方法与证据边界见[可复现 Windows 构建](/zifile/development/reproducible-builds/)。
 
 在打标签前可从 Actions 手动运行 Release 工作流。该模式不接收第二个版本输入，而是使用 `Cargo.toml` 的工作区版本；`none` 保存双架构未签名产物与 SBOM，`digicert-stm` 额外进入受保护环境并保存签后产物与签名审计，两者都跳过公开 Release 和 WinGet 发布。普通 CI 与 Release 都运行版本一致性门禁；标签必须精确匹配 `v<workspace-version>`。CLI、核心 Provider 和 IPC 的兼容边界见[公开契约与版本策略](/zifile/development/contracts/)。
 

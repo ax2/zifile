@@ -20,6 +20,16 @@ All notable changes to ZiFile are documented here. The format follows
 - Packaging-policy smoke coverage locks the x64/ARM64 reproducibility workflow's
   hard timeout, stale-run cancellation, independent matrix results, and retained
   failure evidence so a long double build cannot wait without a bounded outcome.
+- The operation-queue foreground smoke now proves the ZiFile native window owns
+  the Windows foreground before invoking UI Automation and includes bounded last
+  document text in timeout diagnostics instead of treating a background run as
+  real foreground evidence.
+- Dual-architecture Release packaging jobs now have a 90-minute hard timeout,
+  enforced by packaging-policy smoke coverage, so tests or MSIX builds cannot
+  leave a manual rehearsal running without a bounded result.
+- Every CI, documentation deployment, SBOM, and GitHub Release publication job
+  now has a workload-sized hard timeout, with job-scoped policy assertions that
+  prevent an unrelated timeout elsewhere in the YAML from satisfying the gate.
 - Real ZIP/ZIP64/AES and 7z/AES create, list, verify, and extraction operations.
 - Format-aware compression controls: 7z creation now applies the selected LZMA2
   level, Zstandard and Brotli expose their full ranges, Bzip2 enforces its valid

@@ -84,7 +84,9 @@ RAR 校验基准使用确定性的 8 MiB RAR 5 method-3 归档，并加入低频
 
 `tests/accessibility/keyboard-form.ps1` 从候选原生窗口根开始发送真实 Tab/Shift+Tab/Enter 和表单按键，并通过 UI Automation 读取 WebView2 内部焦点。它验证首页→归档→创建→主题→语言顺序、反向导航、归档/创建页激活、创建页 disabled 按钮不获得焦点、格式选择为 7z、压缩等级 `6→7→6`、密码键入后用 Ctrl+A/Backspace 清空，以及两个来源按钮可达。固定测试密码只在进程内使用，JSON 不记录其值。脚本在每次发送前要求前台原生句柄精确属于本次 ZiFile；用户切换到其他窗口时立即失败并在 `finally` 中关闭测试实例。`-ToggleLanguageBeforeTest` 可用 UIA 建立另一语言前置状态，并在成功或失败清理路径恢复原设置；英文与中文核心流程均已通过。双条目归档页流程的扩展正在实现，只有完成独立真实前台运行后才会加入通过证据。
 
-`tests/smoke/packaging-policy.ps1` 在每次 Windows CI 中动态解析当前二十六个发行、语料与仓库政策 PowerShell 脚本，并验证缺失/部分 Partner Center Identity、非法 Name/X.500 Publisher、缺失云签名输入、非法 provider、开发 Identity、未签名 OID Publisher、无效签名产物和未完成的 1.0 就绪清单都会被拒绝，形式正确的输入及 11/11 带证据就绪夹具会被接受；它还要求签后审计、仅签后发布、最小权限、签名超时/并发控制、轮换/应急停止/吊销运维手册，以及版本、发布说明、贡献者、安全和发布就绪门禁均接入 CI。双架构可复现构建另受 120 分钟硬超时、同分支旧任务取消、矩阵独立结论和失败证据保留约束保护。真实账号、云 HSM 签名和 x64/ARM64 包内容审计不能由策略冒烟替代。
+`tests/performance/operation-queue-foreground.ps1` 生成 10 万条目归档，在真实窗口中提交三次完整性校验，并验证取消当前、下一项启动、清空等待队列与 Worker 回收。脚本用独立的 3 秒有界窗口激活重试证明 ZiFile 原生句柄正是 Windows 前台窗口；无法取得前台资格时拒绝运行，不能把后台 UIA 调用记为真实前台证据。等待文案超时时会附带最多 500 个字符的最后可见 Document 文本，且仍在 `finally` 中关闭进程并删除临时夹具。
+
+`tests/smoke/packaging-policy.ps1` 在每次 Windows CI 中动态解析当前二十七个发行、语料与仓库政策 PowerShell 脚本，并验证缺失/部分 Partner Center Identity、非法 Name/X.500 Publisher、缺失云签名输入、非法 provider、开发 Identity、未签名 OID Publisher、无效签名产物和未完成的 1.0 就绪清单都会被拒绝，形式正确的输入及 11/11 带证据就绪夹具会被接受；它还要求签后审计、仅签后发布、最小权限、签名超时/并发控制、轮换/应急停止/吊销运维手册，以及版本、发布说明、贡献者、安全和发布就绪门禁均接入 CI。所有 CI、文档部署、SBOM 和 GitHub Release 发布 Job 都有按工作负载设置的硬超时，并由 Job 作用域检查防止误命中同文件其他上限。双架构可复现构建另受 120 分钟硬超时、同分支旧任务取消、矩阵独立结论和失败证据保留约束保护；前台队列脚本的真实窗口所有权与有界诊断也受防退化检查。真实账号、云 HSM 签名和 x64/ARM64 包内容审计不能由策略冒烟替代。
 
 `tests/smoke/store-listing.ps1` 验证简体中文和英文 Store JSON 都满足 Partner Center 的描述、短描述、功能、关键词、系统要求、许可与 HTTPS URL 限制，并要求两份可读文档逐段、逐功能包含结构化 JSON 的权威文案。负向样本证明超长功能、过多关键词及描述中的 URL 会被拒绝。该门禁验证文字材料，不替代截图、年龄分级、正式 Identity 或认证。
 
