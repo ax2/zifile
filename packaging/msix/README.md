@@ -1,5 +1,11 @@
 # MSIX packaging
 
+`Test-Assets.ps1` validates every committed PNG's exact dimensions and alpha
+channel, the 256-pixel desktop icon, all required manifest logo references, and
+byte-for-byte reproducibility from `Generate-Assets.ps1`. CI and
+`Build-Package.ps1` run this gate before packaging so a stale or malformed visual
+asset cannot enter an MSIX candidate.
+
 MSIX is the primary Microsoft Store package target. `Build-Package.ps1` creates
 both a complete runnable Windows directory and an MSIX without making a ZIP
 archive. The builder is unsigned by default. Its local PFX parameters remain

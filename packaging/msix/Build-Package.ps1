@@ -42,6 +42,7 @@ $iconPath = Join-Path $PSScriptRoot 'Assets\ZiFile.ico'
 if (-not (Test-Path -LiteralPath $iconPath)) {
     ./packaging/msix/Generate-Assets.ps1
 }
+./packaging/msix/Test-Assets.ps1 | Out-Null
 
 $rustTarget = if ($Architecture -eq 'arm64') { 'aarch64-pc-windows-msvc' } else { 'x86_64-pc-windows-msvc' }
 $compilerArchitecture = if ($Architecture -eq 'arm64') { 'arm64' } else { 'x64' }

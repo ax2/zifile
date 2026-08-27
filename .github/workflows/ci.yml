@@ -28,6 +28,7 @@ jobs:
           ./scripts/Test-SecurityDocs.ps1
           ./scripts/Test-UserDocs.ps1
           ./scripts/Test-ReleaseReadiness.ps1
+          ./packaging/msix/Test-Assets.ps1
       - name: Packaging policy smoke test
         shell: pwsh
         run: ./tests/smoke/packaging-policy.ps1

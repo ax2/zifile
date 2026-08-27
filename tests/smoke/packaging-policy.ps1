@@ -30,8 +30,9 @@ $wingetSmoke = Join-Path $repoRoot 'tests\smoke\winget-manifest.ps1'
 $userDocs = Join-Path $repoRoot 'scripts\Test-UserDocs.ps1'
 $reproducibilityWorkflow = Join-Path $repoRoot '.github\workflows\reproducibility.yml'
 $operationQueueForeground = Join-Path $repoRoot 'tests\performance\operation-queue-foreground.ps1'
+$msixAssets = Join-Path $repoRoot 'packaging\msix\Test-Assets.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground, $msixAssets)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -61,6 +62,69 @@ function Get-ExpectedFailure {
         return $_.Exception.Message
     }
     throw "Expected action to fail with '$Pattern'."
+}
+
+$assetResult = & $msixAssets | ConvertFrom-Json
+if (-not $assetResult.validated -or -not $assetResult.reproducible -or
+    $assetResult.png_count -ne 5 -or $assetResult.manifest_logo_references -ne 4) {
+    throw 'MSIX visual assets did not pass completeness, manifest, and reproducibility validation.'
+}
+$assetTemporaryBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+$assetFixture = [System.IO.Path]::GetFullPath((Join-Path $assetTemporaryBase (
+    'zifile-asset-policy-{0}' -f [Guid]::NewGuid().ToString('N')
+)))
+if (-not $assetFixture.StartsWith($assetTemporaryBase, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Refusing to create the asset-policy fixture outside the system temporary directory.'
+}
+try {
+    $fixtureAssets = Join-Path $assetFixture 'Assets'
+    New-Item -ItemType Directory -Path $fixtureAssets -Force | Out-Null
+    Get-ChildItem -LiteralPath (Join-Path $repoRoot 'packaging\msix\Assets') -File |
+        Copy-Item -Destination $fixtureAssets
+    $fixtureManifest = Join-Path $assetFixture 'AppxManifest.xml'
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'packaging\msix\AppxManifest.xml') -Destination $fixtureManifest
+
+    Copy-Item `
+        -LiteralPath (Join-Path $fixtureAssets 'Square50x50Logo.png') `
+        -Destination (Join-Path $fixtureAssets 'Square44x44Logo.png') -Force
+    $null = Get-ExpectedFailure -Pattern 'must be 44x44' -Action {
+        & $msixAssets -AssetsDirectory $fixtureAssets -ManifestPath $fixtureManifest -SkipReproducibility
+    }
+
+    Copy-Item `
+        -LiteralPath (Join-Path $repoRoot 'packaging\msix\Assets\Square44x44Logo.png') `
+        -Destination (Join-Path $fixtureAssets 'Square44x44Logo.png') -Force
+    $manifestSource = Get-Content -Raw -LiteralPath $fixtureManifest
+    $manifestSource = $manifestSource.Replace('Assets\StoreLogo.png', 'Assets\MissingStoreLogo.png')
+    Set-Content -LiteralPath $fixtureManifest -Value $manifestSource -Encoding utf8
+    $null = Get-ExpectedFailure -Pattern 'logo reference does not exist' -Action {
+        & $msixAssets -AssetsDirectory $fixtureAssets -ManifestPath $fixtureManifest -SkipReproducibility
+    }
+
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'packaging\msix\AppxManifest.xml') -Destination $fixtureManifest -Force
+    Add-Type -AssemblyName System.Drawing
+    $changedAsset = Join-Path $fixtureAssets 'Square50x50Logo.png'
+    $loadedBitmap = [Drawing.Bitmap]::new($changedAsset)
+    try { $changedBitmap = [Drawing.Bitmap]::new($loadedBitmap) }
+    finally { $loadedBitmap.Dispose() }
+    try {
+        $changedBitmap.SetPixel(0, 0, [Drawing.Color]::FromArgb(255, 255, 0, 0))
+        $changedBitmap.Save($changedAsset, [Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally { $changedBitmap.Dispose() }
+    $null = Get-ExpectedFailure -Pattern 'differs from deterministic generator output' -Action {
+        & $msixAssets -AssetsDirectory $fixtureAssets -ManifestPath $fixtureManifest
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $assetFixture) {
+        $resolvedAssetFixture = [System.IO.Path]::GetFullPath($assetFixture)
+        if (-not $resolvedAssetFixture.StartsWith($assetTemporaryBase, [System.StringComparison]::OrdinalIgnoreCase) -or
+            [System.IO.Path]::GetFileName($resolvedAssetFixture) -notlike 'zifile-asset-policy-*') {
+            throw "Refusing to remove unexpected asset-policy fixture: $resolvedAssetFixture"
+        }
+        Remove-Item -LiteralPath $resolvedAssetFixture -Recurse -Force
+    }
 }
 
 $versionResult = & $versionConsistency | ConvertFrom-Json
@@ -1088,4 +1152,8 @@ foreach ($requiredLivePrivacyToken in @(
     user_docs_wired = $true
     packaging_release_gates_fail_fast = $true
     public_privacy_routes_wired = $true
+    msix_assets_validated = $true
+    malformed_msix_asset_rejected = $true
+    missing_manifest_asset_rejected = $true
+    generated_asset_drift_rejected = $true
 } | ConvertTo-Json
