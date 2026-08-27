@@ -117,6 +117,7 @@ fn lock_operation_queue(
 enum AccessibleShortcut {
     Open,
     Create,
+    About,
     Cancel,
 }
 
@@ -285,7 +286,7 @@ fn App() -> Element {
                     NavButton { label: locale.text(Text::Home), active: page == Page::Home, onclick: move |_| state.write().page = Page::Home }
                     NavButton { label: locale.text(Text::Archive), active: page == Page::Archive, onclick: move |_| state.write().page = Page::Archive }
                     NavButton { label: locale.text(Text::Create), active: page == Page::Create, onclick: move |_| state.write().page = Page::Create }
-                    NavButton { label: locale.text(Text::About), active: page == Page::About, onclick: move |_| state.write().page = Page::About }
+                    button { class: if page == Page::About { "nav-item active" } else { "nav-item" }, "aria-current": if page == Page::About { "page" } else { "false" }, "aria-keyshortcuts": "F1", onclick: move |_| state.write().page = Page::About, {locale.text(Text::About)} }
                 }
                 div { class: "preferences",
                     button { onclick: move |_| { let mut value = state.write(); value.dark = !value.dark; save_settings(&value); },
@@ -656,6 +657,9 @@ fn accessible_shortcut(key: &str, control: bool) -> Option<AccessibleShortcut> {
     if key.eq_ignore_ascii_case("escape") {
         return Some(AccessibleShortcut::Cancel);
     }
+    if key.eq_ignore_ascii_case("f1") {
+        return Some(AccessibleShortcut::About);
+    }
     if !control {
         return None;
     }
@@ -674,6 +678,7 @@ fn apply_accessible_shortcut(mut state: Signal<UiState>, shortcut: AccessibleSho
     match shortcut {
         AccessibleShortcut::Open => open_archive_dialog(state),
         AccessibleShortcut::Create => state.write().page = Page::Create,
+        AccessibleShortcut::About => state.write().page = Page::About,
         AccessibleShortcut::Cancel => cancel_operation(state),
     }
 }
@@ -1645,6 +1650,7 @@ mod tests {
         assert!(source.contains("dt { {locale.text(Text::Version)} }"));
         assert!(source.contains("dd { {env!(\"CARGO_PKG_VERSION\")} }"));
         assert!(source.contains("https://github.com/ax2/zifile"));
+        assert!(source.contains("\"aria-keyshortcuts\": \"F1\""));
         assert!(STYLES.contains(".about-details"));
     }
     #[test]
@@ -1857,6 +1863,10 @@ mod tests {
         assert_eq!(
             accessible_shortcut("Escape", false),
             Some(AccessibleShortcut::Cancel)
+        );
+        assert_eq!(
+            accessible_shortcut("F1", false),
+            Some(AccessibleShortcut::About)
         );
         assert_eq!(accessible_shortcut("a", true), None);
         assert_eq!(accessible_shortcut("o", false), None);

@@ -16,7 +16,8 @@ All notable changes to ZiFile are documented here. The format follows
 - Both desktop interfaces now include a bilingual About page with the running
   package version, MIT license, supported format-family count, project address,
   and local-processing privacy boundary; the accessible candidate uses semantic
-  definition-list markup and a responsive single-column layout.
+  definition-list markup, a responsive single-column layout, and an exposed `F1`
+  shortcut.
 - Bilingual owner-facing Store and WinGet onboarding guidance now records the
   Company-account boundary, current fee and name-reservation window, business
   verification inputs, and the first-contribution GitHub/CLA requirements.

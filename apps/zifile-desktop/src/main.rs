@@ -196,6 +196,7 @@ enum Message {
 enum Shortcut {
     Open,
     Create,
+    About,
     SelectAll,
     Cancel,
 }
@@ -641,6 +642,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::KeyboardShortcut(shortcut) => match shortcut {
             Shortcut::Open => return update(state, Message::OpenArchiveDialog),
             Shortcut::Create => state.page = Page::Create,
+            Shortcut::About => state.page = Page::About,
             Shortcut::SelectAll if state.page == Page::Archive => {
                 return update(state, Message::SelectAll(true));
             }
@@ -688,6 +690,9 @@ fn ui_event(
         }) if status == iced::event::Status::Ignored => {
             if key == iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape) {
                 return Some(Message::KeyboardShortcut(Shortcut::Cancel));
+            }
+            if key == iced::keyboard::Key::Named(iced::keyboard::key::Named::F1) {
+                return Some(Message::KeyboardShortcut(Shortcut::About));
             }
             if !modifiers.control() {
                 return None;
@@ -1599,6 +1604,8 @@ mod tests {
         assert!(source.contains("\"MIT\".to_owned()"));
         assert!(source.contains("ArchiveFormat::ALL.len().to_string()"));
         assert!(source.contains("https://github.com/ax2/zifile"));
+        assert!(source.contains("key::Named::F1"));
+        assert!(source.contains("KeyboardShortcut(Shortcut::About)"));
     }
 
     #[test]
