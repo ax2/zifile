@@ -79,6 +79,7 @@ supported Windows 10/11 environments.
 Goal: distribution, accessibility, localization, and hardening.
 
 - [x] Simplified Chinese and English desktop UI with persisted language/theme preferences.
+- [x] Add matching bilingual About pages to both desktop interfaces with runtime version, MIT license, core format count, project/privacy identity, responsive semantic markup, and an `F1` entry point.
 - [x] Build an opt-in Dioxus/WebView2 accessibility candidate with semantic archive and create workflows over the isolated Worker.
 - [x] Add candidate CSP/offline resource policy, native drop handling, core shortcuts and local x64 MSIX validation.
 - [x] Verify candidate archive-scoped Ctrl+A and dynamic selection labels in a real UI Automation session.
