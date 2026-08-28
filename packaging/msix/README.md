@@ -12,8 +12,11 @@ from `Generate-Assets.ps1`; package builds intentionally skip that host-specific
 redraw because System.Drawing rasterization can differ across CPU architectures.
 CI and `Build-Package.ps1` run the portable gate before packaging, and
 `Test-Package.ps1` verifies all 58 reviewed PNG hashes and the desktop ICO hash again
-after unpacking the built MSIX, so a stale, blurred, missing, or substituted visual
-asset cannot enter a candidate.
+after unpacking the built MSIX. `Test-EmbeddedIcon.ps1` then loads the packaged desktop
+PE as a data/image resource, requires `GROUP_ICON` ID 1 plus five `ICON` resources,
+and validates each resource's size, PNG signature, IHDR geometry, plane count, and bit
+depth. This runs for both x64 and ARM64 package jobs without executing the target PE,
+so a stale, missing, substituted, or unembedded icon cannot enter a candidate.
 
 MSIX is the primary Microsoft Store package target. `Build-Package.ps1` creates
 both a complete runnable Windows directory and an MSIX without making a ZIP

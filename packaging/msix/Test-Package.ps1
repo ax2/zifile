@@ -141,6 +141,16 @@ try {
         }
         $machineEvidence[$relativePath] = ('0x{0:X4}' -f $machine)
     }
+    $embeddedIconAuditPath = Join-Path $PSScriptRoot 'Test-EmbeddedIcon.ps1'
+    if (-not (Test-Path -LiteralPath $embeddedIconAuditPath -PathType Leaf)) {
+        throw 'The embedded desktop icon audit is unavailable during package audit.'
+    }
+    $embeddedIconEvidence = & $embeddedIconAuditPath `
+        -ExecutablePath (Join-Path $auditRoot 'ZiFile\zifile-desktop.exe') | ConvertFrom-Json
+    if (-not $embeddedIconEvidence.validated -or $embeddedIconEvidence.frame_count -ne 5 -or
+        (@($embeddedIconEvidence.frames | ForEach-Object size) -join ',') -cne '16,24,32,48,256') {
+        throw 'Packaged desktop executable did not pass the reviewed embedded icon audit.'
+    }
 
     $alias = $manifest.SelectSingleNode(
         "//uap3:AppExecutionAlias/desktop:ExecutionAlias[@Alias='zifile.exe']",
@@ -268,6 +278,7 @@ try {
         file_associations = $declaredExtensions
         reviewed_visual_assets = $packagedAssetEvidence
         reviewed_desktop_icon = $packagedIconEvidence
+        embedded_desktop_icon = $embeddedIconEvidence
         app_execution_alias = 'zifile.exe'
         shell_extension = [pscustomobject]@{
             clsid = $shellClsid

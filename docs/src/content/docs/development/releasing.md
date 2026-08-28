@@ -29,7 +29,7 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 
 生产配置、审批、轮换、应急停止、吊销和最小证据集见[生产签名运维](/zifile/development/signing-operations/)。签名 Job 按架构串行化不同发布运行、设置 30 分钟硬超时，并使用 Job 级最小权限；任何超时都作为失败处理，不能绕过签后验签直接发布。
 
-每次打包都会重新解包 MSIX，并核对 Identity、Publisher、Publisher Display Name、版本、最低 Windows build、桌面/CLI/Worker 三枚 EXE 与 Explorer DLL 的 PE 架构、主要文件关联、`zifile.exe` alias、敏感文件/ZIP 缺失和签名状态。审计 JSON 随对应架构进入校验和、来源证明和 Release artifact；它不能替代安装、升级、卸载或 WACK 实机门禁。
+每次打包都会重新解包 MSIX，并核对 Identity、Publisher、Publisher Display Name、版本、最低 Windows build、桌面/CLI/Worker 三枚 EXE 与 Explorer DLL 的 PE 架构、主要文件关联、`zifile.exe` alias、敏感文件/ZIP 缺失和签名状态。审计还以资源数据方式打开桌面 EXE，不执行目标程序，逐帧验证 16/24/32/48/256 的 `GROUP_ICON`/`ICON` 资源；结果写入 `embedded_desktop_icon`。审计 JSON 随对应架构进入校验和、来源证明和 Release artifact；它不能替代安装、升级、卸载或 WACK 实机门禁。
 
 `tests/smoke/msix-lifecycle.ps1` 为可信签名的基线包和升级包提供显式实机门禁。它先运行包审计并拒绝任何既有同 Identity 安装，然后依次验证安装、包内 CLI、版本升级、`Reset-AppxPackage` 和卸载；无论中途是否失败，都会尝试清理本次测试安装并写出 JSON。微软将 Reset 定义为恢复初始配置，因此脚本不会把它误记为保留数据的 Repair；正式 Repair 仍是独立门禁。参见 [Appx 模块](https://learn.microsoft.com/powershell/module/appx/)与 [Reset-AppxPackage](https://learn.microsoft.com/powershell/module/appx/reset-appxpackage)。
 

@@ -31,10 +31,11 @@ $userDocs = Join-Path $repoRoot 'scripts\Test-UserDocs.ps1'
 $reproducibilityWorkflow = Join-Path $repoRoot '.github\workflows\reproducibility.yml'
 $operationQueueForeground = Join-Path $repoRoot 'tests\performance\operation-queue-foreground.ps1'
 $msixAssets = Join-Path $repoRoot 'packaging\msix\Test-Assets.ps1'
+$embeddedIconAudit = Join-Path $repoRoot 'packaging\msix\Test-EmbeddedIcon.ps1'
 $storeListingAssets = Join-Path $repoRoot 'packaging\store\Test-ListingAssets.ps1'
 $storeListingAssetSmoke = Join-Path $repoRoot 'tests\smoke\store-listing-assets.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground, $msixAssets, $storeListingAssets, $storeListingAssetSmoke)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground, $msixAssets, $embeddedIconAudit, $storeListingAssets, $storeListingAssetSmoke)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -78,6 +79,13 @@ if (-not $assetResult.validated -or -not $assetResult.hashes_pinned -or
     $assetResult.icon_sha256 -notmatch '^[A-F0-9]{64}$' -or
     $assetResult.manifest_logo_references -ne 4) {
     throw 'MSIX visual assets did not pass completeness, manifest, and reproducibility validation.'
+}
+$resourceLessSystemBinary = Join-Path $env:SystemRoot 'System32\kernel32.dll'
+if (-not (Test-Path -LiteralPath $resourceLessSystemBinary -PathType Leaf)) {
+    throw 'The system resource-less binary fixture is unavailable.'
+}
+$null = Get-ExpectedFailure -Pattern 'does not contain reviewed GROUP_ICON resource ID 1' -Action {
+    & $embeddedIconAudit -ExecutablePath $resourceLessSystemBinary
 }
 $storeAssetResult = & $storeListingAssetSmoke | ConvertFrom-Json
 if (-not $storeAssetResult.valid_store_icon_accepted -or
@@ -701,7 +709,10 @@ foreach ($requiredVisualAssetAuditToken in @(
     'reviewed_visual_assets',
     'MSIX package is missing reviewed desktop icon',
     'MSIX package desktop icon differs from its reviewed hash',
-    'reviewed_desktop_icon'
+    'reviewed_desktop_icon',
+    "Join-Path `$PSScriptRoot 'Test-EmbeddedIcon.ps1'",
+    'Packaged desktop executable did not pass the reviewed embedded icon audit',
+    'embedded_desktop_icon'
 )) {
     if ($packageAuditSource -notmatch [Regex]::Escape($requiredVisualAssetAuditToken)) {
         throw "The package audit omits reviewed high-DPI asset evidence: $requiredVisualAssetAuditToken"
@@ -1148,6 +1159,8 @@ foreach ($requiredLivePrivacyToken in @(
     parser_checks = $scriptsToParse.Count
     multiresolution_icon_accepted = $true
     truncated_icon_directory_rejected = $true
+    resource_less_executable_rejected = $true
+    embedded_icon_package_audit_wired = $true
     missing_inputs_rejected = $true
     development_identity_rejected = $true
     unsigned_publisher_rejected = $true

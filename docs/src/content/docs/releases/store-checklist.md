@@ -7,7 +7,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 
 - x64 与 ARM64 的完整可运行目录、独立 EXE 和 MSIX 构建。
 - MSIX 已包含微软要求的完整高 DPI 图标最小集合：58 张经哈希锁定的 PNG，覆盖 Store 多缩放资源、44/150 基础图的 100/200/400% 版本，以及任务栏、开始菜单和搜索使用的 14 个 target size × 默认/深色无背板/浅色无背板三套资源；构建后审计会从成品包重新核对全部哈希。
-- 桌面 EXE 与 Explorer 外壳入口使用同一份经审查的多分辨率 Win32 ICO，内含 16、24、32、48、256 像素的 32 位 PNG 帧；生成、目录结构、尺寸和成品包哈希均由机器门禁验证。
+- 桌面 EXE 与 Explorer 外壳入口使用同一份经审查的多分辨率 Win32 ICO，内含 16、24、32、48、256 像素的 32 位 PNG 帧；生成、目录结构、尺寸和成品包哈希均由机器门禁验证，解包审计还会直接读取桌面 EXE 的 `GROUP_ICON`/`ICON` 资源并逐帧核对，防止只旁置 ICO 却没有编译进程序。
 - Release 已移除 PFX，具备受保护的 DigiCert Binary Signing simple-signing、签后系统验签、时间戳检查和签后审计路径；真实账号演练仍待外部凭据。
 - `Test-PartnerCenterIdentity.ps1` 在标签/真实签名演练编译前拒绝缺失、部分三元组、非法 Name、`.Dev`、未签名 OID、无效 X.500 Publisher 和非法 Publisher Display Name；三个正式值仍必须由 Partner Center 提供。
 - SHA-256、CycloneDX JSON SBOM 和 GitHub 构建来源证明。
