@@ -659,11 +659,16 @@ foreach ($requiredStageReleaseToken in @(
     'pattern: windows-*',
     'prerelease: true',
     'RELEASE-ASSETS.txt',
-    'SHA256SUMS-stage.txt'
+    'SHA256SUMS-stage.txt',
+    "! -name 'SHA256SUMS-stage.txt'",
+    "while IFS= read -r -d '' asset"
 )) {
     if ($releaseSource -notmatch [Regex]::Escape($requiredStageReleaseToken)) {
         throw "The release workflow omits stage-release token: $requiredStageReleaseToken"
     }
+}
+if ($releaseSource -match [Regex]::Escape('sha256sum release/* > release/SHA256SUMS-stage.txt')) {
+    throw 'The stage release checksum manifest must not hash itself.'
 }
 if ($releaseSource -notmatch [Regex]::Escape('.audit.json')) {
     throw 'The release workflow does not stage MSIX audit evidence.'

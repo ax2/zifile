@@ -376,8 +376,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find release -maxdepth 1 -type f -printf '%f\n' | sort > release/RELEASE-ASSETS.txt
-          sha256sum release/* > release/SHA256SUMS-stage.txt
+          {
+            find release -maxdepth 1 -type f \
+              ! -name 'RELEASE-ASSETS.txt' \
+              ! -name 'SHA256SUMS-stage.txt' \
+              -printf '%f\n'
+            printf '%s\n' 'RELEASE-ASSETS.txt' 'SHA256SUMS-stage.txt'
+          } | sort > release/RELEASE-ASSETS.txt
+          find release -maxdepth 1 -type f \
+            ! -name 'SHA256SUMS-stage.txt' \
+            -printf '%f\0' | sort -z | \
+            while IFS= read -r -d '' asset; do
+              sha256sum "release/$asset"
+            done > release/SHA256SUMS-stage.txt
       - name: Attest stage build assets
         uses: actions/attest-build-provenance@v4
         with:
