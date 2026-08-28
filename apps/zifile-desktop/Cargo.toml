@@ -9,7 +9,23 @@ license.workspace = true
 repository.workspace = true
 build = "build.rs"
 
+[features]
+accessible-ui = ["dep:dioxus", "dep:dioxus-document", "dep:dioxus-html", "dep:tokio"]
+
+[[bin]]
+name = "zifile-desktop-accessible"
+path = "src/accessible_main.rs"
+required-features = ["accessible-ui"]
+
+[[bench]]
+name = "entry_browser"
+harness = false
+
 [dependencies]
+dioxus = { workspace = true, optional = true }
+dioxus-document = { workspace = true, optional = true }
+dioxus-html = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
 iced.workspace = true
 rfd.workspace = true
 serde_json.workspace = true
@@ -34,3 +50,7 @@ windows-sys = { version = "0.61", features = [
 
 [build-dependencies]
 winresource.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile.workspace = true

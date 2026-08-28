@@ -1,3 +1,14 @@
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing,
+        clippy::undocumented_unsafe_blocks
+    )
+)]
+
 use std::collections::HashSet;
 use std::io::{self, BufRead, BufWriter, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -6,8 +17,8 @@ use std::thread;
 use std::time::Duration;
 
 use zifile_core::{
-    CreateOptions, ExtractOptions, OperationProgress, create_archive, extract_archive,
-    list_archive, test_archive,
+    CreateOptions, ExtractOptions, ListOptions, OperationProgress, TestOptions, create_archive,
+    extract_archive, list_archive_with_options, test_archive_with_options,
 };
 use zifile_worker_protocol::{
     Envelope, PROTOCOL_VERSION, WorkerControl, WorkerEvent, WorkerRequest,
@@ -34,10 +45,34 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let writer = shared_stdout();
     match request {
         WorkerRequest::List { archive, password } => {
-            emit_archive(&writer, list_archive(archive, password.as_deref())?)?;
+            let progress = OperationProgress::default();
+            let cancellation = zifile_core::CancellationToken::default();
+            listen_for_cancel(cancellation.clone());
+            let options = ListOptions {
+                password,
+                cancellation,
+                progress: progress.clone(),
+                ..ListOptions::default()
+            };
+            let archive = with_progress(writer.clone(), progress, move || {
+                list_archive_with_options(archive, &options)
+            })?;
+            emit_archive(&writer, archive)?;
         }
         WorkerRequest::Test { archive, password } => {
-            emit_archive(&writer, test_archive(archive, password.as_deref())?)?;
+            let progress = OperationProgress::default();
+            let cancellation = zifile_core::CancellationToken::default();
+            listen_for_cancel(cancellation.clone());
+            let options = TestOptions {
+                password,
+                cancellation,
+                progress: progress.clone(),
+                ..TestOptions::default()
+            };
+            let archive = with_progress(writer.clone(), progress, move || {
+                test_archive_with_options(archive, &options)
+            })?;
+            emit_archive(&writer, archive)?;
         }
         WorkerRequest::Extract {
             archive,
@@ -157,13 +192,15 @@ where
 {
     let done = Arc::new(AtomicBool::new(false));
     let reporter_done = done.clone();
+    let reporter_writer = writer.clone();
+    let reporter_progress = progress.clone();
     thread::scope(|scope| {
         let reporter = scope.spawn(move || {
             while !reporter_done.load(Ordering::Acquire) {
                 let _ = emit(
-                    &writer,
+                    &reporter_writer,
                     WorkerEvent::Progress {
-                        snapshot: progress.snapshot(),
+                        snapshot: reporter_progress.snapshot(),
                     },
                 );
                 thread::sleep(Duration::from_millis(100));
@@ -171,9 +208,13 @@ where
         });
         let result = operation();
         done.store(true, Ordering::Release);
-        reporter
-            .join()
-            .expect("the worker progress reporter must not panic");
+        let _ = reporter.join();
+        let _ = emit(
+            &writer,
+            WorkerEvent::Progress {
+                snapshot: progress.snapshot(),
+            },
+        );
         result
     })
 }

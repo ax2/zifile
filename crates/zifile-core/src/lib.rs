@@ -1,3 +1,14 @@
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing,
+        clippy::undocumented_unsafe_blocks
+    )
+)]
+
 //! Core domain model for ZiFile.
 //!
 //! This crate deliberately contains no UI or platform code. Archive backends
@@ -16,9 +27,11 @@ mod archive;
 mod path_policy;
 
 pub use archive::{
-    ArchiveEntryInfo, ArchiveInfo, CancellationToken, ConflictPolicy, CreateOptions,
-    ExtractOptions, OperationProgress, OperationSummary, ProgressSnapshot, create_archive,
-    extract_archive, list_archive, test_archive,
+    ArchiveEntryInfo, ArchiveInfo, ArchiveTimestamp, ArchiveTimestampOffset,
+    ArchiveTimestampPrecision, CancellationToken, ConflictPolicy, CreateOptions, ExtractOptions,
+    ListOptions, OperationProgress, OperationSummary, ProgressSnapshot, TestOptions,
+    create_archive, extract_archive, list_archive, list_archive_with_limits,
+    list_archive_with_options, test_archive, test_archive_with_limits, test_archive_with_options,
 };
 pub use path_policy::safe_relative_path;
 
@@ -39,11 +52,19 @@ pub enum ArchiveFormat {
     Lz4,
     Brotli,
     Rar,
+    Cab,
 }
+
+/// Extensions shown by desktop open dialogs for formats ZiFile can inspect.
+/// Existing files are still detected by content signatures before hints.
+pub const OPEN_ARCHIVE_EXTENSIONS: &[&str] = &[
+    "zip", "zipx", "cbz", "epub", "7z", "cb7", "rar", "cbr", "cab", "tar", "cbt", "gz", "tgz",
+    "zst", "tzst", "xz", "txz", "lzma", "bz", "bz2", "tbz", "tbz2", "lz4", "br",
+];
 
 impl ArchiveFormat {
     /// Stable display order used by both CLI and desktop UI.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Zip,
         Self::SevenZip,
         Self::Tar,
@@ -58,11 +79,13 @@ impl ArchiveFormat {
         Self::Lz4,
         Self::Brotli,
         Self::Rar,
+        Self::Cab,
     ];
 
     pub const fn capabilities(self) -> FormatCapabilities {
         match self {
-            Self::Rar => FormatCapabilities::unsupported(ReleaseStage::PostV1),
+            Self::Rar => FormatCapabilities::read_only(true, ReleaseStage::Beta),
+            Self::Cab => FormatCapabilities::read_only(false, ReleaseStage::Beta),
             Self::SevenZip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
             Self::Zip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
             Self::Tar | Self::TarGzip | Self::TarZstd | Self::TarXz | Self::TarBzip2 => {
@@ -71,6 +94,50 @@ impl ArchiveFormat {
             Self::Gzip | Self::Zstandard | Self::Xz | Self::Bzip2 | Self::Lz4 | Self::Brotli => {
                 FormatCapabilities::read_write(false, ReleaseStage::Alpha)
             }
+        }
+    }
+
+    /// Source shape accepted when creating this format.
+    pub const fn create_input(self) -> Option<CreateInputKind> {
+        match self {
+            Self::Rar | Self::Cab => None,
+            Self::Gzip | Self::Zstandard | Self::Xz | Self::Bzip2 | Self::Lz4 | Self::Brotli => {
+                Some(CreateInputKind::SingleFile)
+            }
+            Self::Zip
+            | Self::SevenZip
+            | Self::Tar
+            | Self::TarGzip
+            | Self::TarZstd
+            | Self::TarXz
+            | Self::TarBzip2 => Some(CreateInputKind::FilesAndDirectories),
+        }
+    }
+
+    /// Inclusive compression-level bounds exposed to callers when the selected
+    /// encoder has a user-adjustable level. Formats with fixed compression or
+    /// no compression return `None` so UIs do not present a control that has no
+    /// effect.
+    pub const fn compression_level_range(self) -> Option<(u8, u8)> {
+        match self {
+            Self::Zip | Self::SevenZip | Self::TarGzip | Self::TarXz | Self::Gzip | Self::Xz => {
+                Some((0, 9))
+            }
+            Self::TarZstd | Self::Zstandard => Some((0, 22)),
+            Self::TarBzip2 | Self::Bzip2 => Some((1, 9)),
+            Self::Brotli => Some((0, 11)),
+            Self::Tar | Self::Lz4 | Self::Rar | Self::Cab => None,
+        }
+    }
+
+    /// Clamp a persisted or externally supplied level to this format's
+    /// supported range. Fixed-level formats preserve the value because their
+    /// encoders intentionally ignore it.
+    pub const fn clamp_compression_level(self, level: u8) -> u8 {
+        match self.compression_level_range() {
+            Some((minimum, _)) if level < minimum => minimum,
+            Some((_, maximum)) if level > maximum => maximum,
+            _ => level,
         }
     }
 
@@ -90,8 +157,16 @@ impl ArchiveFormat {
             Self::Lz4 => "lz4",
             Self::Brotli => "br",
             Self::Rar => "rar",
+            Self::Cab => "cab",
         }
     }
+}
+
+/// Source shape supported by a format during archive creation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateInputKind {
+    FilesAndDirectories,
+    SingleFile,
 }
 
 impl fmt::Display for ArchiveFormat {
@@ -111,6 +186,7 @@ impl fmt::Display for ArchiveFormat {
             Self::Lz4 => "LZ4",
             Self::Brotli => "Brotli",
             Self::Rar => "RAR",
+            Self::Cab => "CAB",
         })
     }
 }
@@ -144,22 +220,22 @@ pub struct FormatCapabilities {
 }
 
 impl FormatCapabilities {
+    const fn read_only(encryption: bool, stage: ReleaseStage) -> Self {
+        Self {
+            list: true,
+            extract: true,
+            create: false,
+            encryption,
+            stage,
+        }
+    }
+
     const fn read_write(encryption: bool, stage: ReleaseStage) -> Self {
         Self {
             list: true,
             extract: true,
             create: true,
             encryption,
-            stage,
-        }
-    }
-
-    const fn unsupported(stage: ReleaseStage) -> Self {
-        Self {
-            list: false,
-            extract: false,
-            create: false,
-            encryption: false,
             stage,
         }
     }
@@ -232,7 +308,11 @@ pub fn detect_format(path: impl AsRef<Path>) -> ZiFileResult<ArchiveFormat> {
     let mut file = File::open(path)?;
     let mut header = [0_u8; 512];
     let count = file.read(&mut header)?;
-    let bytes = &header[..count];
+    let bytes = header.get(..count).ok_or_else(|| {
+        ZiFileError::Backend(
+            "reader returned more bytes than the supplied header buffer".to_owned(),
+        )
+    })?;
     let extension_hint = detect_format_from_path(path);
 
     let detected = if bytes.starts_with(b"PK\x03\x04")
@@ -242,8 +322,10 @@ pub fn detect_format(path: impl AsRef<Path>) -> ZiFileResult<ArchiveFormat> {
         Some(ArchiveFormat::Zip)
     } else if bytes.starts_with(b"7z\xBC\xAF\x27\x1C") {
         Some(ArchiveFormat::SevenZip)
-    } else if bytes.starts_with(b"Rar!\x1A\x07") {
+    } else if bytes.starts_with(b"Rar!\x1A\x07") || bytes.starts_with(b"RE~^") {
         Some(ArchiveFormat::Rar)
+    } else if bytes.starts_with(b"MSCF") {
+        Some(ArchiveFormat::Cab)
     } else if bytes.starts_with(b"\x1F\x8B") {
         Some(if extension_hint == Some(ArchiveFormat::TarGzip) {
             ArchiveFormat::TarGzip
@@ -270,7 +352,7 @@ pub fn detect_format(path: impl AsRef<Path>) -> ZiFileResult<ArchiveFormat> {
         })
     } else if bytes.starts_with(b"\x04\x22\x4D\x18") {
         Some(ArchiveFormat::Lz4)
-    } else if bytes.len() >= 262 && &bytes[257..262] == b"ustar" {
+    } else if bytes.get(257..262) == Some(b"ustar") {
         Some(ArchiveFormat::Tar)
     } else if extension_hint == Some(ArchiveFormat::Brotli) {
         // Brotli intentionally has no universal magic bytes.
@@ -311,7 +393,7 @@ pub fn detect_format_from_path(path: impl AsRef<Path>) -> Option<ArchiveFormat> 
 
     let extension = Path::new(&name).extension()?.to_string_lossy();
     match extension.as_ref() {
-        "zip" | "cbz" | "epub" => Some(ArchiveFormat::Zip),
+        "zip" | "zipx" | "cbz" | "epub" => Some(ArchiveFormat::Zip),
         "7z" | "cb7" => Some(ArchiveFormat::SevenZip),
         "tar" | "cbt" => Some(ArchiveFormat::Tar),
         "gz" => Some(ArchiveFormat::Gzip),
@@ -321,6 +403,7 @@ pub fn detect_format_from_path(path: impl AsRef<Path>) -> Option<ArchiveFormat> 
         "lz4" => Some(ArchiveFormat::Lz4),
         "br" => Some(ArchiveFormat::Brotli),
         "rar" | "cbr" => Some(ArchiveFormat::Rar),
+        "cab" => Some(ArchiveFormat::Cab),
         _ => None,
     }
 }
@@ -348,9 +431,23 @@ mod tests {
             Some(ArchiveFormat::Zip)
         );
         assert_eq!(
+            detect_format_from_path("extended.ZIPX"),
+            Some(ArchiveFormat::Zip)
+        );
+        assert_eq!(
             detect_format_from_path("comic.cb7"),
             Some(ArchiveFormat::SevenZip)
         );
+        assert_eq!(
+            detect_format_from_path("driver.CAB"),
+            Some(ArchiveFormat::Cab)
+        );
+        for extension in OPEN_ARCHIVE_EXTENSIONS {
+            assert!(
+                detect_format_from_path(format!("sample.{extension}")).is_some(),
+                "desktop extension is not recognized: {extension}"
+            );
+        }
     }
 
     #[test]
@@ -360,12 +457,84 @@ mod tests {
     }
 
     #[test]
-    fn rar_is_explicitly_unavailable_and_post_v1() {
+    fn rar_is_read_only_beta() {
         let capabilities = ArchiveFormat::Rar.capabilities();
-        assert!(!capabilities.list);
-        assert!(!capabilities.extract);
+        assert!(capabilities.list);
+        assert!(capabilities.extract);
         assert!(!capabilities.create);
-        assert_eq!(capabilities.stage, ReleaseStage::PostV1);
+        assert!(capabilities.encryption);
+        assert_eq!(capabilities.stage, ReleaseStage::Beta);
+    }
+
+    #[test]
+    fn cab_is_unencrypted_read_only_beta() {
+        let capabilities = ArchiveFormat::Cab.capabilities();
+        assert!(capabilities.list);
+        assert!(capabilities.extract);
+        assert!(!capabilities.create);
+        assert!(!capabilities.encryption);
+        assert_eq!(capabilities.stage, ReleaseStage::Beta);
+    }
+
+    #[test]
+    fn creation_input_shape_distinguishes_archives_from_single_streams() {
+        for format in [
+            ArchiveFormat::Zip,
+            ArchiveFormat::SevenZip,
+            ArchiveFormat::Tar,
+            ArchiveFormat::TarGzip,
+            ArchiveFormat::TarZstd,
+            ArchiveFormat::TarXz,
+            ArchiveFormat::TarBzip2,
+        ] {
+            assert_eq!(
+                format.create_input(),
+                Some(CreateInputKind::FilesAndDirectories)
+            );
+        }
+        for format in [
+            ArchiveFormat::Gzip,
+            ArchiveFormat::Zstandard,
+            ArchiveFormat::Xz,
+            ArchiveFormat::Bzip2,
+            ArchiveFormat::Lz4,
+            ArchiveFormat::Brotli,
+        ] {
+            assert_eq!(format.create_input(), Some(CreateInputKind::SingleFile));
+        }
+        assert_eq!(ArchiveFormat::Rar.create_input(), None);
+        assert_eq!(ArchiveFormat::Cab.create_input(), None);
+    }
+
+    #[test]
+    fn compression_level_contract_matches_each_encoder() {
+        for format in [
+            ArchiveFormat::Zip,
+            ArchiveFormat::SevenZip,
+            ArchiveFormat::TarGzip,
+            ArchiveFormat::TarXz,
+            ArchiveFormat::Gzip,
+            ArchiveFormat::Xz,
+        ] {
+            assert_eq!(format.compression_level_range(), Some((0, 9)));
+            assert_eq!(format.clamp_compression_level(22), 9);
+        }
+        for format in [ArchiveFormat::TarZstd, ArchiveFormat::Zstandard] {
+            assert_eq!(format.compression_level_range(), Some((0, 22)));
+            assert_eq!(format.clamp_compression_level(22), 22);
+        }
+        for format in [ArchiveFormat::TarBzip2, ArchiveFormat::Bzip2] {
+            assert_eq!(format.compression_level_range(), Some((1, 9)));
+            assert_eq!(format.clamp_compression_level(0), 1);
+        }
+        assert_eq!(
+            ArchiveFormat::Brotli.compression_level_range(),
+            Some((0, 11))
+        );
+        assert_eq!(ArchiveFormat::Brotli.clamp_compression_level(22), 11);
+        for format in [ArchiveFormat::Tar, ArchiveFormat::Lz4] {
+            assert_eq!(format.compression_level_range(), None);
+        }
     }
 
     #[test]

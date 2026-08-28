@@ -3,10 +3,14 @@
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  IgnorableNamespaces="uap uap3 desktop rescap">
-  <Identity Name="ZiCode.ZiFile.Dev" Publisher="CN=ZiCode" Version="0.1.0.0" ProcessorArchitecture="x64" />
+  IgnorableNamespaces="uap uap3 uap10 com desktop desktop4 desktop5 rescap">
+  <Identity Name="ZiCode.ZiFile.Dev" Publisher="CN=ZiCode Development, OID.2.25.311729368913984317654407730594956997722=1" Version="0.1.0.0" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>ZiFile</DisplayName>
     <PublisherDisplayName>ZiCode</PublisherDisplayName>
@@ -36,13 +40,26 @@
             <uap:Logo>Assets\Square44x44Logo.png</uap:Logo>
             <uap:SupportedFileTypes>
               <uap:FileType>.zip</uap:FileType>
+              <uap:FileType>.zipx</uap:FileType>
+              <uap:FileType>.cbz</uap:FileType>
               <uap:FileType>.7z</uap:FileType>
+              <uap:FileType>.cb7</uap:FileType>
+              <uap:FileType>.rar</uap:FileType>
+              <uap:FileType>.cbr</uap:FileType>
+              <uap:FileType>.cab</uap:FileType>
               <uap:FileType>.tar</uap:FileType>
+              <uap:FileType>.cbt</uap:FileType>
               <uap:FileType>.gz</uap:FileType>
               <uap:FileType>.tgz</uap:FileType>
               <uap:FileType>.zst</uap:FileType>
+              <uap:FileType>.tzst</uap:FileType>
               <uap:FileType>.xz</uap:FileType>
+              <uap:FileType>.txz</uap:FileType>
+              <uap:FileType>.lzma</uap:FileType>
+              <uap:FileType>.bz</uap:FileType>
               <uap:FileType>.bz2</uap:FileType>
+              <uap:FileType>.tbz</uap:FileType>
+              <uap:FileType>.tbz2</uap:FileType>
               <uap:FileType>.lz4</uap:FileType>
               <uap:FileType>.br</uap:FileType>
             </uap:SupportedFileTypes>
@@ -56,6 +73,37 @@
             <desktop:ExecutionAlias Alias="zifile.exe" />
           </uap3:AppExecutionAlias>
         </uap3:Extension>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="ZiFile commands">
+              <com:Class
+                Id="2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531"
+                Path="ZiFile\zifile-shell.dll"
+                ThreadingModel="STA" />
+              <com:Class
+                Id="2D39AD2E-1B36-4F4F-8E09-589F0B1D2BC3"
+                Path="ZiFile\zifile-shell.dll"
+                ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop5:ItemType Type="*">
+              <desktop5:Verb
+                Id="CreateArchiveWithZiFile"
+                Clsid="2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531" />
+              <desktop5:Verb
+                Id="ExtractArchiveWithZiFile"
+                Clsid="2D39AD2E-1B36-4F4F-8E09-589F0B1D2BC3" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type="Directory">
+              <desktop5:Verb
+                Id="CreateArchiveWithZiFile"
+                Clsid="2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531" />
+            </desktop5:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
       </Extensions>
     </Application>
   </Applications>

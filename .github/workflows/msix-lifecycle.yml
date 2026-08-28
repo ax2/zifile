@@ -1,0 +1,100 @@
+name: Trusted MSIX lifecycle
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_run_id:
+        description: Release workflow run ID containing the signed baseline signed-windows-x64 artifact
+        required: true
+      upgrade_run_id:
+        description: Release workflow run ID containing the signed upgrade signed-windows-x64 artifact
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  lifecycle:
+    name: Signed x64 install, upgrade, repair, reset and uninstall
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+      - name: Build data-preserving Repair helper
+        shell: pwsh
+        run: |
+          dotnet publish tests/helpers/msix-repair/MsixRepair.csproj `
+            --configuration Release `
+            --self-contained false `
+            -p:WindowsAppSDKSelfContained=true `
+            --output "$env:RUNNER_TEMP\msix-repair-helper"
+          ./tests/helpers/msix-repair/Invoke-Probe.ps1 `
+            -HelperPath "$env:RUNNER_TEMP\msix-repair-helper\MsixRepair.exe"
+      - name: Download baseline package artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: signed-windows-x64
+          path: baseline
+          run-id: ${{ inputs.baseline_run_id }}
+          github-token: ${{ github.token }}
+      - name: Download upgrade package artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: signed-windows-x64
+          path: upgrade
+          run-id: ${{ inputs.upgrade_run_id }}
+          github-token: ${{ github.token }}
+      - name: Validate trusted package lifecycle
+        shell: pwsh
+        run: |
+          function Get-ReleasePair {
+            param([Parameter(Mandatory)][string]$Root)
+
+            $package = @(Get-ChildItem -LiteralPath $Root -File -Filter '*-windows-x64.msix' |
+              Where-Object Name -NotLike '*-accessible.msix')
+            $audit = @(Get-ChildItem -LiteralPath $Root -File -Filter '*-windows-x64.audit.json' |
+              Where-Object Name -NotLike '*-accessible.audit.json')
+            if ($package.Count -ne 1 -or $audit.Count -ne 1) {
+              throw "Expected exactly one default x64 MSIX and audit in $Root."
+            }
+            [pscustomobject]@{
+              package = $package[0].FullName
+              audit = Get-Content -Raw -LiteralPath $audit[0].FullName | ConvertFrom-Json
+            }
+          }
+
+          $baseline = Get-ReleasePair -Root baseline
+          $upgrade = Get-ReleasePair -Root upgrade
+          foreach ($field in @('identity', 'publisher', 'publisher_display_name', 'architecture', 'minimum_windows_version')) {
+            if ($baseline.audit.$field -cne $upgrade.audit.$field) {
+              throw "Baseline and upgrade audit field differs: $field"
+            }
+          }
+          if ($baseline.audit.architecture -cne 'x64') {
+            throw "Lifecycle Runner only accepts x64 packages."
+          }
+          ./tests/smoke/msix-lifecycle.ps1 `
+            -BaselinePackage $baseline.package `
+            -UpgradePackage $upgrade.package `
+            -Architecture x64 `
+            -BaselineVersion $baseline.audit.version `
+            -UpgradeVersion $upgrade.audit.version `
+            -IdentityName $baseline.audit.identity `
+            -Publisher $baseline.audit.publisher `
+            -PublisherDisplayName $baseline.audit.publisher_display_name `
+            -MinimumWindowsVersion $baseline.audit.minimum_windows_version `
+            -RepairHelper "$env:RUNNER_TEMP\msix-repair-helper\MsixRepair.exe" `
+            -EvidencePath "$env:RUNNER_TEMP\msix-lifecycle.json" `
+            -ConfirmLifecycle
+      - name: Upload lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: msix-lifecycle-x64
+          path: ${{ runner.temp }}/msix-lifecycle.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -12,9 +12,31 @@ try {
         throw 'Workspace build failed.'
     }
 
-    $formats = (cargo run --quiet -p zifile-cli -- formats) -join "`n"
-    if ($LASTEXITCODE -ne 0 -or $formats -notmatch 'ZIP' -or $formats -notmatch '7z') {
+    $cliPath = Join-Path $repoRoot 'target\debug\zifile.exe'
+    if (-not (Test-Path -LiteralPath $cliPath)) {
+        throw 'CLI executable was not produced.'
+    }
+    $formats = (& $cliPath formats) -join "`n"
+    if (
+        $LASTEXITCODE -ne 0 -or
+        $formats -notmatch '(?m)^FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tCOMPRESSION_LEVEL\tENCRYPTION\tSTAGE$' -or
+        $formats -notmatch '(?m)^ZIP\tyes\tyes\tyes\tfiles-or-directories\t0-9\tyes\tAlpha$' -or
+        $formats -notmatch '(?m)^Zstandard\tyes\tyes\tyes\tsingle-file\t0-22\tno\tAlpha$' -or
+        $formats -notmatch '(?m)^Bzip2\tyes\tyes\tyes\tsingle-file\t1-9\tno\tAlpha$' -or
+        $formats -notmatch '(?m)^TAR\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha$' -or
+        $formats -notmatch '(?m)^LZ4\tyes\tyes\tyes\tsingle-file\tfixed\tno\tAlpha$' -or
+        $formats -notmatch '(?m)^RAR\tyes\tyes\tno\tnone\tnone\tyes\tBeta$' -or
+        $formats -notmatch '(?m)^CAB\tyes\tyes\tno\tnone\tnone\tno\tBeta$'
+    ) {
         throw 'CLI format registry smoke test failed.'
+    }
+    $createHelp = (& $cliPath create --help) -join "`n"
+    if (
+        $LASTEXITCODE -ne 0 -or
+        $createHelp -notmatch '--password-stdin' -or
+        $createHelp -match '(?m)^\s*--password(?:\s|=|<)'
+    ) {
+        throw 'CLI password input policy smoke test failed.'
     }
 
     $tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
@@ -27,10 +49,60 @@ try {
     Set-Content -LiteralPath (Join-Path $smokeRoot 'input\hello.txt') -Value 'hello ZiFile' -NoNewline
     Set-Content -LiteralPath (Join-Path $smokeRoot 'input\nested\unicode-测试.txt') -Value 'archive smoke' -NoNewline
 
+    $invalidLevelArchive = Join-Path $smokeRoot 'invalid-level.zip'
+    $invalidLevelError = (& $cliPath create $invalidLevelArchive `
+        (Join-Path $smokeRoot 'input\hello.txt') --format zip --level 10 2>&1) -join "`n"
+    if (
+        $LASTEXITCODE -ne 1 -or
+        $invalidLevelError -notmatch 'compression level for ZIP must be between 0 and 9; received 10' -or
+        (Test-Path -LiteralPath $invalidLevelArchive)
+    ) {
+        throw "CLI format-specific compression-level rejection failed: $invalidLevelError"
+    }
+
+    $fixedLevelArchive = Join-Path $smokeRoot 'fixed-level.tar'
+    $fixedLevelError = (& $cliPath create $fixedLevelArchive `
+        (Join-Path $smokeRoot 'input\hello.txt') --format tar --level 6 2>&1) -join "`n"
+    if (
+        $LASTEXITCODE -ne 1 -or
+        $fixedLevelError -notmatch 'compression level is fixed for TAR; omit --level instead of passing 6' -or
+        (Test-Path -LiteralPath $fixedLevelArchive)
+    ) {
+        throw "CLI fixed compression-level rejection failed: $fixedLevelError"
+    }
+
+    $defaultLevelArchive = Join-Path $smokeRoot 'default-level.tar'
+    & $cliPath create $defaultLevelArchive (Join-Path $smokeRoot 'input\hello.txt') --format tar
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $defaultLevelArchive)) {
+        throw 'CLI fixed-format creation without --level failed.'
+    }
+
     $archivePath = Join-Path $smokeRoot 'smoke.tar.gz'
     cargo run --quiet -p zifile-cli -- create $archivePath (Join-Path $smokeRoot 'input') --format tar-gzip
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $archivePath)) {
         throw 'CLI archive creation smoke test failed.'
+    }
+
+    $encryptedArchive = Join-Path $smokeRoot 'smoke-encrypted.7z'
+    'zifile-smoke-password' |
+        cargo run --quiet -p zifile-cli -- create $encryptedArchive `
+            (Join-Path $smokeRoot 'input\hello.txt') --format seven-zip --password-stdin
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $encryptedArchive)) {
+        throw 'CLI encrypted archive creation through standard input failed.'
+    }
+    'zifile-smoke-password' |
+        cargo run --quiet -p zifile-cli -- test $encryptedArchive --password-stdin
+    if ($LASTEXITCODE -ne 0) {
+        throw 'CLI encrypted archive verification through standard input failed.'
+    }
+    $encryptedOutput = Join-Path $smokeRoot 'encrypted-output'
+    'zifile-smoke-password' |
+        cargo run --quiet -p zifile-cli -- extract $encryptedArchive $encryptedOutput --password-stdin
+    if (
+        $LASTEXITCODE -ne 0 -or
+        (Get-Content -Raw -LiteralPath (Join-Path $encryptedOutput 'hello.txt')) -ne 'hello ZiFile'
+    ) {
+        throw 'CLI encrypted archive extraction through standard input failed.'
     }
 
     $detection = (cargo run --quiet -p zifile-cli -- detect $archivePath) -join "`n"
@@ -60,10 +132,52 @@ try {
             password = $null
         }
     } | ConvertTo-Json -Depth 5 -Compress
-    $workerOutput = ($workerRequest | & $workerPath) -join "`n"
+    $workerListLines = @($workerRequest | & $workerPath)
+    $workerOutput = $workerListLines -join "`n"
     if ($LASTEXITCODE -ne 0 -or $workerOutput -notmatch 'archive_start' -or
         $workerOutput -notmatch 'unicode-测试.txt' -or $workerOutput -notmatch 'archive_end') {
         throw 'Isolated worker IPC smoke test failed.'
+    }
+    $workerListEvents = @($workerListLines | ForEach-Object { $_ | ConvertFrom-Json })
+    $listProgressEvents = @($workerListEvents | Where-Object { $_.payload.event -eq 'progress' })
+    $lastListProgress = $listProgressEvents | Select-Object -Last 1
+    [object[]]$workerListEventNames = @($workerListEvents | ForEach-Object { $_.payload.event })
+    $listArchiveStartIndex = [Array]::IndexOf($workerListEventNames, 'archive_start')
+    $lastListProgressIndex = [Array]::LastIndexOf($workerListEventNames, 'progress')
+    if (
+        $listProgressEvents.Count -lt 1 -or
+        -not $lastListProgress -or
+        $lastListProgress.payload.snapshot.total_entries -lt 1 -or
+        $lastListProgress.payload.snapshot.processed_entries -ne $lastListProgress.payload.snapshot.total_entries -or
+        $lastListProgressIndex -ge $listArchiveStartIndex
+    ) {
+        throw 'Worker listing did not emit a complete final progress snapshot before archive streaming.'
+    }
+
+    $workerTestRequest = @{
+        version = 1
+        payload = @{
+            operation = 'test'
+            archive = $archivePath
+            password = $null
+        }
+    } | ConvertTo-Json -Depth 5 -Compress
+    $workerTestLines = @($workerTestRequest | & $workerPath)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Worker integrity test request failed.'
+    }
+    $workerTestEvents = @($workerTestLines | ForEach-Object { $_ | ConvertFrom-Json })
+    $progressEvents = @($workerTestEvents | Where-Object { $_.payload.event -eq 'progress' })
+    $lastProgress = $progressEvents | Select-Object -Last 1
+    if (
+        $progressEvents.Count -lt 1 -or
+        -not $lastProgress -or
+        $lastProgress.payload.snapshot.total_entries -lt 1 -or
+        $lastProgress.payload.snapshot.processed_entries -ne $lastProgress.payload.snapshot.total_entries -or
+        $lastProgress.payload.snapshot.processed_bytes -ne $lastProgress.payload.snapshot.total_bytes -or
+        $workerTestEvents[-1].payload.event -ne 'archive_end'
+    ) {
+        throw 'Worker integrity test did not emit a complete final progress snapshot before its archive result.'
     }
 
     $cancelRoot = Join-Path $smokeRoot 'worker-cancel'

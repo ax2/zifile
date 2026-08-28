@@ -1,3 +1,14 @@
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing,
+        clippy::undocumented_unsafe_blocks
+    )
+)]
+
 use std::collections::HashSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -15,14 +26,23 @@ use iced::widget::{
 use iced::{Element, Fill, Length, Subscription, Task, Theme};
 use rfd::FileDialog;
 use zifile_core::{
-    ArchiveEntryInfo, ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy,
-    OperationProgress, OperationSummary, SafetyLimits, detect_format_from_path,
+    ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy, CreateInputKind,
+    OPEN_ARCHIVE_EXTENSIONS, OperationProgress, OperationSummary, SafetyLimits,
+    detect_format_from_path,
 };
 use zifile_worker_protocol::WorkerRequest;
 
-use i18n::{Locale, Text};
+use i18n::{Locale, Text, format_archive_modified, format_worker_error};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
+use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
+use zifile_desktop::entry_view::{
+    DirectorySelection, ENTRIES_PER_PAGE, EntrySort, SortDirection, browser_entry_count,
+    browser_entry_page, child_directory_selections, descendant_file_paths, directory_breadcrumbs,
+    next_sort,
+};
+use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
+use zifile_desktop::startup::{self, StartupRequest};
 
 const CREATE_FORMATS: [ArchiveFormat; 13] = [
     ArchiveFormat::Zip,
@@ -39,7 +59,6 @@ const CREATE_FORMATS: [ArchiveFormat; 13] = [
     ArchiveFormat::Lz4,
     ArchiveFormat::Brotli,
 ];
-const ENTRIES_PER_PAGE: usize = 500;
 
 pub fn main() -> iced::Result {
     iced::application(initialize, update, view)
@@ -53,8 +72,19 @@ pub fn main() -> iced::Result {
 
 fn initialize() -> (ZiFile, Task<Message>) {
     let mut state = ZiFile::default();
-    let archive = std::env::args_os().nth(1).map(PathBuf::from);
-    let task = archive.map_or_else(Task::none, |path| begin_load(&mut state, path));
+    let task = match startup::parse(std::env::args_os().skip(1)) {
+        StartupRequest::Home => Task::none(),
+        StartupRequest::OpenArchive(path) => begin_load(&mut state, path),
+        StartupRequest::ExtractHere(path) => {
+            state.automatic_extract_destination = Some(startup::extraction_destination(&path));
+            begin_load(&mut state, path)
+        }
+        StartupRequest::CreateFrom(sources) => {
+            state.page = Page::Create;
+            append_unique(&mut state.create_sources, sources);
+            Task::none()
+        }
+    };
     (state, task)
 }
 
@@ -63,15 +93,21 @@ enum Page {
     Home,
     Archive,
     Create,
+    About,
 }
 
 #[derive(Debug)]
 struct ZiFile {
     page: Page,
     archive: Option<ArchiveInfo>,
+    pending_archive: Option<PathBuf>,
+    automatic_extract_destination: Option<PathBuf>,
     selected: HashSet<PathBuf>,
+    entry_directory: PathBuf,
     entry_filter: String,
     entry_page: usize,
+    entry_sort: EntrySort,
+    entry_sort_direction: SortDirection,
     password: String,
     conflict: ConflictChoice,
     create_sources: Vec<PathBuf>,
@@ -82,6 +118,7 @@ struct ZiFile {
     busy: bool,
     cancellation: Option<CancellationToken>,
     progress: Option<OperationProgress>,
+    operations: OperationQueue<QueuedOperation>,
     dark: bool,
     locale: Locale,
 }
@@ -92,9 +129,14 @@ impl Default for ZiFile {
         Self {
             page: Page::Home,
             archive: None,
+            pending_archive: None,
+            automatic_extract_destination: None,
             selected: HashSet::new(),
+            entry_directory: PathBuf::new(),
             entry_filter: String::new(),
             entry_page: 0,
+            entry_sort: EntrySort::default(),
+            entry_sort_direction: SortDirection::default(),
             password: String::new(),
             conflict: ConflictChoice::Rename,
             create_sources: Vec::new(),
@@ -105,6 +147,7 @@ impl Default for ZiFile {
             busy: false,
             cancellation: None,
             progress: None,
+            operations: OperationQueue::default(),
             dark: settings.dark,
             locale: settings.locale,
         }
@@ -117,19 +160,22 @@ enum Message {
     ToggleTheme,
     ToggleLocale,
     OpenArchiveDialog,
-    ArchiveLoaded(Result<ArchiveInfo, String>),
+    ArchiveLoaded(u64, Result<ArchiveInfo, String>),
     PasswordChanged(String),
     ReloadArchive,
     ToggleEntry(PathBuf, bool),
+    ToggleDirectory(PathBuf, bool),
     SelectAll(bool),
+    NavigateArchiveDirectory(PathBuf),
     EntryFilterChanged(String),
+    SortEntries(EntrySort),
     PreviousEntryPage,
     NextEntryPage,
     ConflictChanged(ConflictChoice),
     Extract,
-    ExtractFinished(Result<OperationSummary, String>),
+    ExtractFinished(u64, Result<OperationSummary, String>),
     TestArchive,
-    TestFinished(Result<ArchiveInfo, String>),
+    TestFinished(u64, Result<ArchiveInfo, String>),
     AddFiles,
     AddFolder,
     RemoveSource(usize),
@@ -138,19 +184,36 @@ enum Message {
     CreatePasswordChanged(String),
     CompressionLevelChanged(u8),
     Create,
-    CreateFinished(Result<OperationSummary, String>),
+    CreateFinished(u64, Result<OperationSummary, String>),
+    ClearQueued,
     Cancel,
     ProgressTick,
     FileDropped(PathBuf),
     KeyboardShortcut(Shortcut),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Shortcut {
     Open,
     Create,
+    About,
     SelectAll,
     Cancel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OperationKind {
+    List,
+    Test,
+    Extract,
+    Create,
+}
+
+struct QueuedOperation {
+    kind: OperationKind,
+    request: WorkerRequest,
+    status: String,
+    archive_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -234,10 +297,12 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::OpenArchiveDialog => {
             if let Some(path) = archive_dialog(state.locale).pick_file() {
+                state.password.clear();
+                state.automatic_extract_destination = None;
                 return begin_load(state, path);
             }
         }
-        Message::ArchiveLoaded(result) => {
+        Message::ArchiveLoaded(id, result) => {
             state.busy = false;
             state.cancellation = None;
             state.progress = None;
@@ -250,7 +315,10 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                         .map(|entry| entry.path.clone())
                         .collect();
                     state.entry_filter.clear();
+                    state.entry_directory.clear();
                     state.entry_page = 0;
+                    state.entry_sort = EntrySort::Name;
+                    state.entry_sort_direction = SortDirection::Ascending;
                     state.status = if state.locale == Locale::ZhCn {
                         format!(
                             "已打开 {} 个项目 · 展开后 {}",
@@ -265,7 +333,13 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                         )
                     };
                     state.archive = Some(archive);
+                    state.pending_archive = None;
                     state.page = Page::Archive;
+                    if let Some(destination) = state.automatic_extract_destination.take()
+                        && let Some(operation) = extract_operation(state, destination)
+                    {
+                        drop(submit_operation(state, operation));
+                    }
                 }
                 Err(error) => {
                     state.status = format!(
@@ -274,10 +348,16 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     )
                 }
             }
+            return continue_queue(state, id);
         }
         Message::PasswordChanged(password) => state.password = password,
         Message::ReloadArchive => {
-            if let Some(path) = state.archive.as_ref().map(|archive| archive.path.clone()) {
+            if let Some(path) = state
+                .archive
+                .as_ref()
+                .map(|archive| archive.path.clone())
+                .or_else(|| state.pending_archive.clone())
+            {
                 return begin_load(state, path);
             }
         }
@@ -286,6 +366,18 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 state.selected.insert(path);
             } else {
                 state.selected.remove(&path);
+            }
+        }
+        Message::ToggleDirectory(directory, selected) => {
+            if let Some(archive) = &state.archive {
+                let descendants = descendant_file_paths(archive, &directory);
+                if selected {
+                    state.selected.extend(descendants);
+                } else {
+                    for path in descendants {
+                        state.selected.remove(&path);
+                    }
+                }
             }
         }
         Message::SelectAll(selected) => {
@@ -300,8 +392,18 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 );
             }
         }
+        Message::NavigateArchiveDirectory(directory) => {
+            state.entry_directory = directory;
+            state.entry_filter.clear();
+            state.entry_page = 0;
+        }
         Message::EntryFilterChanged(filter) => {
             state.entry_filter = filter;
+            state.entry_page = 0;
+        }
+        Message::SortEntries(sort) => {
+            (state.entry_sort, state.entry_sort_direction) =
+                next_sort(state.entry_sort, state.entry_sort_direction, sort);
             state.entry_page = 0;
         }
         Message::PreviousEntryPage => {
@@ -309,7 +411,8 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::NextEntryPage => {
             if let Some(archive) = &state.archive {
-                let count = filtered_entry_count(archive, &state.entry_filter);
+                let count =
+                    browser_entry_count(archive, &state.entry_directory, &state.entry_filter);
                 let last_page = count.saturating_sub(1) / ENTRIES_PER_PAGE;
                 state.entry_page = (state.entry_page + 1).min(last_page);
             }
@@ -331,46 +434,10 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             else {
                 return Task::none();
             };
-            let path = archive.path.clone();
-            let cancellation = CancellationToken::default();
-            let progress = OperationProgress::default();
-            let file_count = archive
-                .entries
-                .iter()
-                .filter(|entry| !entry.is_directory)
-                .count();
-            let selected_paths = if state.selected.len() == file_count {
-                None
-            } else {
-                Some(state.selected.iter().cloned().collect())
-            };
-            let request = WorkerRequest::Extract {
-                archive: path,
-                destination: destination.clone(),
-                conflict: state.conflict.into(),
-                limits: SafetyLimits::default(),
-                password: non_empty(&state.password),
-                selected_paths,
-            };
-            state.busy = true;
-            state.cancellation = Some(cancellation.clone());
-            state.progress = Some(progress.clone());
-            state.status = format!(
-                "{} {}…",
-                choose(state.locale, "Extracting to", "正在解压到"),
-                destination.display()
-            );
-            let worker_progress = progress.clone();
-            let worker_cancellation = cancellation.clone();
-            return Task::perform(
-                async move {
-                    run_worker(request, worker_progress, worker_cancellation)
-                        .and_then(expect_summary)
-                },
-                Message::ExtractFinished,
-            );
+            return extract_operation(state, destination)
+                .map_or_else(Task::none, |operation| submit_operation(state, operation));
         }
-        Message::ExtractFinished(result) => {
+        Message::ExtractFinished(id, result) => {
             state.busy = false;
             state.cancellation = None;
             state.progress = None;
@@ -388,37 +455,39 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     summary.skipped
                 ),
                 Err(error) => format!(
-                    "{}: {error}",
-                    choose(state.locale, "Extraction failed", "解压失败")
+                    "{}: {}",
+                    choose(state.locale, "Extraction failed", "解压失败"),
+                    format_worker_error(state.locale, &error)
                 ),
             };
+            return continue_queue(state, id);
         }
         Message::TestArchive => {
             let Some(path) = state.archive.as_ref().map(|archive| archive.path.clone()) else {
                 return Task::none();
             };
             let password = non_empty(&state.password);
-            let cancellation = CancellationToken::default();
-            let progress = OperationProgress::default();
             let request = WorkerRequest::Test {
                 archive: path,
                 password,
             };
-            state.busy = true;
-            state.cancellation = Some(cancellation.clone());
-            state.progress = Some(progress.clone());
-            state.status = choose(
+            let status = choose(
                 state.locale,
                 "Testing every entry and checksum…",
                 "正在校验所有项目与校验和…",
             )
             .to_owned();
-            return Task::perform(
-                async move { run_worker(request, progress, cancellation).and_then(expect_archive) },
-                Message::TestFinished,
+            return submit_operation(
+                state,
+                QueuedOperation {
+                    kind: OperationKind::Test,
+                    request,
+                    status,
+                    archive_path: None,
+                },
             );
         }
-        Message::TestFinished(result) => {
+        Message::TestFinished(id, result) => {
             state.busy = false;
             state.cancellation = None;
             state.progress = None;
@@ -438,6 +507,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     choose(state.locale, "Integrity test failed", "完整性校验失败")
                 ),
             };
+            return continue_queue(state, id);
         }
         Message::AddFiles => {
             if let Some(paths) = FileDialog::new()
@@ -449,7 +519,9 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
         }
         Message::AddFolder => {
-            if let Some(path) = FileDialog::new()
+            if state.create_format.create_input() == Some(CreateInputKind::SingleFile) {
+                state.status = state.locale.text(Text::SingleFileRequired).to_owned();
+            } else if let Some(path) = FileDialog::new()
                 .set_title(state.locale.text(Text::AddFolderDialog))
                 .pick_folder()
             {
@@ -463,17 +535,21 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
         }
         Message::ClearSources => state.create_sources.clear(),
-        Message::CreateFormatChanged(format) => state.create_format = format,
+        Message::CreateFormatChanged(format) => {
+            state.create_format = format;
+            state.compression_level = format.clamp_compression_level(state.compression_level);
+            if !format.capabilities().encryption {
+                state.create_password.clear();
+            }
+            state.status = create_input_help(state.locale, format).to_owned();
+        }
         Message::CreatePasswordChanged(password) => state.create_password = password,
-        Message::CompressionLevelChanged(level) => state.compression_level = level,
+        Message::CompressionLevelChanged(level) => {
+            state.compression_level = state.create_format.clamp_compression_level(level);
+        }
         Message::Create => {
-            if state.create_sources.is_empty() {
-                state.status = choose(
-                    state.locale,
-                    "Add at least one file or folder first",
-                    "请先添加至少一个文件或文件夹",
-                )
-                .to_owned();
+            if let Some(issue) = create_source_issue(state.create_format, &state.create_sources) {
+                state.status = create_source_issue_text(state.locale, issue).to_owned();
                 return Task::none();
             }
             let extension = state.create_format.canonical_extension();
@@ -487,8 +563,6 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             };
             let sources = state.create_sources.clone();
             let format = state.create_format;
-            let cancellation = CancellationToken::default();
-            let progress = OperationProgress::default();
             let request = WorkerRequest::Create {
                 sources,
                 destination: destination.clone(),
@@ -496,20 +570,22 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 compression_level: state.compression_level,
                 password: non_empty(&state.create_password),
             };
-            state.busy = true;
-            state.cancellation = Some(cancellation.clone());
-            state.progress = Some(progress.clone());
-            state.status = format!(
+            let status = format!(
                 "{} {}…",
                 choose(state.locale, "Creating", "正在创建"),
                 destination.display()
             );
-            return Task::perform(
-                async move { run_worker(request, progress, cancellation).and_then(expect_summary) },
-                Message::CreateFinished,
+            return submit_operation(
+                state,
+                QueuedOperation {
+                    kind: OperationKind::Create,
+                    request,
+                    status,
+                    archive_path: None,
+                },
             );
         }
-        Message::CreateFinished(result) => {
+        Message::CreateFinished(id, result) => {
             state.busy = false;
             state.cancellation = None;
             state.progress = None;
@@ -529,6 +605,14 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     choose(state.locale, "Creation failed", "创建失败")
                 ),
             };
+            return continue_queue(state, id);
+        }
+        Message::ClearQueued => {
+            let cleared = state.operations.clear_pending().len();
+            state.status = match state.locale {
+                Locale::En => format!("Cleared {cleared} queued operations"),
+                Locale::ZhCn => format!("已清除 {cleared} 个排队操作"),
+            };
         }
         Message::Cancel => {
             if let Some(cancellation) = &state.cancellation {
@@ -543,16 +627,11 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::ProgressTick => {}
         Message::FileDropped(path) => {
-            if state.busy {
-                state.status = choose(
-                    state.locale,
-                    "Wait for the current operation before dropping more files",
-                    "请等待当前操作完成后再拖入文件",
-                )
-                .to_owned();
-            } else if path.is_file()
+            if path.is_file()
                 && detect_format_from_path(&path).is_some_and(|format| format.capabilities().list)
             {
+                state.password.clear();
+                state.automatic_extract_destination = None;
                 return begin_load(state, path);
             } else if path.exists() {
                 append_unique(&mut state.create_sources, vec![path]);
@@ -562,9 +641,10 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
         }
         Message::KeyboardShortcut(shortcut) => match shortcut {
-            Shortcut::Open if !state.busy => return update(state, Message::OpenArchiveDialog),
-            Shortcut::Create if !state.busy => state.page = Page::Create,
-            Shortcut::SelectAll if state.page == Page::Archive && !state.busy => {
+            Shortcut::Open => return update(state, Message::OpenArchiveDialog),
+            Shortcut::Create => state.page = Page::Create,
+            Shortcut::About => state.page = Page::About,
+            Shortcut::SelectAll if state.page == Page::Archive => {
                 return update(state, Message::SelectAll(true));
             }
             Shortcut::Cancel if state.cancellation.is_some() => {
@@ -609,19 +689,36 @@ fn ui_event(
             repeat: false,
             ..
         }) if status == iced::event::Status::Ignored => {
-            if key == iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape) {
-                return Some(Message::KeyboardShortcut(Shortcut::Cancel));
-            }
-            if !modifiers.control() {
-                return None;
-            }
-            match key.to_latin(physical_key) {
-                Some('o') => Some(Message::KeyboardShortcut(Shortcut::Open)),
-                Some('n') => Some(Message::KeyboardShortcut(Shortcut::Create)),
-                Some('a') => Some(Message::KeyboardShortcut(Shortcut::SelectAll)),
-                _ => None,
-            }
+            default_shortcut(&key, physical_key, modifiers).map(Message::KeyboardShortcut)
         }
+        _ => None,
+    }
+}
+
+fn default_shortcut(
+    key: &iced::keyboard::Key,
+    physical_key: iced::keyboard::key::Physical,
+    modifiers: iced::keyboard::Modifiers,
+) -> Option<Shortcut> {
+    if modifiers == iced::keyboard::Modifiers::NONE {
+        if *key == iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape) {
+            return Some(Shortcut::Cancel);
+        }
+        if *key == iced::keyboard::Key::Named(iced::keyboard::key::Named::F1) {
+            return Some(Shortcut::About);
+        }
+        return None;
+    }
+    if modifiers != iced::keyboard::Modifiers::CTRL {
+        return None;
+    }
+    match key
+        .to_latin(physical_key)
+        .map(|value| value.to_ascii_lowercase())
+    {
+        Some('o') => Some(Shortcut::Open),
+        Some('n') => Some(Shortcut::Create),
+        Some('a') => Some(Shortcut::SelectAll),
         _ => None,
     }
 }
@@ -635,25 +732,136 @@ fn save_settings(state: &ZiFile) {
 }
 
 fn begin_load(state: &mut ZiFile, path: PathBuf) -> Task<Message> {
+    state.archive = None;
+    state.pending_archive = Some(path.clone());
+    state.selected.clear();
+    state.page = Page::Archive;
     let password = non_empty(&state.password);
-    let cancellation = CancellationToken::default();
-    let progress = OperationProgress::default();
     let request = WorkerRequest::List {
         archive: path.clone(),
         password,
     };
-    state.busy = true;
-    state.cancellation = Some(cancellation.clone());
-    state.progress = Some(progress.clone());
-    state.status = format!(
+    let status = format!(
         "{} {}…",
         choose(state.locale, "Opening", "正在打开"),
         path.display()
     );
-    Task::perform(
-        async move { run_worker(request, progress, cancellation).and_then(expect_archive) },
-        Message::ArchiveLoaded,
+    submit_operation(
+        state,
+        QueuedOperation {
+            kind: OperationKind::List,
+            request,
+            status,
+            archive_path: Some(path),
+        },
     )
+}
+
+fn extract_operation(state: &ZiFile, destination: PathBuf) -> Option<QueuedOperation> {
+    let archive = state.archive.as_ref()?;
+    let file_count = archive
+        .entries
+        .iter()
+        .filter(|entry| !entry.is_directory)
+        .count();
+    let selected_paths = if state.selected.len() == file_count {
+        None
+    } else {
+        Some(state.selected.iter().cloned().collect())
+    };
+    Some(QueuedOperation {
+        kind: OperationKind::Extract,
+        request: WorkerRequest::Extract {
+            archive: archive.path.clone(),
+            destination: destination.clone(),
+            conflict: state.conflict.into(),
+            limits: SafetyLimits::default(),
+            password: non_empty(&state.password),
+            selected_paths,
+        },
+        status: format!(
+            "{} {}…",
+            choose(state.locale, "Extracting to", "正在解压到"),
+            destination.display()
+        ),
+        archive_path: None,
+    })
+}
+
+fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Message> {
+    match state.operations.submit(operation) {
+        Ok(Submission::Start(job)) => start_operation(state, job),
+        Ok(Submission::Queued { position, .. }) => {
+            state.status = match state.locale {
+                Locale::En => format!(
+                    "Queued operation at position {position}; the current operation continues"
+                ),
+                Locale::ZhCn => format!("操作已排队，位置 {position}；当前操作继续运行"),
+            };
+            Task::none()
+        }
+        Err(error) => {
+            state.status = match state.locale {
+                Locale::En => format!("Operation queue is full (maximum {})", error.capacity),
+                Locale::ZhCn => format!("操作队列已满（最多 {} 个）", error.capacity),
+            };
+            Task::none()
+        }
+    }
+}
+
+fn start_operation(state: &mut ZiFile, job: Job<QueuedOperation>) -> Task<Message> {
+    let Job { id, payload } = job;
+    let QueuedOperation {
+        kind,
+        request,
+        status,
+        archive_path,
+    } = payload;
+    if let Some(path) = archive_path {
+        state.archive = None;
+        state.pending_archive = Some(path);
+        state.selected.clear();
+        state.page = Page::Archive;
+    }
+    let cancellation = CancellationToken::default();
+    let progress = OperationProgress::default();
+    state.busy = true;
+    state.cancellation = Some(cancellation.clone());
+    state.progress = Some(progress.clone());
+    state.status = status;
+    match kind {
+        OperationKind::List => Task::perform(
+            async move { run_worker(request, progress, cancellation).and_then(expect_archive) },
+            move |result| Message::ArchiveLoaded(id, result),
+        ),
+        OperationKind::Test => Task::perform(
+            async move { run_worker(request, progress, cancellation).and_then(expect_archive) },
+            move |result| Message::TestFinished(id, result),
+        ),
+        OperationKind::Extract => Task::perform(
+            async move { run_worker(request, progress, cancellation).and_then(expect_summary) },
+            move |result| Message::ExtractFinished(id, result),
+        ),
+        OperationKind::Create => Task::perform(
+            async move { run_worker(request, progress, cancellation).and_then(expect_summary) },
+            move |result| Message::CreateFinished(id, result),
+        ),
+    }
+}
+
+fn continue_queue(state: &mut ZiFile, completed_id: u64) -> Task<Message> {
+    state.busy = false;
+    state.cancellation = None;
+    state.progress = None;
+    match state.operations.complete(completed_id) {
+        Ok(Some(next)) => start_operation(state, next),
+        Ok(None) => Task::none(),
+        Err(error) => {
+            state.status = format!("Internal operation queue error: {error}");
+            Task::none()
+        }
+    }
 }
 
 fn expect_archive(output: WorkerOutput) -> Result<ArchiveInfo, String> {
@@ -683,6 +891,7 @@ fn view(state: &ZiFile) -> Element<'_, Message> {
             nav_button(state.locale.text(Text::Home), Page::Home, state.page),
             nav_button(state.locale.text(Text::Archive), Page::Archive, state.page),
             nav_button(state.locale.text(Text::Create), Page::Create, state.page),
+            nav_button(state.locale.text(Text::About), Page::About, state.page),
             space().height(Fill),
             row![
                 button(if state.dark {
@@ -711,21 +920,41 @@ fn view(state: &ZiFile) -> Element<'_, Message> {
         Page::Home => home_view(state),
         Page::Archive => archive_view(state),
         Page::Create => create_view(state),
+        Page::About => about_view(state),
     };
     let progress: Element<'_, Message> = state.progress.as_ref().map_or_else(
         || space().height(0).into(),
         |progress| {
             let snapshot = progress.snapshot();
-            row![
-                container(progress_bar(0.0..=1.0, snapshot.fraction())).width(Fill),
-                text(format!(
+            let progress_text = if snapshot.total_bytes == 0 && snapshot.processed_bytes > 0 {
+                match state.locale {
+                    Locale::En => {
+                        format!("Scanning · {} read", format_bytes(snapshot.processed_bytes))
+                    }
+                    Locale::ZhCn => format!(
+                        "正在扫描 · 已读取 {}",
+                        format_bytes(snapshot.processed_bytes)
+                    ),
+                }
+            } else if snapshot.total_entries == 0 && snapshot.processed_entries > 0 {
+                match state.locale {
+                    Locale::En => {
+                        format!("Scanning · {} entries found", snapshot.processed_entries)
+                    }
+                    Locale::ZhCn => format!("正在扫描 · 已发现 {} 项", snapshot.processed_entries),
+                }
+            } else {
+                format!(
                     "{} / {} · {} / {}",
                     snapshot.processed_entries,
                     snapshot.total_entries,
                     format_bytes(snapshot.processed_bytes),
                     format_bytes(snapshot.total_bytes)
-                ))
-                .size(12),
+                )
+            };
+            row![
+                container(progress_bar(0.0..=1.0, snapshot.fraction())).width(Fill),
+                text(progress_text).size(12),
             ]
             .spacing(12)
             .align_y(iced::Alignment::Center)
@@ -741,6 +970,19 @@ fn view(state: &ZiFile) -> Element<'_, Message> {
         column![
             row![
                 text(status_line).size(13).width(Fill),
+                text(match state.locale {
+                    Locale::En => format!("{} queued", state.operations.pending_count()),
+                    Locale::ZhCn => format!("{} 个排队", state.operations.pending_count()),
+                })
+                .size(12),
+                button(match state.locale {
+                    Locale::En => "Clear queue",
+                    Locale::ZhCn => "清空队列",
+                })
+                .style(button::secondary)
+                .on_press_maybe(
+                    (state.operations.pending_count() > 0).then_some(Message::ClearQueued)
+                ),
                 button(state.locale.text(Text::Cancel))
                     .style(button::danger)
                     .on_press_maybe(state.cancellation.as_ref().map(|_| Message::Cancel)),
@@ -765,14 +1007,14 @@ fn home_view(state: &ZiFile) -> Element<'_, Message> {
         state.locale.text(Text::OpenDescription),
         state.locale.text(Text::OpenAction),
         Message::OpenArchiveDialog,
-        state.busy,
+        false,
     );
     let create = action_card(
         state.locale.text(Text::CreateArchive),
         state.locale.text(Text::CreateDescription),
         state.locale.text(Text::StartCreating),
         Message::Navigate(Page::Create),
-        state.busy,
+        false,
     );
     column![
         text(state.locale.text(Text::Hero)).size(38),
@@ -794,14 +1036,97 @@ fn home_view(state: &ZiFile) -> Element<'_, Message> {
     .into()
 }
 
+fn about_view(state: &ZiFile) -> Element<'_, Message> {
+    let locale = state.locale;
+    let detail = |label: &'static str, value: String| {
+        container(
+            column![text(label).size(13), text(value).size(18)]
+                .spacing(4)
+                .width(Fill),
+        )
+        .padding(18)
+        .width(Fill)
+        .style(container::rounded_box)
+    };
+    column![
+        text(locale.text(Text::AboutHeading)).size(32),
+        text(locale.text(Text::AboutDescription)).size(17),
+        row![
+            detail(
+                locale.text(Text::Version),
+                env!("CARGO_PKG_VERSION").to_owned()
+            ),
+            detail(locale.text(Text::License), "MIT".to_owned()),
+            detail(
+                locale.text(Text::SupportedFormatFamilies),
+                ArchiveFormat::ALL.len().to_string()
+            ),
+        ]
+        .spacing(14),
+        detail(
+            locale.text(Text::ProjectWebsite),
+            "https://github.com/ax2/zifile".to_owned()
+        ),
+        container(text(locale.text(Text::PrivacyDescription)))
+            .padding(18)
+            .width(Fill)
+            .style(container::rounded_box),
+    ]
+    .spacing(18)
+    .width(Fill)
+    .into()
+}
+
+fn sort_header_label(
+    label: &str,
+    column: EntrySort,
+    active: EntrySort,
+    direction: SortDirection,
+) -> String {
+    if column != active {
+        return label.to_owned();
+    }
+    let arrow = match direction {
+        SortDirection::Ascending => "↑",
+        SortDirection::Descending => "↓",
+    };
+    format!("{label} {arrow}")
+}
+
+fn folder_selection_summary(locale: Locale, selection: DirectorySelection) -> String {
+    match locale {
+        Locale::En => format!("{}/{} selected", selection.selected, selection.total),
+        Locale::ZhCn => format!("已选 {}/{}", selection.selected, selection.total),
+    }
+}
+
 fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     let Some(archive) = &state.archive else {
+        let pending = state.pending_archive.as_ref();
+        let heading = pending.and_then(|path| path.file_name()).map_or_else(
+            || state.locale.text(Text::NoArchive).to_owned(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        let description = if pending.is_some() {
+            state.locale.text(Text::EncryptedArchiveDescription)
+        } else {
+            state.locale.text(Text::NoArchiveDescription)
+        };
         return container(
             column![
-                text(state.locale.text(Text::NoArchive)).size(30),
-                text(state.locale.text(Text::NoArchiveDescription)),
-                button(state.locale.text(Text::OpenAction))
+                text(heading).size(30),
+                text(description),
+                text_input(state.locale.text(Text::PasswordEncrypted), &state.password)
+                    .secure(true)
+                    .on_input(Message::PasswordChanged)
+                    .width(280),
+                button(state.locale.text(Text::UnlockArchive))
                     .style(button::primary)
+                    .on_press_maybe(
+                        (pending.is_some() && !state.busy).then_some(Message::ReloadArchive)
+                    ),
+                button(state.locale.text(Text::OpenAction))
+                    .style(button::secondary)
                     .on_press(Message::OpenArchiveDialog),
             ]
             .spacing(16),
@@ -849,10 +1174,10 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         .width(Fill),
         button(state.locale.text(Text::OpenAnother))
             .style(button::secondary)
-            .on_press_maybe((!state.busy).then_some(Message::OpenArchiveDialog)),
+            .on_press(Message::OpenArchiveDialog),
         button(state.locale.text(Text::TestArchive))
             .style(button::secondary)
-            .on_press_maybe((!state.busy).then_some(Message::TestArchive)),
+            .on_press(Message::TestArchive),
     ]
     .align_y(iced::Alignment::Center)
     .spacing(10);
@@ -870,8 +1195,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             .secure(true)
             .on_input(Message::PasswordChanged)
             .width(220),
-        button(state.locale.text(Text::Reload))
-            .on_press_maybe((!state.busy).then_some(Message::ReloadArchive)),
+        button(state.locale.text(Text::Reload)).on_press(Message::ReloadArchive),
         pick_list(
             ConflictChoice::ALL.map(|choice| LocalizedConflict {
                 choice,
@@ -885,15 +1209,12 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         ),
         button(state.locale.text(Text::ExtractSelected))
             .style(button::primary)
-            .on_press_maybe(
-                (!state.busy && !state.selected.is_empty()).then_some(Message::Extract)
-            ),
+            .on_press_maybe((!state.selected.is_empty()).then_some(Message::Extract)),
     ]
     .align_y(iced::Alignment::Center)
     .spacing(10);
 
-    let filtered_count = filtered_entry_count(archive, &state.entry_filter);
-    let filter_lower = state.entry_filter.to_lowercase();
+    let filtered_count = browser_entry_count(archive, &state.entry_directory, &state.entry_filter);
     let last_page = filtered_count.saturating_sub(1) / ENTRIES_PER_PAGE;
     let current_page = state.entry_page.min(last_page);
     let browser_controls = row![
@@ -917,50 +1238,127 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     .spacing(10)
     .align_y(iced::Alignment::Center);
 
+    let mut breadcrumbs = row![
+        button(choose(state.locale, "Archive root", "归档根目录"))
+            .style(button::text)
+            .on_press(Message::NavigateArchiveDirectory(PathBuf::new()))
+    ]
+    .spacing(4)
+    .align_y(iced::Alignment::Center);
+    for (label, path) in directory_breadcrumbs(&state.entry_directory) {
+        breadcrumbs = breadcrumbs.push(text("›")).push(
+            button(text(label))
+                .style(button::text)
+                .on_press(Message::NavigateArchiveDirectory(path)),
+        );
+    }
+
     let mut entries = column![
         row![
             text(" ").width(34),
-            text(state.locale.text(Text::Name)).width(Fill),
-            text(state.locale.text(Text::Original)).width(110),
-            text(state.locale.text(Text::Packed)).width(110),
-            text(state.locale.text(Text::Flags)).width(90),
+            button(text(sort_header_label(
+                state.locale.text(Text::Name),
+                EntrySort::Name,
+                state.entry_sort,
+                state.entry_sort_direction,
+            )))
+            .style(button::text)
+            .on_press(Message::SortEntries(EntrySort::Name))
+            .width(Fill),
+            button(text(sort_header_label(
+                state.locale.text(Text::Original),
+                EntrySort::Size,
+                state.entry_sort,
+                state.entry_sort_direction,
+            )))
+            .style(button::text)
+            .on_press(Message::SortEntries(EntrySort::Size))
+            .width(110),
+            button(text(sort_header_label(
+                state.locale.text(Text::Packed),
+                EntrySort::Packed,
+                state.entry_sort,
+                state.entry_sort_direction,
+            )))
+            .style(button::text)
+            .on_press(Message::SortEntries(EntrySort::Packed))
+            .width(110),
+            button(text(sort_header_label(
+                state.locale.text(Text::Modified),
+                EntrySort::Modified,
+                state.entry_sort,
+                state.entry_sort_direction,
+            )))
+            .style(button::text)
+            .on_press(Message::SortEntries(EntrySort::Modified))
+            .width(220),
+            text(state.locale.text(Text::Flags)).width(150),
         ]
         .spacing(10),
         rule::horizontal(1),
     ]
     .spacing(4);
-    for entry in archive
-        .entries
-        .iter()
-        .filter(|entry| entry_matches_filter(entry, &filter_lower))
-        .skip(current_page * ENTRIES_PER_PAGE)
-        .take(ENTRIES_PER_PAGE)
-    {
-        let path = entry.path.clone();
+    let directory_selections = if state.entry_filter.is_empty() {
+        child_directory_selections(archive, &state.entry_directory, &state.selected)
+    } else {
+        Default::default()
+    };
+    for entry in browser_entry_page(
+        archive,
+        &state.entry_directory,
+        &state.entry_filter,
+        current_page,
+        state.entry_sort,
+        state.entry_sort_direction,
+    ) {
+        let path = entry.path.as_ref().to_path_buf();
         let selected = state.selected.contains(&path);
+        let selection_path = path.clone();
+        let directory_selection = directory_selections.get(&path).copied().unwrap_or_default();
+        let directory_selection_path = path.clone();
+        let display_path = if state.entry_filter.is_empty() {
+            entry.path.file_name().unwrap_or_default().to_string_lossy()
+        } else {
+            entry.path.to_string_lossy()
+        };
+        let flags = if entry.encrypted {
+            state.locale.text(Text::Locked).to_owned()
+        } else if entry.is_directory {
+            folder_selection_summary(state.locale, directory_selection)
+        } else {
+            "—".to_owned()
+        };
         entries = entries.push(
             row![
                 if entry.is_directory {
-                    checkbox(false)
+                    checkbox(directory_selection.all_selected()).on_toggle_maybe(
+                        (directory_selection.total > 0).then_some(move |value| {
+                            Message::ToggleDirectory(directory_selection_path.clone(), value)
+                        }),
+                    )
                 } else {
                     checkbox(selected)
-                        .on_toggle(move |value| Message::ToggleEntry(path.clone(), value))
+                        .on_toggle(move |value| Message::ToggleEntry(selection_path.clone(), value))
                 }
                 .width(34),
-                text(format!(
-                    "{} {}",
-                    if entry.is_directory { "▸" } else { "•" },
-                    entry.path.display()
-                ))
-                .width(Fill),
+                if entry.is_directory {
+                    button(text(format!("▸ {display_path}")))
+                        .style(button::text)
+                        .on_press(Message::NavigateArchiveDirectory(path.clone()))
+                        .width(Fill)
+                } else {
+                    button(text(format!("• {display_path}")))
+                        .style(button::text)
+                        .width(Fill)
+                },
                 text(format_bytes(entry.size)).width(110),
                 text(format_bytes(entry.compressed_size)).width(110),
-                text(if entry.encrypted {
-                    state.locale.text(Text::Locked)
-                } else {
-                    "—"
-                })
-                .width(90),
+                text(format_archive_modified(
+                    state.locale,
+                    entry.modified.as_ref()
+                ))
+                .width(220),
+                text(flags).width(150),
             ]
             .spacing(10)
             .align_y(iced::Alignment::Center)
@@ -971,6 +1369,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     column![
         header,
         controls,
+        breadcrumbs,
         browser_controls,
         container(scrollable(entries).height(Fill))
             .padding(12)
@@ -1001,15 +1400,41 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
         );
     }
     let encryption_supported = state.create_format.capabilities().encryption;
+    let source_issue = create_source_issue(state.create_format, &state.create_sources);
+    let single_file_format =
+        state.create_format.create_input() == Some(CreateInputKind::SingleFile);
+    let compression_control: Element<'_, Message> =
+        if let Some((minimum, maximum)) = state.create_format.compression_level_range() {
+            column![
+                text(format!(
+                    "{} · {}",
+                    state.locale.text(Text::CompressionLevel),
+                    state.compression_level
+                ))
+                .size(13),
+                slider(
+                    minimum..=maximum,
+                    state.compression_level,
+                    Message::CompressionLevelChanged
+                )
+            ]
+            .spacing(8)
+            .width(Fill)
+            .into()
+        } else {
+            text(state.locale.text(Text::CompressionFixed))
+                .size(13)
+                .width(Fill)
+                .into()
+        };
 
     column![
         text(state.locale.text(Text::CreateHeading)).size(32),
         text(state.locale.text(Text::CreateHelp)),
         row![
-            button(state.locale.text(Text::AddFiles))
-                .on_press_maybe((!state.busy).then_some(Message::AddFiles)),
+            button(state.locale.text(Text::AddFiles)).on_press(Message::AddFiles),
             button(state.locale.text(Text::AddFolder))
-                .on_press_maybe((!state.busy).then_some(Message::AddFolder)),
+                .on_press_maybe((!single_file_format).then_some(Message::AddFolder)),
             button(state.locale.text(Text::Clear))
                 .style(button::secondary)
                 .on_press_maybe(
@@ -1034,23 +1459,10 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
                     ]
                     .spacing(6)
                     .width(240),
-                    column![
-                        text(format!(
-                            "{} · {}",
-                            state.locale.text(Text::CompressionLevel),
-                            state.compression_level
-                        ))
-                        .size(13),
-                        slider(
-                            0..=9,
-                            state.compression_level,
-                            Message::CompressionLevelChanged
-                        )
-                    ]
-                    .spacing(8)
-                    .width(Fill),
+                    compression_control,
                 ]
                 .spacing(20),
+                text(create_input_help(state.locale, state.create_format)).size(13),
                 column![
                     text(if encryption_supported {
                         state.locale.text(Text::PasswordOptional)
@@ -1076,14 +1488,28 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
             space().width(Fill),
             button(state.locale.text(Text::CreateAction))
                 .style(button::primary)
-                .on_press_maybe(
-                    (!state.busy && !state.create_sources.is_empty()).then_some(Message::Create)
-                ),
+                .on_press_maybe(source_issue.is_none().then_some(Message::Create)),
         ],
     ]
     .spacing(14)
     .height(Fill)
     .into()
+}
+
+fn create_input_help(locale: Locale, format: ArchiveFormat) -> &'static str {
+    match format.create_input() {
+        Some(CreateInputKind::FilesAndDirectories) => locale.text(Text::FilesAndFoldersSupported),
+        Some(CreateInputKind::SingleFile) => locale.text(Text::SingleFileRequired),
+        None => locale.text(Text::FormatCannotCreate),
+    }
+}
+
+fn create_source_issue_text(locale: Locale, issue: CreateSourceIssue) -> &'static str {
+    match issue {
+        CreateSourceIssue::MissingSources => locale.text(Text::NoSources),
+        CreateSourceIssue::SingleFileRequired => locale.text(Text::SingleFileRequired),
+        CreateSourceIssue::UnsupportedFormat => locale.text(Text::FormatCannotCreate),
+    }
 }
 
 fn nav_button(label: &str, page: Page, active: Page) -> iced::widget::Button<'_, Message> {
@@ -1126,9 +1552,7 @@ fn archive_dialog(locale: Locale) -> FileDialog {
         .set_title(locale.text(Text::OpenDialog))
         .add_filter(
             locale.text(Text::SupportedArchives),
-            &[
-                "zip", "7z", "tar", "gz", "tgz", "zst", "xz", "bz2", "lz4", "br",
-            ],
+            OPEN_ARCHIVE_EXTENSIONS,
         )
         .add_filter(locale.text(Text::AllFiles), &["*"])
 }
@@ -1152,24 +1576,6 @@ fn append_unique(destination: &mut Vec<PathBuf>, paths: Vec<PathBuf>) {
     }
 }
 
-fn filtered_entry_count(archive: &ArchiveInfo, filter: &str) -> usize {
-    let filter_lower = filter.to_lowercase();
-    archive
-        .entries
-        .iter()
-        .filter(|entry| entry_matches_filter(entry, &filter_lower))
-        .count()
-}
-
-fn entry_matches_filter(entry: &ArchiveEntryInfo, filter_lower: &str) -> bool {
-    filter_lower.is_empty()
-        || entry
-            .path
-            .to_string_lossy()
-            .to_lowercase()
-            .contains(filter_lower)
-}
-
 fn format_bytes(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut value = bytes as f64;
@@ -1181,13 +1587,75 @@ fn format_bytes(bytes: u64) -> String {
     if unit == 0 {
         format!("{bytes} B")
     } else {
-        format!("{value:.1} {}", UNITS[unit])
+        let unit_label = UNITS.get(unit).copied().unwrap_or("TB");
+        format!("{value:.1} {unit_label}")
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use zifile_core::ArchiveEntryInfo;
+    use zifile_desktop::entry_view::{filtered_entry_count, sorted_filtered_entry_page};
+
+    #[test]
+    fn create_input_guidance_is_bilingual_and_matches_capabilities() {
+        assert_eq!(
+            create_input_help(Locale::En, ArchiveFormat::Tar),
+            "This format accepts files and folders."
+        );
+        assert!(create_input_help(Locale::ZhCn, ArchiveFormat::Brotli).contains("TAR 组合格式"));
+        assert_eq!(
+            create_source_issue_text(Locale::ZhCn, CreateSourceIssue::UnsupportedFormat),
+            "此格式不支持创建。"
+        );
+    }
+
+    #[test]
+    fn about_page_exposes_release_identity_in_the_default_ui() {
+        let source = include_str!("main.rs");
+        assert!(source.contains("Page::About => about_view(state)"));
+        assert!(source.contains("env!(\"CARGO_PKG_VERSION\")"));
+        assert!(source.contains("\"MIT\".to_owned()"));
+        assert!(source.contains("ArchiveFormat::ALL.len().to_string()"));
+        assert!(source.contains("https://github.com/ax2/zifile"));
+        assert!(source.contains("key::Named::F1"));
+        assert!(source.contains("KeyboardShortcut(Shortcut::About)"));
+    }
+
+    #[test]
+    fn default_shortcuts_require_exact_modifiers() {
+        use iced::keyboard::Key;
+        use iced::keyboard::Modifiers;
+        use iced::keyboard::key::{Code, Named, NativeCode, Physical};
+
+        let key_n = Key::Character("n".into());
+        let physical_n = Physical::Code(Code::KeyN);
+        assert_eq!(
+            default_shortcut(&key_n, physical_n, Modifiers::CTRL),
+            Some(Shortcut::Create)
+        );
+        assert_eq!(
+            default_shortcut(&key_n, physical_n, Modifiers::CTRL | Modifiers::SHIFT),
+            None
+        );
+        assert_eq!(
+            default_shortcut(
+                &Key::Named(Named::F1),
+                Physical::Unidentified(NativeCode::Unidentified),
+                Modifiers::ALT
+            ),
+            None
+        );
+        assert_eq!(
+            default_shortcut(
+                &Key::Named(Named::Escape),
+                Physical::Unidentified(NativeCode::Unidentified),
+                Modifiers::NONE
+            ),
+            Some(Shortcut::Cancel)
+        );
+    }
 
     #[test]
     fn large_archive_filtering_keeps_rendered_page_bounded() {
@@ -1198,6 +1666,7 @@ mod tests {
                 compressed_size: 1,
                 is_directory: false,
                 encrypted: false,
+                modified: None,
             })
             .collect();
         let archive = ArchiveInfo {
@@ -1208,12 +1677,141 @@ mod tests {
             compressed_size: 100_000,
         };
         assert_eq!(filtered_entry_count(&archive, "file-09"), 10_000);
-        let rendered = archive
-            .entries
-            .iter()
-            .filter(|entry| entry_matches_filter(entry, "file-09"))
-            .take(ENTRIES_PER_PAGE)
-            .count();
+        let rendered = sorted_filtered_entry_page(
+            &archive,
+            "file-09",
+            0,
+            EntrySort::Name,
+            SortDirection::Ascending,
+        )
+        .len();
         assert_eq!(rendered, ENTRIES_PER_PAGE);
+    }
+
+    #[test]
+    fn sort_header_identifies_the_active_direction() {
+        assert_eq!(
+            sort_header_label(
+                "Modified",
+                EntrySort::Modified,
+                EntrySort::Modified,
+                SortDirection::Descending,
+            ),
+            "Modified ↓"
+        );
+        assert_eq!(
+            sort_header_label(
+                "Packed",
+                EntrySort::Packed,
+                EntrySort::Name,
+                SortDirection::Ascending,
+            ),
+            "Packed"
+        );
+    }
+
+    #[test]
+    fn directory_navigation_resets_filter_and_page() {
+        let mut state = ZiFile {
+            entry_filter: "readme".to_owned(),
+            entry_page: 7,
+            ..ZiFile::default()
+        };
+        drop(update(
+            &mut state,
+            Message::NavigateArchiveDirectory(PathBuf::from("docs/reference")),
+        ));
+        assert_eq!(state.entry_directory, PathBuf::from("docs/reference"));
+        assert!(state.entry_filter.is_empty());
+        assert_eq!(state.entry_page, 0);
+    }
+
+    #[test]
+    fn directory_toggle_selects_and_clears_only_descendant_files() {
+        let archive = ArchiveInfo {
+            path: PathBuf::from("folders.zip"),
+            format: ArchiveFormat::Zip,
+            entries: vec![
+                ArchiveEntryInfo {
+                    path: PathBuf::from("docs/a.txt"),
+                    size: 1,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    modified: None,
+                },
+                ArchiveEntryInfo {
+                    path: PathBuf::from("other.txt"),
+                    size: 1,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    modified: None,
+                },
+            ],
+            total_size: 2,
+            compressed_size: 2,
+        };
+        let mut state = ZiFile {
+            archive: Some(archive),
+            selected: HashSet::from([PathBuf::from("other.txt")]),
+            ..ZiFile::default()
+        };
+        drop(update(
+            &mut state,
+            Message::ToggleDirectory(PathBuf::from("docs"), true),
+        ));
+        assert!(state.selected.contains(Path::new("docs/a.txt")));
+        assert!(state.selected.contains(Path::new("other.txt")));
+        drop(update(
+            &mut state,
+            Message::ToggleDirectory(PathBuf::from("docs"), false),
+        ));
+        assert!(!state.selected.contains(Path::new("docs/a.txt")));
+        assert!(state.selected.contains(Path::new("other.txt")));
+        assert_eq!(
+            folder_selection_summary(
+                Locale::ZhCn,
+                DirectorySelection {
+                    selected: 1,
+                    total: 3
+                }
+            ),
+            "已选 1/3"
+        );
+    }
+
+    #[test]
+    fn extract_here_queues_extraction_after_listing_succeeds() {
+        let archive_path = PathBuf::from(r"C:\archives\sample.zip");
+        let destination = PathBuf::from(r"C:\archives\sample");
+        let archive = ArchiveInfo {
+            path: archive_path.clone(),
+            format: ArchiveFormat::Zip,
+            entries: vec![ArchiveEntryInfo {
+                path: PathBuf::from("hello.txt"),
+                size: 5,
+                compressed_size: 5,
+                is_directory: false,
+                encrypted: false,
+                modified: None,
+            }],
+            total_size: 5,
+            compressed_size: 5,
+        };
+        let mut state = ZiFile {
+            automatic_extract_destination: Some(destination.clone()),
+            ..ZiFile::default()
+        };
+        drop(begin_load(&mut state, archive_path));
+        assert_eq!(state.operations.active_id(), Some(1));
+
+        drop(update(&mut state, Message::ArchiveLoaded(1, Ok(archive))));
+
+        assert_eq!(state.operations.active_id(), Some(2));
+        assert!(state.busy);
+        assert!(state.automatic_extract_destination.is_none());
+        assert!(state.status.contains(&destination.display().to_string()));
+        assert_eq!(state.selected, HashSet::from([PathBuf::from("hello.txt")]));
     }
 }

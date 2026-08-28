@@ -1,10 +1,26 @@
-use std::path::PathBuf;
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing,
+        clippy::undocumented_unsafe_blocks
+    )
+)]
+
+use std::{
+    io::{self, BufRead},
+    path::PathBuf,
+};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use zifile_core::{
-    ArchiveFormat, ConflictPolicy, CreateOptions, ExtractOptions, create_archive, detect_format,
-    detect_format_from_path, extract_archive, list_archive, test_archive,
+    ArchiveFormat, ConflictPolicy, CreateInputKind, CreateOptions, ExtractOptions, create_archive,
+    detect_format, detect_format_from_path, extract_archive, list_archive, test_archive,
 };
+
+const RUNTIME_ERROR_EXIT_CODE: i32 = 1;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -26,14 +42,16 @@ enum Command {
     /// List archive contents.
     List {
         archive: PathBuf,
+        /// Read the archive password from one line of standard input.
         #[arg(long)]
-        password: Option<String>,
+        password_stdin: bool,
     },
     /// Verify every archive entry without extracting it.
     Test {
         archive: PathBuf,
+        /// Read the archive password from one line of standard input.
         #[arg(long)]
-        password: Option<String>,
+        password_stdin: bool,
     },
     /// Safely extract an archive.
     Extract {
@@ -41,8 +59,9 @@ enum Command {
         destination: PathBuf,
         #[arg(long, value_enum, default_value_t = ConflictArg::Error)]
         conflict: ConflictArg,
+        /// Read the archive password from one line of standard input.
         #[arg(long)]
-        password: Option<String>,
+        password_stdin: bool,
     },
     /// Create an archive from one or more files/directories.
     Create {
@@ -51,10 +70,12 @@ enum Command {
         sources: Vec<PathBuf>,
         #[arg(long, value_enum)]
         format: Option<FormatArg>,
-        #[arg(long, default_value_t = 6, value_parser = clap::value_parser!(u8).range(0..=22))]
-        level: u8,
+        /// Compression level; defaults to 6 for adjustable formats (see `zifile formats`).
+        #[arg(long, value_parser = clap::value_parser!(u8).range(0..=22))]
+        level: Option<u8>,
+        /// Read the archive password from one line of standard input.
         #[arg(long)]
-        password: Option<String>,
+        password_stdin: bool,
     },
 }
 
@@ -117,7 +138,7 @@ impl From<FormatArg> for ArchiveFormat {
 fn main() {
     if let Err(error) = run(Cli::parse()) {
         eprintln!("error: {error}");
-        std::process::exit(1);
+        std::process::exit(RUNTIME_ERROR_EXIT_CODE);
     }
 }
 
@@ -128,7 +149,11 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             let format = detect_format(&path)?;
             println!("{format}\t{}", format.canonical_extension());
         }
-        Command::List { archive, password } => {
+        Command::List {
+            archive,
+            password_stdin,
+        } => {
+            let password = read_password(password_stdin)?;
             let info = list_archive(&archive, password.as_deref())?;
             println!(
                 "{}\t{} entries\t{} bytes expanded\t{} bytes archive",
@@ -149,7 +174,11 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
         }
-        Command::Test { archive, password } => {
+        Command::Test {
+            archive,
+            password_stdin,
+        } => {
+            let password = read_password(password_stdin)?;
             let info = test_archive(&archive, password.as_deref())?;
             println!(
                 "OK: {} entries, {} expanded bytes",
@@ -161,8 +190,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             archive,
             destination,
             conflict,
-            password,
+            password_stdin,
         } => {
+            let password = read_password(password_stdin)?;
             let summary = extract_archive(
                 archive,
                 destination,
@@ -182,18 +212,20 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             sources,
             format,
             level,
-            password,
+            password_stdin,
         } => {
+            let password = read_password(password_stdin)?;
             let format = format
                 .map(ArchiveFormat::from)
                 .or_else(|| detect_format_from_path(&destination))
                 .ok_or("cannot infer output format; pass --format")?;
+            let compression_level = resolve_compression_level(format, level)?;
             let summary = create_archive(
                 &sources,
                 destination,
                 format,
                 &CreateOptions {
-                    compression_level: level,
+                    compression_level,
                     password,
                     ..CreateOptions::default()
                 },
@@ -207,21 +239,237 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn read_password(enabled: bool) -> io::Result<Option<String>> {
+    let stdin = io::stdin();
+    read_password_from(&mut stdin.lock(), enabled)
+}
+
+fn read_password_from(reader: &mut impl BufRead, enabled: bool) -> io::Result<Option<String>> {
+    if !enabled {
+        return Ok(None);
+    }
+    let mut password = String::new();
+    if reader.read_line(&mut password)? == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "--password-stdin requires one line on standard input",
+        ));
+    }
+    while matches!(password.chars().last(), Some('\r' | '\n')) {
+        password.pop();
+    }
+    if password.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--password-stdin does not accept an empty password",
+        ));
+    }
+    Ok(Some(password))
+}
+
 fn print_formats() {
-    println!("FORMAT\tLIST\tEXTRACT\tCREATE\tENCRYPTION\tSTAGE");
+    print!("{}", format_matrix());
+}
+
+fn format_matrix() -> String {
+    let mut output = String::from(
+        "FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tCOMPRESSION_LEVEL\tENCRYPTION\tSTAGE\n",
+    );
     for format in ArchiveFormat::ALL {
         let capabilities = format.capabilities();
-        println!(
-            "{format}\t{}\t{}\t{}\t{}\t{}",
+        output.push_str(&format!(
+            "{format}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             yes_no(capabilities.list),
             yes_no(capabilities.extract),
             yes_no(capabilities.create),
+            create_input_label(format.create_input()),
+            compression_level_label(format),
             yes_no(capabilities.encryption),
             capabilities.stage
-        );
+        ));
+        output.push('\n');
+    }
+    output
+}
+
+fn resolve_compression_level(format: ArchiveFormat, requested: Option<u8>) -> io::Result<u8> {
+    let default = CreateOptions::default().compression_level;
+    match (format.compression_level_range(), requested) {
+        (Some((minimum, maximum)), requested) => {
+            let level = requested.unwrap_or(default);
+            if (minimum..=maximum).contains(&level) {
+                Ok(level)
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "compression level for {format} must be between {minimum} and {maximum}; received {level}"
+                    ),
+                ))
+            }
+        }
+        (None, Some(level)) if format.capabilities().create => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "compression level is fixed for {format}; omit --level instead of passing {level}"
+            ),
+        )),
+        (None, _) => Ok(default),
+    }
+}
+
+fn compression_level_label(format: ArchiveFormat) -> String {
+    match format.compression_level_range() {
+        Some((minimum, maximum)) => format!("{minimum}-{maximum}"),
+        None if format.capabilities().create => "fixed".to_owned(),
+        None => "none".to_owned(),
+    }
+}
+
+const fn create_input_label(input: Option<CreateInputKind>) -> &'static str {
+    match input {
+        Some(CreateInputKind::FilesAndDirectories) => "files-or-directories",
+        Some(CreateInputKind::SingleFile) => "single-file",
+        None => "none",
     }
 }
 
 const fn yes_no(value: bool) -> &'static str {
     if value { "yes" } else { "no" }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use clap::{CommandFactory, Parser, ValueEnum};
+
+    use super::{
+        Cli, ConflictArg, FormatArg, RUNTIME_ERROR_EXIT_CODE, format_matrix, read_password_from,
+        resolve_compression_level,
+    };
+    use zifile_core::ArchiveFormat;
+
+    #[test]
+    fn public_cli_surface_and_usage_exit_code_are_stable() {
+        let command = Cli::command();
+        let subcommands: Vec<_> = command
+            .get_subcommands()
+            .map(|subcommand| subcommand.get_name())
+            .collect();
+        assert_eq!(
+            subcommands,
+            ["formats", "detect", "list", "test", "extract", "create"]
+        );
+        assert_eq!(command.get_version(), Some(env!("CARGO_PKG_VERSION")));
+        assert_eq!(RUNTIME_ERROR_EXIT_CODE, 1);
+        assert_eq!(
+            Cli::try_parse_from(["zifile", "unknown"])
+                .unwrap_err()
+                .exit_code(),
+            2
+        );
+    }
+
+    #[test]
+    fn public_value_names_are_stable() {
+        let conflicts: Vec<_> = ConflictArg::value_variants()
+            .iter()
+            .map(|value| value.to_possible_value().unwrap().get_name().to_owned())
+            .collect();
+        assert_eq!(conflicts, ["overwrite", "skip", "rename", "error"]);
+
+        let formats: Vec<_> = FormatArg::value_variants()
+            .iter()
+            .map(|value| value.to_possible_value().unwrap().get_name().to_owned())
+            .collect();
+        assert_eq!(
+            formats,
+            [
+                "zip",
+                "seven-zip",
+                "tar",
+                "tar-gzip",
+                "tar-zstd",
+                "tar-xz",
+                "tar-bzip2",
+                "gzip",
+                "zstandard",
+                "xz",
+                "bzip2",
+                "lz4",
+                "brotli",
+            ]
+        );
+    }
+
+    #[test]
+    fn format_matrix_exposes_creation_contract() {
+        let matrix = format_matrix();
+        assert!(matrix.starts_with(
+            "FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tCOMPRESSION_LEVEL\tENCRYPTION\tSTAGE\n"
+        ));
+        assert!(matrix.contains("gzip\tyes\tyes\tyes\tsingle-file\t0-9\tno\tAlpha"));
+        assert!(matrix.contains("ZIP\tyes\tyes\tyes\tfiles-or-directories\t0-9\tyes\tAlpha"));
+        assert!(matrix.contains("Zstandard\tyes\tyes\tyes\tsingle-file\t0-22\tno\tAlpha"));
+        assert!(matrix.contains("Bzip2\tyes\tyes\tyes\tsingle-file\t1-9\tno\tAlpha"));
+        assert!(matrix.contains("Brotli\tyes\tyes\tyes\tsingle-file\t0-11\tno\tAlpha"));
+        assert!(matrix.contains("TAR\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha"));
+        assert!(matrix.contains("LZ4\tyes\tyes\tyes\tsingle-file\tfixed\tno\tAlpha"));
+        assert!(matrix.contains("RAR\tyes\tyes\tno\tnone\tnone\tyes\tBeta"));
+        assert!(matrix.contains("CAB\tyes\tyes\tno\tnone\tnone\tno\tBeta"));
+    }
+
+    #[test]
+    fn compression_level_validation_is_format_specific() {
+        assert_eq!(
+            resolve_compression_level(ArchiveFormat::Zip, None).unwrap(),
+            6
+        );
+        assert_eq!(
+            resolve_compression_level(ArchiveFormat::Zip, Some(9)).unwrap(),
+            9
+        );
+        assert!(resolve_compression_level(ArchiveFormat::Zip, Some(10)).is_err());
+        assert!(resolve_compression_level(ArchiveFormat::Zstandard, Some(22)).is_ok());
+        assert!(resolve_compression_level(ArchiveFormat::Bzip2, Some(0)).is_err());
+        assert!(resolve_compression_level(ArchiveFormat::Bzip2, Some(1)).is_ok());
+        assert!(resolve_compression_level(ArchiveFormat::Brotli, Some(11)).is_ok());
+        assert!(resolve_compression_level(ArchiveFormat::Brotli, Some(12)).is_err());
+        assert_eq!(
+            resolve_compression_level(ArchiveFormat::Tar, None).unwrap(),
+            6
+        );
+        assert!(resolve_compression_level(ArchiveFormat::Tar, Some(6)).is_err());
+        assert_eq!(
+            resolve_compression_level(ArchiveFormat::Lz4, None).unwrap(),
+            6
+        );
+        assert!(resolve_compression_level(ArchiveFormat::Lz4, Some(6)).is_err());
+    }
+
+    #[test]
+    fn password_stdin_is_opt_in() {
+        let mut input = Cursor::new(b"ignored\n");
+        assert_eq!(read_password_from(&mut input, false).unwrap(), None);
+        assert_eq!(input.position(), 0);
+    }
+
+    #[test]
+    fn password_stdin_removes_only_line_endings() {
+        let mut input = Cursor::new(b"  secret phrase  \r\n");
+        assert_eq!(
+            read_password_from(&mut input, true).unwrap().as_deref(),
+            Some("  secret phrase  ")
+        );
+    }
+
+    #[test]
+    fn password_stdin_rejects_missing_or_empty_input() {
+        let mut missing = Cursor::new(Vec::<u8>::new());
+        assert!(read_password_from(&mut missing, true).is_err());
+
+        let mut empty = Cursor::new(b"\n");
+        assert!(read_password_from(&mut empty, true).is_err());
+    }
 }

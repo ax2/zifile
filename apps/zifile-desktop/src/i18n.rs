@@ -1,3 +1,5 @@
+use zifile_core::{ArchiveTimestamp, ArchiveTimestampOffset, ArchiveTimestampPrecision};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Locale {
     En,
@@ -35,6 +37,7 @@ impl Locale {
             Text::Home => ("Home", "首页"),
             Text::Archive => ("Archive", "压缩文件"),
             Text::Create => ("Create", "创建"),
+            Text::About => ("About", "关于"),
             Text::Light => ("Light", "浅色"),
             Text::Dark => ("Dark", "深色"),
             Text::SwitchLanguage => ("中文", "English"),
@@ -62,11 +65,25 @@ impl Locale {
                 "Archive work stays on this device. ZiFile does not upload filenames, passwords or file contents.",
                 "所有操作都在本机完成。ZiFile 不上传文件名、密码或文件内容。",
             ),
+            Text::AboutHeading => ("About ZiFile", "关于 ZiFile"),
+            Text::AboutDescription => (
+                "A local-first, open-source archive manager built in Rust for Windows.",
+                "以 Rust 构建、面向 Windows 的本地优先开源压缩文件管理器。",
+            ),
+            Text::Version => ("Version", "版本"),
+            Text::License => ("License", "许可证"),
+            Text::SupportedFormatFamilies => ("Supported format families", "支持的格式系列"),
+            Text::ProjectWebsite => ("Project website", "项目网站"),
             Text::NoArchive => ("No archive open", "尚未打开压缩文件"),
             Text::NoArchiveDescription => (
                 "Open an archive to inspect its contents and extract files.",
                 "打开压缩文件以查看内容并解压所需文件。",
             ),
+            Text::EncryptedArchiveDescription => (
+                "This archive may encrypt its file list. Enter the password and try again.",
+                "此压缩文件可能加密了文件列表。请输入密码后重试。",
+            ),
+            Text::UnlockArchive => ("Unlock archive", "解锁压缩文件"),
             Text::OpenAnother => ("Open another", "打开其他文件"),
             Text::TestArchive => ("Test archive", "校验压缩文件"),
             Text::Selected => ("selected", "项已选择"),
@@ -76,6 +93,7 @@ impl Locale {
             Text::Name => ("Name", "名称"),
             Text::Original => ("Original", "原始大小"),
             Text::Packed => ("Packed", "压缩大小"),
+            Text::Modified => ("Modified", "修改时间"),
             Text::Flags => ("Flags", "标记"),
             Text::Locked => ("Locked", "已加密"),
             Text::Search => ("Search paths", "搜索路径"),
@@ -91,12 +109,25 @@ impl Locale {
                 "No sources yet. Add files or one or more folders.",
                 "尚未添加来源。请添加文件或一个或多个文件夹。",
             ),
+            Text::FilesAndFoldersSupported => (
+                "This format accepts files and folders.",
+                "此格式支持添加文件和文件夹。",
+            ),
+            Text::SingleFileRequired => (
+                "This stream format requires exactly one file. Use a TAR composition for folders or multiple items.",
+                "此流格式只能压缩一个文件。文件夹或多个项目请改用 TAR 组合格式。",
+            ),
+            Text::FormatCannotCreate => ("This format cannot be created.", "此格式不支持创建。"),
             Text::AddFiles => ("Add files", "添加文件"),
             Text::AddFolder => ("Add folder", "添加文件夹"),
             Text::Clear => ("Clear", "清空"),
             Text::Remove => ("Remove", "移除"),
             Text::Format => ("Format", "格式"),
             Text::CompressionLevel => ("Compression level", "压缩等级"),
+            Text::CompressionFixed => (
+                "Compression level · fixed for this format",
+                "压缩等级 · 此格式使用固定设置",
+            ),
             Text::PasswordOptional => ("Password · optional", "密码 · 可选"),
             Text::PasswordUnavailable => (
                 "Password · unavailable for this format",
@@ -123,12 +154,50 @@ impl Locale {
     }
 }
 
+pub fn format_archive_modified(locale: Locale, value: Option<&ArchiveTimestamp>) -> String {
+    let Some(value) = value else {
+        return "—".to_owned();
+    };
+    let mut formatted = format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        value.year, value.month, value.day, value.hour, value.minute, value.second
+    );
+    if value.precision == ArchiveTimestampPrecision::Subsecond && value.nanosecond != 0 {
+        let fraction = format!("{:09}", value.nanosecond);
+        formatted.push('.');
+        formatted.push_str(fraction.trim_end_matches('0'));
+    }
+    match value.offset {
+        ArchiveTimestampOffset::Utc => formatted.push_str(" UTC"),
+        ArchiveTimestampOffset::Unspecified => formatted.push_str(if locale == Locale::ZhCn {
+            " · 无时区"
+        } else {
+            " · no TZ"
+        }),
+    }
+    formatted
+}
+
+/// Maps stable Worker diagnostics to user-facing localized text while keeping
+/// backend-specific error details intact for all other failures.
+pub fn format_worker_error(locale: Locale, error: &str) -> String {
+    if error.eq_ignore_ascii_case("operation cancelled") {
+        return if locale == Locale::ZhCn {
+            "操作已取消".to_owned()
+        } else {
+            "Operation cancelled".to_owned()
+        };
+    }
+    error.to_owned()
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Text {
     ArchiveStudio,
     Home,
     Archive,
     Create,
+    About,
     Light,
     Dark,
     SwitchLanguage,
@@ -144,8 +213,16 @@ pub enum Text {
     StartCreating,
     Privacy,
     PrivacyDescription,
+    AboutHeading,
+    AboutDescription,
+    Version,
+    License,
+    SupportedFormatFamilies,
+    ProjectWebsite,
     NoArchive,
     NoArchiveDescription,
+    EncryptedArchiveDescription,
+    UnlockArchive,
     OpenAnother,
     TestArchive,
     Selected,
@@ -155,6 +232,7 @@ pub enum Text {
     Name,
     Original,
     Packed,
+    Modified,
     Flags,
     Locked,
     Search,
@@ -164,12 +242,16 @@ pub enum Text {
     CreateHeading,
     CreateHelp,
     NoSources,
+    FilesAndFoldersSupported,
+    SingleFileRequired,
+    FormatCannotCreate,
     AddFiles,
     AddFolder,
     Clear,
     Remove,
     Format,
     CompressionLevel,
+    CompressionFixed,
     PasswordOptional,
     PasswordUnavailable,
     NoEncryption,
@@ -195,7 +277,47 @@ mod tests {
     fn both_locales_cover_representative_navigation_and_security_text() {
         assert_eq!(Locale::En.text(Text::Home), "Home");
         assert_eq!(Locale::ZhCn.text(Text::Home), "首页");
+        assert_eq!(Locale::En.text(Text::About), "About");
+        assert_eq!(Locale::ZhCn.text(Text::AboutHeading), "关于 ZiFile");
+        assert_eq!(Locale::ZhCn.text(Text::License), "许可证");
         assert!(Locale::ZhCn.text(Text::PrivacyDescription).contains("本机"));
         assert_eq!(Locale::ZhCn.toggle(), Locale::En);
+    }
+
+    #[test]
+    fn archive_modified_time_exposes_timezone_semantics() {
+        let value = ArchiveTimestamp {
+            year: 2023,
+            month: 11,
+            day: 14,
+            hour: 22,
+            minute: 13,
+            second: 20,
+            nanosecond: 0,
+            offset: ArchiveTimestampOffset::Unspecified,
+            precision: ArchiveTimestampPrecision::TwoSeconds,
+        };
+        assert_eq!(
+            format_archive_modified(Locale::En, Some(&value)),
+            "2023-11-14 22:13:20 · no TZ"
+        );
+        assert!(format_archive_modified(Locale::ZhCn, Some(&value)).ends_with("无时区"));
+        assert_eq!(format_archive_modified(Locale::En, None), "—");
+    }
+
+    #[test]
+    fn worker_cancellation_error_is_localized_without_rewriting_backend_errors() {
+        assert_eq!(
+            format_worker_error(Locale::ZhCn, "operation cancelled"),
+            "操作已取消"
+        );
+        assert_eq!(
+            format_worker_error(Locale::En, "Operation Cancelled"),
+            "Operation cancelled"
+        );
+        assert_eq!(
+            format_worker_error(Locale::ZhCn, "archive checksum mismatch"),
+            "archive checksum mismatch"
+        );
     }
 }

@@ -1,16 +1,24 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
-use std::io::{self, BufReader, BufWriter, Read, Seek, Write};
+use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bzip2::read::BzDecoder;
 use bzip2::write::BzEncoder;
+use cab::Cabinet;
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use lz4_flex::frame::{FrameDecoder, FrameEncoder};
+use rars::{
+    Archive as RarArchive, ArchiveMemberDetail as RarMemberDetail,
+    ArchiveReadOptions as RarReadOptions, ArchiveReader as RarReader,
+};
 use serde::{Deserialize, Serialize};
 use sevenz_rust2::{ArchiveReader as SevenZReader, ArchiveWriter as SevenZWriter, Password};
 use tempfile::NamedTempFile;
@@ -31,6 +39,36 @@ pub struct ArchiveEntryInfo {
     pub compressed_size: u64,
     pub is_directory: bool,
     pub encrypted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modified: Option<ArchiveTimestamp>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArchiveTimestampOffset {
+    Utc,
+    Unspecified,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArchiveTimestampPrecision {
+    TwoSeconds,
+    Second,
+    Subsecond,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ArchiveTimestamp {
+    pub year: u16,
+    pub month: u8,
+    pub day: u8,
+    pub hour: u8,
+    pub minute: u8,
+    pub second: u8,
+    pub nanosecond: u32,
+    pub offset: ArchiveTimestampOffset,
+    pub precision: ArchiveTimestampPrecision,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,6 +88,22 @@ pub enum ConflictPolicy {
     Skip,
     Rename,
     Error,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ListOptions {
+    pub limits: SafetyLimits,
+    pub password: Option<String>,
+    pub cancellation: CancellationToken,
+    pub progress: OperationProgress,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TestOptions {
+    pub limits: SafetyLimits,
+    pub password: Option<String>,
+    pub cancellation: CancellationToken,
+    pub progress: OperationProgress,
 }
 
 #[derive(Debug, Clone)]
@@ -198,24 +252,61 @@ impl CancellationToken {
 }
 
 pub fn list_archive(path: impl AsRef<Path>, password: Option<&str>) -> ZiFileResult<ArchiveInfo> {
+    list_archive_with_options(
+        path,
+        &ListOptions {
+            password: password.map(str::to_owned),
+            ..ListOptions::default()
+        },
+    )
+}
+
+pub fn list_archive_with_limits(
+    path: impl AsRef<Path>,
+    password: Option<&str>,
+    limits: SafetyLimits,
+) -> ZiFileResult<ArchiveInfo> {
+    list_archive_with_options(
+        path,
+        &ListOptions {
+            limits,
+            password: password.map(str::to_owned),
+            ..ListOptions::default()
+        },
+    )
+}
+
+pub fn list_archive_with_options(
+    path: impl AsRef<Path>,
+    options: &ListOptions,
+) -> ZiFileResult<ArchiveInfo> {
+    options.cancellation.check()?;
     let path = path.as_ref();
     let format = detect_format(path)?;
     let entries = match format {
-        ArchiveFormat::Zip => list_zip(path, password)?,
-        ArchiveFormat::SevenZip => list_seven_zip(path, password)?,
+        ArchiveFormat::Zip => list_zip(path, options)?,
+        ArchiveFormat::SevenZip => {
+            guard_archive_backend(format, "listing", || list_seven_zip(path, options))?
+        }
         ArchiveFormat::Tar
         | ArchiveFormat::TarGzip
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
-        | ArchiveFormat::TarBzip2 => list_tar(path, format)?,
+        | ArchiveFormat::TarBzip2 => list_tar(path, format, options)?,
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
         | ArchiveFormat::Bzip2
         | ArchiveFormat::Lz4
-        | ArchiveFormat::Brotli => list_stream(path, format)?,
-        ArchiveFormat::Rar => return Err(ZiFileError::UnsupportedOperation(format)),
+        | ArchiveFormat::Brotli => list_stream(path, format, options)?,
+        ArchiveFormat::Rar => guard_archive_backend(format, "listing", || list_rar(path, options))?,
+        ArchiveFormat::Cab => guard_archive_backend(format, "listing", || list_cab(path, options))?,
     };
+    options.cancellation.check()?;
+    let scanned_bytes = options.progress.snapshot().processed_bytes;
+    options
+        .progress
+        .set_totals(entries.len() as u64, scanned_bytes);
 
     let total_size = entries.iter().try_fold(0_u64, |total, entry| {
         total
@@ -230,23 +321,67 @@ pub fn list_archive(path: impl AsRef<Path>, password: Option<&str>) -> ZiFileRes
         total_size,
         compressed_size,
     };
-    validate_declared_limits(&info, SafetyLimits::default())?;
+    validate_declared_limits(&info, options.limits)?;
     Ok(info)
 }
 
 pub fn test_archive(path: impl AsRef<Path>, password: Option<&str>) -> ZiFileResult<ArchiveInfo> {
+    test_archive_with_options(
+        path,
+        &TestOptions {
+            password: password.map(str::to_owned),
+            ..TestOptions::default()
+        },
+    )
+}
+
+pub fn test_archive_with_limits(
+    path: impl AsRef<Path>,
+    password: Option<&str>,
+    limits: SafetyLimits,
+) -> ZiFileResult<ArchiveInfo> {
+    test_archive_with_options(
+        path,
+        &TestOptions {
+            limits,
+            password: password.map(str::to_owned),
+            ..TestOptions::default()
+        },
+    )
+}
+
+pub fn test_archive_with_options(
+    path: impl AsRef<Path>,
+    options: &TestOptions,
+) -> ZiFileResult<ArchiveInfo> {
+    options.cancellation.check()?;
     let path = path.as_ref();
-    let info = list_archive(path, password)?;
-    let limits = SafetyLimits::default();
-    validate_declared_limits(&info, limits)?;
+    let info = list_archive_with_options(
+        path,
+        &ListOptions {
+            limits: options.limits,
+            password: options.password.clone(),
+            cancellation: options.cancellation.clone(),
+            ..ListOptions::default()
+        },
+    )?;
+    validate_declared_limits(&info, options.limits)?;
+    let total_entries = info
+        .entries
+        .iter()
+        .filter(|entry| !entry.is_directory)
+        .count() as u64;
+    options.progress.set_totals(total_entries, info.total_size);
     match info.format {
-        ArchiveFormat::Zip => test_zip(path, password, limits)?,
-        ArchiveFormat::SevenZip => test_seven_zip(path, password, limits)?,
+        ArchiveFormat::Zip => test_zip(path, options)?,
+        ArchiveFormat::SevenZip => {
+            guard_archive_backend(info.format, "testing", || test_seven_zip(path, options))?
+        }
         ArchiveFormat::Tar
         | ArchiveFormat::TarGzip
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
-        | ArchiveFormat::TarBzip2 => test_tar(path, info.format, limits)?,
+        | ArchiveFormat::TarBzip2 => test_tar(path, info.format, options)?,
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
@@ -259,12 +394,18 @@ pub fn test_archive(path: impl AsRef<Path>, password: Option<&str>) -> ZiFileRes
                 &mut reader,
                 &mut io::sink(),
                 &mut total,
-                limits.max_expanded_bytes,
-                None,
-                None,
+                options.limits.max_expanded_bytes,
+                Some(&options.cancellation),
+                Some(&options.progress),
             )?;
+            options.progress.advance_entry();
         }
-        ArchiveFormat::Rar => return Err(ZiFileError::UnsupportedOperation(info.format)),
+        ArchiveFormat::Rar => {
+            guard_archive_backend(info.format, "testing", || test_rar(path, options))?
+        }
+        ArchiveFormat::Cab => {
+            guard_archive_backend(info.format, "testing", || test_cab(path, options))?
+        }
     }
     Ok(info)
 }
@@ -274,12 +415,21 @@ pub fn extract_archive(
     destination: impl AsRef<Path>,
     options: &ExtractOptions,
 ) -> ZiFileResult<OperationSummary> {
+    options.cancellation.check()?;
     if options.conflict == ConflictPolicy::Ask {
         return Err(ZiFileError::ConflictPolicyRequired);
     }
     let archive = archive.as_ref();
     let destination = destination.as_ref();
-    let info = list_archive(archive, options.password.as_deref())?;
+    let info = list_archive_with_options(
+        archive,
+        &ListOptions {
+            limits: options.limits,
+            password: options.password.clone(),
+            cancellation: options.cancellation.clone(),
+            ..ListOptions::default()
+        },
+    )?;
     validate_declared_limits(&info, options.limits)?;
     let selected = info.entries.iter().filter(|entry| {
         !entry.is_directory
@@ -296,7 +446,9 @@ pub fn extract_archive(
 
     match info.format {
         ArchiveFormat::Zip => extract_zip(archive, destination, options),
-        ArchiveFormat::SevenZip => extract_seven_zip(archive, destination, options),
+        ArchiveFormat::SevenZip => guard_archive_backend(info.format, "extracting", || {
+            extract_seven_zip(archive, destination, options)
+        }),
         ArchiveFormat::Tar
         | ArchiveFormat::TarGzip
         | ArchiveFormat::TarZstd
@@ -308,7 +460,12 @@ pub fn extract_archive(
         | ArchiveFormat::Bzip2
         | ArchiveFormat::Lz4
         | ArchiveFormat::Brotli => extract_stream(archive, destination, info.format, options),
-        ArchiveFormat::Rar => Err(ZiFileError::UnsupportedOperation(info.format)),
+        ArchiveFormat::Rar => guard_archive_backend(info.format, "extracting", || {
+            extract_rar(archive, destination, options, &info)
+        }),
+        ArchiveFormat::Cab => guard_archive_backend(info.format, "extracting", || {
+            extract_cab(archive, destination, options)
+        }),
     }
 }
 
@@ -344,21 +501,593 @@ pub fn create_archive(
         | ArchiveFormat::Bzip2
         | ArchiveFormat::Lz4
         | ArchiveFormat::Brotli => create_stream(sources, destination, format, options),
-        ArchiveFormat::Rar => Err(ZiFileError::UnsupportedOperation(format)),
+        ArchiveFormat::Rar | ArchiveFormat::Cab => Err(ZiFileError::UnsupportedOperation(format)),
     }
 }
 
-fn list_zip(path: &Path, _password: Option<&str>) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
-    let mut archive = ZipArchive::new(BufReader::new(File::open(path)?))?;
-    let limits = SafetyLimits::default();
-    if archive.len() as u64 > limits.max_entries {
+fn open_cab(path: &Path) -> ZiFileResult<Cabinet<BufReader<File>>> {
+    const CABINET_CHAIN_FLAGS: u16 = 0x0003;
+    const CABINET_FLAGS_OFFSET: usize = 30;
+
+    let mut file = File::open(path)?;
+    let mut header = [0_u8; CABINET_FLAGS_OFFSET + 2];
+    file.read_exact(&mut header)?;
+    let flags = u16::from_le_bytes([
+        header[CABINET_FLAGS_OFFSET],
+        header[CABINET_FLAGS_OFFSET + 1],
+    ]);
+    if flags & CABINET_CHAIN_FLAGS != 0 {
+        return Err(ZiFileError::InvalidInput(
+            "multi-cabinet sets are not supported".to_owned(),
+        ));
+    }
+    file.seek(SeekFrom::Start(0))?;
+    let cabinet = Cabinet::new(BufReader::new(file)).map_err(ZiFileError::Io)?;
+    if cabinet.cabinet_set_index() != 0 {
+        return Err(ZiFileError::InvalidInput(
+            "multi-cabinet sets are not supported".to_owned(),
+        ));
+    }
+    Ok(cabinet)
+}
+
+fn cab_file_names(cabinet: &Cabinet<BufReader<File>>) -> Vec<String> {
+    cabinet
+        .folder_entries()
+        .flat_map(|folder| folder.file_entries().map(|entry| entry.name().to_owned()))
+        .collect()
+}
+
+fn list_cab(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
+    let cabinet = open_cab(path)?;
+    let mut entries = Vec::new();
+    for folder in cabinet.folder_entries() {
+        for entry in folder.file_entries() {
+            options.cancellation.check()?;
+            if entries.len() as u64 >= options.limits.max_entries {
+                return Err(ZiFileError::LimitExceeded(format!(
+                    "entry count exceeds {}",
+                    options.limits.max_entries
+                )));
+            }
+            let safe = safe_relative_path(entry.name(), options.limits.max_path_depth)?;
+            entries.push(ArchiveEntryInfo {
+                path: safe,
+                size: u64::from(entry.uncompressed_size()),
+                compressed_size: 0,
+                is_directory: false,
+                encrypted: false,
+                modified: entry.datetime().map(|value| {
+                    timestamp_from_primitive(
+                        value,
+                        ArchiveTimestampOffset::Unspecified,
+                        ArchiveTimestampPrecision::TwoSeconds,
+                    )
+                }),
+            });
+            options.progress.advance_entry();
+        }
+    }
+    validate_entry_names(&entries, options.limits)?;
+    Ok(entries)
+}
+
+fn test_cab(path: &Path, options: &TestOptions) -> ZiFileResult<()> {
+    let mut cabinet = open_cab(path)?;
+    let names = cab_file_names(&cabinet);
+    let mut total = 0_u64;
+    for name in names {
+        options.cancellation.check()?;
+        let mut reader = cabinet.read_file(&name).map_err(ZiFileError::Io)?;
+        copy_limited(
+            &mut reader,
+            &mut io::sink(),
+            &mut total,
+            options.limits.max_expanded_bytes,
+            Some(&options.cancellation),
+            Some(&options.progress),
+        )?;
+        options.progress.advance_entry();
+    }
+    Ok(())
+}
+
+fn extract_cab(
+    path: &Path,
+    destination: &Path,
+    options: &ExtractOptions,
+) -> ZiFileResult<OperationSummary> {
+    let mut cabinet = open_cab(path)?;
+    let names = cab_file_names(&cabinet);
+    let mut summary = OperationSummary::default();
+    let mut claimed = HashSet::new();
+    for name in names {
+        options.cancellation.check()?;
+        let modified = cabinet
+            .get_file_entry(&name)
+            .and_then(|entry| entry.datetime())
+            .map(primitive_datetime_to_system_time);
+        let relative = safe_relative_path(&name, options.limits.max_path_depth)?;
+        if !is_selected(&relative, options) {
+            continue;
+        }
+        let Some(output) = prepare_output(
+            destination,
+            &relative,
+            false,
+            options.conflict,
+            &mut claimed,
+        )?
+        else {
+            summary.skipped += 1;
+            continue;
+        };
+        let mut reader = cabinet.read_file(&name).map_err(ZiFileError::Io)?;
+        write_atomic(&output, |writer| {
+            copy_limited(
+                &mut reader,
+                writer,
+                &mut summary.bytes,
+                options.limits.max_expanded_bytes,
+                Some(&options.cancellation),
+                Some(&options.progress),
+            )?;
+            Ok(())
+        })?;
+        set_modified_time_if_present(&output, modified)?;
+        summary.files += 1;
+        options.progress.advance_entry();
+    }
+    Ok(summary)
+}
+
+const RAR_BUFFERED_DECODE_LIMIT: u64 = 256 * 1024 * 1024;
+const WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT: u64 = 0x400;
+
+fn rar_read_options<'a>(password: Option<&'a str>, limits: SafetyLimits) -> RarReadOptions<'a> {
+    RarReadOptions::with_optional_password(password.map(str::as_bytes))
+        .with_rar50_buffered_decode_limit(limits.max_expanded_bytes.min(RAR_BUFFERED_DECODE_LIMIT))
+}
+
+fn read_rar(path: &Path, password: Option<&str>, limits: SafetyLimits) -> ZiFileResult<RarArchive> {
+    RarReader::read_path_with_options(path, rar_read_options(password, limits))
+        .map_err(map_rar_error)
+}
+
+fn map_rar_error(error: rars::Error) -> ZiFileError {
+    if rar_error_needs_password(&error) {
+        ZiFileError::PasswordRequired
+    } else if rar_error_is_limit(&error) {
+        ZiFileError::LimitExceeded(format!("RAR decoder resource limit: {error}"))
+    } else {
+        ZiFileError::Backend(format!("RAR backend: {error}"))
+    }
+}
+
+fn rar_error_needs_password(error: &rars::Error) -> bool {
+    match error {
+        rars::Error::NeedPassword => true,
+        rars::Error::AtArchiveOffset { source, .. }
+        | rars::Error::AtEntry { source, .. }
+        | rars::Error::InVolume { source, .. } => rar_error_needs_password(source),
+        _ => false,
+    }
+}
+
+fn rar_error_is_limit(error: &rars::Error) -> bool {
+    match error {
+        rars::Error::Rar50BufferedDecodeLimitExceeded { .. }
+        | rars::Error::MemoryLimitExceeded { .. } => true,
+        rars::Error::AtArchiveOffset { source, .. }
+        | rars::Error::AtEntry { source, .. }
+        | rars::Error::InVolume { source, .. } => rar_error_is_limit(source),
+        _ => false,
+    }
+}
+
+fn list_rar(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
+    let archive = read_rar(path, options.password.as_deref(), options.limits)?;
+    options.cancellation.check()?;
+    reject_rar_special_entries(&archive)?;
+    let mut entries = Vec::new();
+    for member in archive.members() {
+        options.cancellation.check()?;
+        if entries.len() as u64 >= options.limits.max_entries {
+            return Err(ZiFileError::LimitExceeded(format!(
+                "entry count exceeds {}",
+                options.limits.max_entries
+            )));
+        }
+        reject_rar_member_link(&member)?;
+        let name = member.meta.name_lossy();
+        let safe = safe_relative_path(&name, options.limits.max_path_depth)?;
+        entries.push(ArchiveEntryInfo {
+            path: safe,
+            size: member.meta.unpacked_size,
+            compressed_size: member.meta.packed_size,
+            is_directory: member.meta.is_directory,
+            encrypted: member.meta.is_encrypted,
+            modified: member.meta.file_time.and_then(rar_archive_timestamp),
+        });
+        options.progress.advance_entry();
+    }
+    validate_entry_names(&entries, options.limits)?;
+    Ok(entries)
+}
+
+fn reject_rar_special_entries(archive: &RarArchive) -> ZiFileResult<()> {
+    if let RarArchive::Rar50Plus(archive) = archive {
+        for block in &archive.blocks {
+            if let rars::rar50::Block::File(file) = block
+                && file.redirection.is_some()
+            {
+                return Err(ZiFileError::LinkEntry(
+                    String::from_utf8_lossy(&file.name).into_owned(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn reject_rar_member_link(member: &rars::ArchiveMember) -> ZiFileResult<()> {
+    let host = member.meta.host_os;
+    let attributes = member.meta.file_attr;
+    let (unix_link, windows_reparse) = match &member.detail {
+        RarMemberDetail::Rar13 { .. } => (
+            false,
+            attributes & WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT != 0,
+        ),
+        RarMemberDetail::Rar15To40 { .. } => (
+            matches!(host, Some(3 | 5)) && attributes & 0o170000 == 0o120000,
+            matches!(host, Some(0 | 1 | 2 | 4))
+                && attributes & WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT != 0,
+        ),
+        RarMemberDetail::Rar50Plus { .. } => (
+            host == Some(1) && attributes & 0o170000 == 0o120000,
+            host == Some(0) && attributes & WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT != 0,
+        ),
+        _ => (false, false),
+    };
+    if unix_link || windows_reparse {
+        return Err(ZiFileError::LinkEntry(member.meta.name_lossy()));
+    }
+    Ok(())
+}
+
+fn test_rar(path: &Path, options: &TestOptions) -> ZiFileResult<()> {
+    let archive = read_rar(path, options.password.as_deref(), options.limits)?;
+    reject_rar_special_entries(&archive)?;
+    for member in archive.members() {
+        reject_rar_member_link(&member)?;
+    }
+    let total = Arc::new(AtomicU64::new(0));
+    let limit_exceeded = Arc::new(AtomicBool::new(false));
+    let result = archive.extract_to_with_options(
+        rar_read_options(options.password.as_deref(), options.limits),
+        |_| {
+            Ok(Box::new(RarGuardedWriter::discard(
+                Arc::clone(&total),
+                options.limits.max_expanded_bytes,
+                Arc::clone(&limit_exceeded),
+                Some(options.cancellation.clone()),
+                Some(options.progress.clone()),
+            )) as Box<dyn Write>)
+        },
+    );
+    options.cancellation.check()?;
+    if limit_exceeded.load(Ordering::Acquire) {
         return Err(ZiFileError::LimitExceeded(format!(
-            "entry count exceeds {}",
-            limits.max_entries
+            "expanded data exceeds {} bytes",
+            options.limits.max_expanded_bytes
         )));
     }
+    result.map_err(map_rar_error)?;
+    for member in archive.members().filter(|member| !member.meta.is_directory) {
+        let _ = member;
+        options.progress.advance_entry();
+    }
+    Ok(())
+}
+
+struct PendingRarFile {
+    temporary: Arc<Mutex<Option<NamedTempFile>>>,
+    destination: PathBuf,
+    modified: Option<SystemTime>,
+}
+
+struct RarGuardedWriter {
+    temporary: Option<Arc<Mutex<Option<NamedTempFile>>>>,
+    decoded_total: Arc<AtomicU64>,
+    selected_total: Option<Arc<AtomicU64>>,
+    maximum: u64,
+    limit_exceeded: Arc<AtomicBool>,
+    cancellation: Option<CancellationToken>,
+    progress: Option<OperationProgress>,
+}
+
+impl RarGuardedWriter {
+    fn discard(
+        decoded_total: Arc<AtomicU64>,
+        maximum: u64,
+        limit_exceeded: Arc<AtomicBool>,
+        cancellation: Option<CancellationToken>,
+        progress: Option<OperationProgress>,
+    ) -> Self {
+        Self {
+            temporary: None,
+            decoded_total,
+            selected_total: None,
+            maximum,
+            limit_exceeded,
+            cancellation,
+            progress,
+        }
+    }
+
+    fn file(
+        temporary: Arc<Mutex<Option<NamedTempFile>>>,
+        decoded_total: Arc<AtomicU64>,
+        selected_total: Arc<AtomicU64>,
+        maximum: u64,
+        limit_exceeded: Arc<AtomicBool>,
+        cancellation: CancellationToken,
+        progress: OperationProgress,
+    ) -> Self {
+        Self {
+            temporary: Some(temporary),
+            decoded_total,
+            selected_total: Some(selected_total),
+            maximum,
+            limit_exceeded,
+            cancellation: Some(cancellation),
+            progress: Some(progress),
+        }
+    }
+
+    fn should_write(&self, length: usize) -> bool {
+        if self
+            .cancellation
+            .as_ref()
+            .is_some_and(CancellationToken::is_cancelled)
+        {
+            return false;
+        }
+        let length = length as u64;
+        let current = self.decoded_total.load(Ordering::Acquire);
+        if current
+            .checked_add(length)
+            .is_none_or(|next| next > self.maximum)
+        {
+            self.limit_exceeded.store(true, Ordering::Release);
+            return false;
+        }
+        true
+    }
+}
+
+impl Write for RarGuardedWriter {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        // rars 0.9.3 can leave its solid-decoder worker waiting when a
+        // destination writer returns an error. Consume but do not persist data
+        // after cancellation/limit detection, then surface the recorded ZiFile
+        // error before any temporary file is committed.
+        if !self.should_write(buffer.len()) {
+            return Ok(buffer.len());
+        }
+        let written = if let Some(temporary) = &self.temporary {
+            let mut guard = temporary
+                .lock()
+                .map_err(|_| io::Error::other("RAR temporary writer lock poisoned"))?;
+            guard
+                .as_mut()
+                .ok_or_else(|| io::Error::other("RAR temporary writer already committed"))?
+                .write(buffer)?
+        } else {
+            buffer.len()
+        };
+        let written = written as u64;
+        self.decoded_total.fetch_add(written, Ordering::AcqRel);
+        if let Some(selected_total) = &self.selected_total {
+            selected_total.fetch_add(written, Ordering::AcqRel);
+        }
+        if let Some(progress) = &self.progress {
+            progress.advance_bytes(written);
+        }
+        Ok(written as usize)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if let Some(temporary) = &self.temporary {
+            let mut guard = temporary
+                .lock()
+                .map_err(|_| io::Error::other("RAR temporary writer lock poisoned"))?;
+            guard
+                .as_mut()
+                .ok_or_else(|| io::Error::other("RAR temporary writer already committed"))?
+                .flush()
+        } else {
+            Ok(())
+        }
+    }
+}
+
+fn extract_rar(
+    path: &Path,
+    destination: &Path,
+    options: &ExtractOptions,
+    info: &ArchiveInfo,
+) -> ZiFileResult<OperationSummary> {
+    let archive = read_rar(path, options.password.as_deref(), options.limits)?;
+    reject_rar_special_entries(&archive)?;
+    for member in archive.members() {
+        reject_rar_member_link(&member)?;
+    }
+
+    let mut claimed = HashSet::new();
+    let mut outputs = HashMap::<String, Option<PathBuf>>::new();
+    let mut directories = Vec::new();
+    let mut summary = OperationSummary::default();
+    for entry in &info.entries {
+        if !is_selected(&entry.path, options) {
+            continue;
+        }
+        let output = prepare_output(
+            destination,
+            &entry.path,
+            entry.is_directory,
+            options.conflict,
+            &mut claimed,
+        )?;
+        if output.is_none() {
+            summary.skipped += 1;
+        } else if entry.is_directory
+            && let Some(directory) = output.as_ref()
+        {
+            directories.push((
+                archive_name(&entry.path).to_ascii_lowercase(),
+                directory.clone(),
+            ));
+        }
+        outputs.insert(archive_name(&entry.path).to_ascii_lowercase(), output);
+    }
+
+    let decoded_total = Arc::new(AtomicU64::new(0));
+    let selected_total = Arc::new(AtomicU64::new(0));
+    let limit_exceeded = Arc::new(AtomicBool::new(false));
+    let mut pending = Vec::<PendingRarFile>::new();
+    let mut directory_times = HashMap::<String, SystemTime>::new();
+    let mut setup_error = None;
+    let result = archive.extract_to_with_options(
+        rar_read_options(options.password.as_deref(), options.limits),
+        |meta| {
+            let relative = match safe_relative_path(
+                &String::from_utf8_lossy(&meta.name),
+                options.limits.max_path_depth,
+            ) {
+                Ok(relative) => relative,
+                Err(error) => {
+                    setup_error = Some(error);
+                    return Err(rars::Error::from(io::Error::other(
+                        "RAR output path failed safety validation",
+                    )));
+                }
+            };
+            let key = archive_name(&relative).to_ascii_lowercase();
+            let Some(Some(output)) = outputs.get(&key) else {
+                return Ok(Box::new(RarGuardedWriter::discard(
+                    Arc::clone(&decoded_total),
+                    options.limits.max_expanded_bytes,
+                    Arc::clone(&limit_exceeded),
+                    Some(options.cancellation.clone()),
+                    None,
+                )) as Box<dyn Write>);
+            };
+            if meta.is_directory {
+                if let Some(modified) = rar_modified_time(meta.file_time, meta.mtime_refinement) {
+                    directory_times.insert(key, modified);
+                }
+                return Ok(Box::new(io::sink()) as Box<dyn Write>);
+            }
+
+            let parent = output.parent().unwrap_or_else(|| Path::new("."));
+            let temporary =
+                match fs::create_dir_all(parent).and_then(|()| NamedTempFile::new_in(parent)) {
+                    Ok(temporary) => Arc::new(Mutex::new(Some(temporary))),
+                    Err(error) => {
+                        setup_error = Some(ZiFileError::Io(error));
+                        return Err(rars::Error::from(io::Error::other(
+                            "RAR temporary output creation failed",
+                        )));
+                    }
+                };
+            pending.push(PendingRarFile {
+                temporary: Arc::clone(&temporary),
+                destination: output.clone(),
+                modified: rar_modified_time(meta.file_time, meta.mtime_refinement),
+            });
+            Ok(Box::new(RarGuardedWriter::file(
+                temporary,
+                Arc::clone(&decoded_total),
+                Arc::clone(&selected_total),
+                options.limits.max_expanded_bytes,
+                Arc::clone(&limit_exceeded),
+                options.cancellation.clone(),
+                options.progress.clone(),
+            )) as Box<dyn Write>)
+        },
+    );
+
+    if let Some(error) = setup_error {
+        return Err(error);
+    }
+    if options.cancellation.is_cancelled() {
+        return Err(ZiFileError::Cancelled);
+    }
+    if limit_exceeded.load(Ordering::Acquire) {
+        return Err(ZiFileError::LimitExceeded(format!(
+            "expanded data exceeds {} bytes",
+            options.limits.max_expanded_bytes
+        )));
+    }
+    result.map_err(map_rar_error)?;
+
+    for (_, directory) in &directories {
+        fs::create_dir_all(directory)?;
+    }
+    summary.directories = directories.len() as u64;
+    summary.files = pending.len() as u64;
+    summary.bytes = selected_total.load(Ordering::Acquire);
+    for pending_file in pending {
+        let destination = pending_file.destination.clone();
+        let modified = pending_file.modified;
+        persist_rar_output(pending_file)?;
+        set_modified_time_if_present(&destination, modified)?;
+        options.progress.advance_entry();
+    }
+    let directory_times = directories
+        .into_iter()
+        .filter_map(|(key, path)| directory_times.remove(&key).map(|time| (path, time)))
+        .collect();
+    restore_directory_times(directory_times)?;
+    Ok(summary)
+}
+
+fn persist_rar_output(pending: PendingRarFile) -> ZiFileResult<()> {
+    let mutex = Arc::try_unwrap(pending.temporary)
+        .map_err(|_| ZiFileError::Backend("RAR output writer remained active".to_owned()))?;
+    let mut temporary = mutex
+        .into_inner()
+        .map_err(|_| ZiFileError::Backend("RAR output writer lock poisoned".to_owned()))?
+        .ok_or_else(|| ZiFileError::Backend("RAR output was already committed".to_owned()))?;
+    temporary.as_file_mut().sync_all()?;
+    if pending.destination.exists() {
+        if pending.destination.is_dir() {
+            return Err(ZiFileError::DestinationExists(pending.destination));
+        }
+        fs::remove_file(&pending.destination)?;
+    }
+    temporary
+        .persist(&pending.destination)
+        .map_err(|error| ZiFileError::Io(error.error))?;
+    Ok(())
+}
+
+fn list_zip(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
+    let mut archive = ZipArchive::new(BufReader::new(File::open(path)?))?;
+    if archive.len() as u64 > options.limits.max_entries {
+        return Err(ZiFileError::LimitExceeded(format!(
+            "entry count exceeds {}",
+            options.limits.max_entries
+        )));
+    }
+    options.progress.set_totals(archive.len() as u64, 0);
     let mut entries = Vec::with_capacity(archive.len());
     for index in 0..archive.len() {
+        options.cancellation.check()?;
         let entry = archive.by_index_raw(index)?;
         let safe = entry
             .enclosed_name()
@@ -370,27 +1099,31 @@ fn list_zip(path: &Path, _password: Option<&str>) -> ZiFileResult<Vec<ArchiveEnt
             compressed_size: entry.compressed_size(),
             is_directory: entry.is_dir(),
             encrypted: entry.encrypted(),
+            modified: entry.last_modified().map(timestamp_from_zip_datetime),
         });
+        options.progress.advance_entry();
     }
-    validate_entry_names(&entries, SafetyLimits::default())?;
+    validate_entry_names(&entries, options.limits)?;
     Ok(entries)
 }
 
-fn test_zip(path: &Path, password: Option<&str>, limits: SafetyLimits) -> ZiFileResult<()> {
+fn test_zip(path: &Path, options: &TestOptions) -> ZiFileResult<()> {
     let mut archive = ZipArchive::new(BufReader::new(File::open(path)?))?;
     let mut total = 0;
     for index in 0..archive.len() {
-        let mut entry = open_zip_entry(&mut archive, index, password)?;
+        options.cancellation.check()?;
+        let mut entry = open_zip_entry(&mut archive, index, options.password.as_deref())?;
         reject_zip_link(entry.unix_mode(), entry.name())?;
         if !entry.is_dir() {
             copy_limited(
                 &mut entry,
                 &mut io::sink(),
                 &mut total,
-                limits.max_expanded_bytes,
-                None,
-                None,
+                options.limits.max_expanded_bytes,
+                Some(&options.cancellation),
+                Some(&options.progress),
             )?;
+            options.progress.advance_entry();
         }
     }
     Ok(())
@@ -404,9 +1137,11 @@ fn extract_zip(
     let mut archive = ZipArchive::new(BufReader::new(File::open(path)?))?;
     let mut summary = OperationSummary::default();
     let mut claimed = HashSet::new();
+    let mut directory_times = Vec::new();
     for index in 0..archive.len() {
         options.cancellation.check()?;
         let mut entry = open_zip_entry(&mut archive, index, options.password.as_deref())?;
+        let modified = entry.last_modified().and_then(zip_datetime_to_system_time);
         reject_zip_link(entry.unix_mode(), entry.name())?;
         let relative = safe_relative_path(entry.name(), options.limits.max_path_depth)?;
         if !is_selected(&relative, options) {
@@ -425,6 +1160,9 @@ fn extract_zip(
         };
         if entry.is_dir() {
             fs::create_dir_all(&output)?;
+            if let Some(modified) = modified {
+                directory_times.push((output.clone(), modified));
+            }
             summary.directories += 1;
         } else {
             write_atomic(&output, |writer| {
@@ -438,10 +1176,12 @@ fn extract_zip(
                 )?;
                 Ok(())
             })?;
+            set_modified_time_if_present(&output, modified)?;
             summary.files += 1;
             options.progress.advance_entry();
         }
     }
+    restore_directory_times(directory_times)?;
     Ok(summary)
 }
 
@@ -483,6 +1223,10 @@ fn create_zip(
             .compression_method(CompressionMethod::Deflated)
             .compression_level(Some(i64::from(options.compression_level.min(9))))
             .large_file(source.size >= u64::from(u32::MAX));
+        let base = source
+            .modified
+            .and_then(system_time_to_zip_datetime)
+            .map_or(base, |modified| base.last_modified_time(modified));
         if source.is_directory {
             writer.add_directory(format!("{name}/"), base)?;
             summary.directories += 1;
@@ -512,15 +1256,20 @@ fn create_zip(
     Ok(summary)
 }
 
-fn list_tar(path: &Path, format: ArchiveFormat) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+fn list_tar(
+    path: &Path,
+    format: ArchiveFormat,
+    options: &ListOptions,
+) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
     let mut archive = tar::Archive::new(open_tar_reader(path, format)?);
-    let limits = SafetyLimits::default();
     let mut result = Vec::new();
     for entry in archive.entries()? {
-        if result.len() as u64 >= limits.max_entries {
+        options.cancellation.check()?;
+        if result.len() as u64 >= options.limits.max_entries {
             return Err(ZiFileError::LimitExceeded(format!(
                 "entry count exceeds {}",
-                limits.max_entries
+                options.limits.max_entries
             )));
         }
         let entry = entry?;
@@ -531,26 +1280,30 @@ fn list_tar(path: &Path, format: ArchiveFormat) -> ZiFileResult<Vec<ArchiveEntry
             ));
         }
         let path = entry.path()?.into_owned();
-        let safe = safe_relative_path(
-            &path.to_string_lossy(),
-            SafetyLimits::default().max_path_depth,
-        )?;
+        let safe = safe_relative_path(&path.to_string_lossy(), options.limits.max_path_depth)?;
         result.push(ArchiveEntryInfo {
             path: safe,
             size: entry.size(),
             compressed_size: 0,
             is_directory: entry_type.is_dir(),
             encrypted: false,
+            modified: entry
+                .header()
+                .mtime()
+                .ok()
+                .and_then(timestamp_from_unix_seconds),
         });
+        options.progress.advance_entry();
     }
-    validate_entry_names(&result, SafetyLimits::default())?;
+    validate_entry_names(&result, options.limits)?;
     Ok(result)
 }
 
-fn test_tar(path: &Path, format: ArchiveFormat, limits: SafetyLimits) -> ZiFileResult<()> {
+fn test_tar(path: &Path, format: ArchiveFormat, options: &TestOptions) -> ZiFileResult<()> {
     let mut archive = tar::Archive::new(open_tar_reader(path, format)?);
     let mut total = 0;
     for entry in archive.entries()? {
+        options.cancellation.check()?;
         let mut entry = entry?;
         let entry_type = entry.header().entry_type();
         if entry_type.is_symlink() || entry_type.is_hard_link() {
@@ -563,10 +1316,11 @@ fn test_tar(path: &Path, format: ArchiveFormat, limits: SafetyLimits) -> ZiFileR
                 &mut entry,
                 &mut io::sink(),
                 &mut total,
-                limits.max_expanded_bytes,
-                None,
-                None,
+                options.limits.max_expanded_bytes,
+                Some(&options.cancellation),
+                Some(&options.progress),
             )?;
+            options.progress.advance_entry();
         }
     }
     Ok(())
@@ -581,10 +1335,16 @@ fn extract_tar(
     let mut archive = tar::Archive::new(open_tar_reader(path, format)?);
     let mut summary = OperationSummary::default();
     let mut claimed = HashSet::new();
+    let mut directory_times = Vec::new();
     for entry in archive.entries()? {
         options.cancellation.check()?;
         let mut entry = entry?;
         let entry_type = entry.header().entry_type();
+        let modified = entry
+            .header()
+            .mtime()
+            .ok()
+            .and_then(|seconds| UNIX_EPOCH.checked_add(Duration::from_secs(seconds)));
         let original = entry.path()?.to_string_lossy().into_owned();
         if entry_type.is_symlink() || entry_type.is_hard_link() {
             return Err(ZiFileError::LinkEntry(original));
@@ -606,6 +1366,9 @@ fn extract_tar(
         };
         if entry_type.is_dir() {
             fs::create_dir_all(&output)?;
+            if let Some(modified) = modified {
+                directory_times.push((output.clone(), modified));
+            }
             summary.directories += 1;
         } else if entry_type.is_file() {
             write_atomic(&output, |writer| {
@@ -619,12 +1382,14 @@ fn extract_tar(
                 )?;
                 Ok(())
             })?;
+            set_modified_time_if_present(&output, modified)?;
             summary.files += 1;
             options.progress.advance_entry();
         } else {
             return Err(ZiFileError::UnsupportedEntry(original));
         }
     }
+    restore_directory_times(directory_times)?;
     Ok(summary)
 }
 
@@ -732,50 +1497,90 @@ fn open_tar_reader(path: &Path, format: ArchiveFormat) -> ZiFileResult<Box<dyn R
     }
 }
 
-fn list_seven_zip(path: &Path, password: Option<&str>) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
-    let reader = SevenZReader::open(path, seven_password(password))?;
-    let limits = SafetyLimits::default();
-    if reader.archive().files.len() as u64 > limits.max_entries {
+fn guard_archive_backend<T>(
+    format: ArchiveFormat,
+    operation: &str,
+    action: impl FnOnce() -> ZiFileResult<T>,
+) -> ZiFileResult<T> {
+    // Third-party decoders may panic on impossible sizes in malformed metadata.
+    // Keep that failure inside the provider boundary; process-aborting failures
+    // such as OOM and sanitizer findings are intentionally not intercepted.
+    catch_unwind(AssertUnwindSafe(action)).unwrap_or_else(|_| {
+        Err(ZiFileError::Backend(format!(
+            "{format} backend rejected malformed metadata while {operation} the archive"
+        )))
+    })
+}
+
+fn list_seven_zip(path: &Path, options: &ListOptions) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
+    let reader = SevenZReader::open(path, seven_password(options.password.as_deref()))?;
+    options.cancellation.check()?;
+    if reader.archive().files.len() as u64 > options.limits.max_entries {
         return Err(ZiFileError::LimitExceeded(format!(
             "entry count exceeds {}",
-            limits.max_entries
+            options.limits.max_entries
         )));
     }
-    let entries = reader
-        .archive()
-        .files
-        .iter()
-        .map(|entry| {
-            Ok(ArchiveEntryInfo {
-                path: safe_relative_path(entry.name(), SafetyLimits::default().max_path_depth)?,
-                size: entry.size(),
-                compressed_size: entry.compressed_size,
-                is_directory: entry.is_directory(),
-                encrypted: false,
-            })
-        })
-        .collect::<ZiFileResult<Vec<_>>>()?;
-    validate_entry_names(&entries, SafetyLimits::default())?;
+    let files = reader.archive().files.clone();
+    options.progress.set_totals(files.len() as u64, 0);
+    let mut entries = Vec::with_capacity(files.len());
+    for entry in &files {
+        options.cancellation.check()?;
+        let mut methods = Vec::new();
+        reader.file_compression_methods(entry.name(), &mut methods)?;
+        entries.push(ArchiveEntryInfo {
+            path: safe_relative_path(entry.name(), options.limits.max_path_depth)?,
+            size: entry.size(),
+            compressed_size: entry.compressed_size,
+            is_directory: entry.is_directory(),
+            encrypted: methods.contains(&sevenz_rust2::EncoderMethod::AES256_SHA256),
+            modified: entry.has_last_modified_date.then(|| {
+                timestamp_from_system_time(
+                    SystemTime::from(entry.last_modified_date()),
+                    ArchiveTimestampPrecision::Subsecond,
+                )
+            }),
+        });
+        options.progress.advance_entry();
+    }
+    validate_entry_names(&entries, options.limits)?;
     Ok(entries)
 }
 
-fn test_seven_zip(path: &Path, password: Option<&str>, limits: SafetyLimits) -> ZiFileResult<()> {
-    let mut reader = SevenZReader::open(path, seven_password(password))?;
+fn test_seven_zip(path: &Path, options: &TestOptions) -> ZiFileResult<()> {
+    let mut reader = SevenZReader::open(path, seven_password(options.password.as_deref()))?;
     let mut total = 0;
-    reader.for_each_entries(|entry, input| {
-        if !entry.is_directory() {
-            copy_limited(
-                input,
-                &mut io::sink(),
-                &mut total,
-                limits.max_expanded_bytes,
-                None,
-                None,
-            )
-            .map_err(|error| sevenz_rust2::Error::from(io::Error::other(error.to_string())))?;
+    let mut operation_error = None;
+    let result = reader.for_each_entries(|entry, input| {
+        let operation = (|| -> ZiFileResult<()> {
+            options.cancellation.check()?;
+            if !entry.is_directory() {
+                copy_limited(
+                    input,
+                    &mut io::sink(),
+                    &mut total,
+                    options.limits.max_expanded_bytes,
+                    Some(&options.cancellation),
+                    Some(&options.progress),
+                )?;
+                options.progress.advance_entry();
+            }
+            Ok(())
+        })();
+        match operation {
+            Ok(()) => Ok(true),
+            Err(error) => {
+                let message = error.to_string();
+                operation_error = Some(error);
+                Err(sevenz_rust2::Error::from(io::Error::other(message)))
+            }
         }
-        Ok(true)
-    })?;
+    });
+    if let Some(error) = operation_error {
+        return Err(error);
+    }
+    result?;
     Ok(())
 }
 
@@ -787,10 +1592,14 @@ fn extract_seven_zip(
     let mut reader = SevenZReader::open(path, seven_password(options.password.as_deref()))?;
     let mut summary = OperationSummary::default();
     let mut claimed = HashSet::new();
+    let mut directory_times = Vec::new();
     let mut operation_error = None;
     let result = reader.for_each_entries(|entry, input| {
         let operation = (|| -> ZiFileResult<()> {
             options.cancellation.check()?;
+            let modified = entry
+                .has_last_modified_date
+                .then(|| SystemTime::from(entry.last_modified_date()));
             let relative = safe_relative_path(entry.name(), options.limits.max_path_depth)?;
             if !is_selected(&relative, options) {
                 return Ok(());
@@ -807,7 +1616,10 @@ fn extract_seven_zip(
                 return Ok(());
             };
             if entry.is_directory() {
-                fs::create_dir_all(output)?;
+                fs::create_dir_all(&output)?;
+                if let Some(modified) = modified {
+                    directory_times.push((output, modified));
+                }
                 summary.directories += 1;
             } else {
                 write_atomic(&output, |writer| {
@@ -821,6 +1633,7 @@ fn extract_seven_zip(
                     )?;
                     Ok(())
                 })?;
+                set_modified_time_if_present(&output, modified)?;
                 summary.files += 1;
                 options.progress.advance_entry();
             }
@@ -839,6 +1652,7 @@ fn extract_seven_zip(
         return Err(error);
     }
     result?;
+    restore_directory_times(directory_times)?;
     Ok(summary)
 }
 
@@ -851,17 +1665,22 @@ fn create_seven_zip(
     set_source_totals(&entries, &options.progress);
     let mut temporary = temporary_archive(destination)?;
     let mut writer = SevenZWriter::new(temporary.as_file_mut())?;
+    let mut content_methods = Vec::new();
     if let Some(password) = options
         .password
         .as_deref()
         .filter(|value| !value.is_empty())
     {
         use sevenz_rust2::encoder_options::AesEncoderOptions;
-        writer.set_content_methods(vec![
-            AesEncoderOptions::new(Password::new(password)).into(),
-            sevenz_rust2::EncoderMethod::LZMA2.into(),
-        ]);
+        content_methods.push(AesEncoderOptions::new(Password::new(password)).into());
     }
+    content_methods.push(
+        sevenz_rust2::encoder_options::Lzma2Options::from_level(u32::from(
+            ArchiveFormat::SevenZip.clamp_compression_level(options.compression_level),
+        ))
+        .into(),
+    );
+    writer.set_content_methods(content_methods);
     let mut summary = OperationSummary::default();
     for source in entries {
         options.cancellation.check()?;
@@ -895,22 +1714,36 @@ fn seven_password(password: Option<&str>) -> Password {
     password.map_or_else(Password::empty, Password::new)
 }
 
-fn list_stream(path: &Path, format: ArchiveFormat) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+fn list_stream(
+    path: &Path,
+    format: ArchiveFormat,
+    options: &ListOptions,
+) -> ZiFileResult<Vec<ArchiveEntryInfo>> {
+    options.cancellation.check()?;
+    options.progress.set_totals(1, 0);
     let mut reader = open_stream_decoder(path, format)?;
     let compressed_size = fs::metadata(path)?.len();
-    let limits = SafetyLimits::default();
     let ratio_limit = compressed_size
-        .saturating_mul(limits.max_expansion_ratio)
+        .saturating_mul(options.limits.max_expansion_ratio)
         .max(compressed_size);
-    let maximum = limits.max_expanded_bytes.min(ratio_limit);
+    let maximum = options.limits.max_expanded_bytes.min(ratio_limit);
     let mut size = 0;
-    copy_limited(&mut reader, &mut io::sink(), &mut size, maximum, None, None)?;
+    copy_limited(
+        &mut reader,
+        &mut io::sink(),
+        &mut size,
+        maximum,
+        Some(&options.cancellation),
+        Some(&options.progress),
+    )?;
+    options.progress.advance_entry();
     Ok(vec![ArchiveEntryInfo {
         path: stream_output_name(path, format),
         size,
         compressed_size,
         is_directory: false,
         encrypted: false,
+        modified: None,
     }])
 }
 
@@ -965,7 +1798,12 @@ fn create_stream(
     format: ArchiveFormat,
     options: &CreateOptions,
 ) -> ZiFileResult<OperationSummary> {
-    if sources.len() != 1 || !sources[0].is_file() {
+    let [source] = sources else {
+        return Err(ZiFileError::InvalidInput(format!(
+            "{format} streams require exactly one input file; use a TAR composition for directories"
+        )));
+    };
+    if !source.is_file() {
         return Err(ZiFileError::InvalidInput(format!(
             "{format} streams require exactly one input file; use a TAR composition for directories"
         )));
@@ -977,7 +1815,6 @@ fn create_stream(
     {
         return Err(ZiFileError::UnsupportedEncryption(format));
     }
-    let source = &sources[0];
     let bytes = fs::metadata(source)?.len();
     options.progress.set_totals(1, bytes);
     let mut input = BufReader::new(File::open(source)?);
@@ -1166,6 +2003,9 @@ fn copy_limited(
         if count == 0 {
             break;
         }
+        let buffer_chunk = buffer.get(..count).ok_or_else(|| {
+            ZiFileError::Backend("reader returned more bytes than the supplied buffer".to_owned())
+        })?;
         let count = count as u64;
         *total = total
             .checked_add(count)
@@ -1175,7 +2015,7 @@ fn copy_limited(
                 "expanded data exceeds {maximum} bytes"
             )));
         }
-        writer.write_all(&buffer[..count as usize])?;
+        writer.write_all(buffer_chunk)?;
         if let Some(progress) = progress {
             progress.advance_bytes(count);
         }
@@ -1261,6 +2101,119 @@ fn unique_path(path: &Path) -> PathBuf {
     parent.join(format!("{stem} (copy)"))
 }
 
+fn timestamp_from_primitive(
+    value: time::PrimitiveDateTime,
+    offset: ArchiveTimestampOffset,
+    precision: ArchiveTimestampPrecision,
+) -> ArchiveTimestamp {
+    ArchiveTimestamp {
+        year: value.year().try_into().unwrap_or_default(),
+        month: value.month() as u8,
+        day: value.day(),
+        hour: value.hour(),
+        minute: value.minute(),
+        second: value.second(),
+        nanosecond: value.nanosecond(),
+        offset,
+        precision,
+    }
+}
+
+fn timestamp_from_system_time(
+    value: SystemTime,
+    precision: ArchiveTimestampPrecision,
+) -> ArchiveTimestamp {
+    let value = time::OffsetDateTime::from(value);
+    timestamp_from_primitive(
+        time::PrimitiveDateTime::new(value.date(), value.time()),
+        ArchiveTimestampOffset::Utc,
+        precision,
+    )
+}
+
+fn timestamp_from_unix_seconds(value: u64) -> Option<ArchiveTimestamp> {
+    let value = i64::try_from(value).ok()?;
+    let value = time::OffsetDateTime::from_unix_timestamp(value).ok()?;
+    Some(timestamp_from_primitive(
+        time::PrimitiveDateTime::new(value.date(), value.time()),
+        ArchiveTimestampOffset::Utc,
+        ArchiveTimestampPrecision::Second,
+    ))
+}
+
+fn timestamp_from_zip_datetime(value: zip::DateTime) -> ArchiveTimestamp {
+    ArchiveTimestamp {
+        year: value.year(),
+        month: value.month(),
+        day: value.day(),
+        hour: value.hour(),
+        minute: value.minute(),
+        second: value.second(),
+        nanosecond: 0,
+        offset: ArchiveTimestampOffset::Unspecified,
+        precision: ArchiveTimestampPrecision::TwoSeconds,
+    }
+}
+
+fn rar_archive_timestamp(value: u32) -> Option<ArchiveTimestamp> {
+    if value == 0 {
+        return None;
+    }
+    let date = (value >> 16) as u16;
+    let time = value as u16;
+    zip::DateTime::try_from((date, time))
+        .ok()
+        .map(timestamp_from_zip_datetime)
+}
+
+fn primitive_datetime_to_system_time(value: time::PrimitiveDateTime) -> SystemTime {
+    SystemTime::from(value.assume_utc())
+}
+
+fn zip_datetime_to_system_time(value: zip::DateTime) -> Option<SystemTime> {
+    time::PrimitiveDateTime::try_from(value)
+        .ok()
+        .map(primitive_datetime_to_system_time)
+}
+
+fn system_time_to_zip_datetime(value: SystemTime) -> Option<zip::DateTime> {
+    let value = time::OffsetDateTime::from(value);
+    zip::DateTime::try_from(time::PrimitiveDateTime::new(value.date(), value.time())).ok()
+}
+
+fn rar_modified_time(value: u32, refinement: Option<rars::TimeRefinement>) -> Option<SystemTime> {
+    if value == 0 {
+        return None;
+    }
+    let date = (value >> 16) as u16;
+    let time = value as u16;
+    let mut modified = zip_datetime_to_system_time(zip::DateTime::try_from((date, time)).ok()?)?;
+    if let Some(refinement) = refinement {
+        modified = modified.checked_add(Duration::new(
+            u64::from(refinement.add_second),
+            refinement.nanoseconds,
+        ))?;
+    }
+    Some(modified)
+}
+
+fn set_modified_time_if_present(path: &Path, modified: Option<SystemTime>) -> ZiFileResult<()> {
+    if let Some(modified) = modified {
+        filetime::set_file_mtime(path, filetime::FileTime::from_system_time(modified))?;
+    }
+    Ok(())
+}
+
+fn restore_directory_times(mut entries: Vec<(PathBuf, SystemTime)>) -> ZiFileResult<()> {
+    entries.sort_by(|(left, _), (right, _)| {
+        right.components().count().cmp(&left.components().count())
+    });
+    for (path, modified) in entries {
+        set_modified_time_if_present(&path, Some(modified))?;
+    }
+    Ok(())
+}
+
 fn write_atomic(
     destination: &Path,
     write: impl FnOnce(&mut dyn Write) -> ZiFileResult<()>,
@@ -1288,6 +2241,7 @@ struct SourceEntry {
     archive_path: PathBuf,
     is_directory: bool,
     size: u64,
+    modified: Option<SystemTime>,
 }
 
 fn set_source_totals(entries: &[SourceEntry], progress: &OperationProgress) {
@@ -1343,6 +2297,7 @@ fn collect_sources(sources: &[PathBuf], destination: &Path) -> ZiFileResult<Vec<
                 } else {
                     0
                 },
+                modified: metadata.modified().ok(),
             });
         }
     }

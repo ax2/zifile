@@ -8,34 +8,158 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
     name: Rust quality gates
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Repository policy
+        shell: pwsh
+        run: |
+          ./scripts/Test-VersionConsistency.ps1
+          ./scripts/Test-ReleaseNotes.ps1
+          ./scripts/Test-ContributorDocs.ps1
+          ./scripts/Test-SecurityDocs.ps1
+          ./scripts/Test-UserDocs.ps1
+          ./scripts/Test-ReleaseReadiness.ps1
+          ./scripts/Test-SignPathFoundationReadiness.ps1
+          ./packaging/msix/Test-Assets.ps1 -VerifyGenerator
+          ./packaging/store/Test-ListingAssets.ps1 -VerifyGenerator
+      - name: Packaging policy smoke test
+        shell: pwsh
+        run: ./tests/smoke/packaging-policy.ps1
+      - name: PowerShell syntax checks
+        shell: pwsh
+        run: |
+          $failures = @()
+          foreach ($root in @('scripts', 'tests', 'packaging')) {
+            foreach ($file in (Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.ps1')) {
+              $tokens = $null
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                $file.FullName,
+                [ref]$tokens,
+                [ref]$errors
+              ) | Out-Null
+              if (@($errors).Count -gt 0) {
+                $failures += [pscustomobject]@{
+                  path = $file.FullName
+                  errors = @($errors | ForEach-Object Message)
+                }
+              }
+            }
+          }
+          if ($failures.Count -gt 0) {
+            $failures | ConvertTo-Json -Depth 5
+            throw 'PowerShell syntax errors detected.'
+          }
+          Write-Host "PowerShell syntax checks passed for $((Get-ChildItem scripts,tests,packaging -Recurse -File -Filter '*.ps1').Count) scripts."
+      - name: Install current WinGet validation client
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./packaging/winget/Install-ValidationClient.ps1
+      - name: Official WinGet manifest validation
+        shell: pwsh
+        run: ./tests/smoke/winget-manifest.ps1
+      - uses: dtolnay/rust-toolchain@1.93.0
         with:
           components: clippy,rustfmt
       - uses: Swatinem/rust-cache@v2
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Tests
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --all-targets --all-features --locked
       - name: Benchmark targets compile
-        run: cargo bench -p zifile-core --no-run --locked
+        run: cargo bench --workspace --no-run --locked
       - name: Foundation smoke test
         shell: pwsh
         run: ./tests/smoke/foundation.ps1 -SkipDesktopLaunch
+      - name: Reproducibility diagnostics smoke test
+        shell: pwsh
+        run: ./tests/smoke/reproducibility-diagnostics.ps1
+      - name: WACK readiness policy
+        shell: pwsh
+        run: ./tests/smoke/wack-readiness.ps1
+      - name: Store listing policy
+        shell: pwsh
+        run: ./tests/smoke/store-listing.ps1
       - name: Reference-tool interoperability
         shell: pwsh
-        run: ./tests/interoperability/windows-tools.ps1 -SkipBuild
+        run: |
+          ./tests/interoperability/windows-tools.ps1 -SkipBuild
+          ./tests/interoperability/cab-windows.ps1 -SkipBuild
+          ./tests/interoperability/sevenzip-corpus.ps1 -SkipBuild
+          ./tests/interoperability/zip-method-corpus.ps1 -SkipBuild
+          ./tests/interoperability/zip-legacy-corpus.ps1 -SkipBuild
+          ./tests/interoperability/zip-zstd-corpus.ps1 -SkipBuild
+      - name: Upload CAB interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: cab-interoperability
+          path: target/cab-interoperability.json
+          retention-days: 30
+      - name: Upload 7-Zip interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: sevenzip-corpus
+          path: target/sevenzip-corpus.json
+          retention-days: 30
+      - name: Upload ZIP method interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: zip-method-corpus
+          path: target/zip-method-corpus.json
+          retention-days: 30
+      - name: Upload ZIP legacy interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: zip-legacy-corpus
+          path: target/zip-legacy-corpus.json
+          retention-days: 30
+      - name: Upload ZIP Zstandard interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: zip-zstd-corpus
+          path: target/zip-zstd-corpus.json
+          retention-days: 30
+
+  rar-interoperability:
+    name: RAR reference interoperability
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.93.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Build CLI
+        run: cargo build -p zifile-cli --locked
+      - name: Compare pinned RAR corpus
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: ./tests/interoperability/rar-corpus.ps1 -SkipBuild
+      - name: Upload RAR interoperability evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: rar-corpus
+          path: target/rar-corpus.json
+          if-no-files-found: warn
+          retention-days: 30
 
   licenses:
     name: Dependency policy
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -43,17 +167,49 @@ jobs:
   fuzz:
     name: Fuzz targets compile
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-fuzz
-      - run: cargo fuzz build --fuzz-dir fuzz --target x86_64-unknown-linux-gnu
+      - run: cargo +nightly fuzz build --fuzz-dir fuzz --target x86_64-unknown-linux-gnu
+
+  repair-helper:
+    name: MSIX Repair helper
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: tests/helpers/msix-repair/packages.lock.json
+      - run: dotnet restore tests/helpers/msix-repair/MsixRepair.csproj --locked-mode
+      - run: dotnet build tests/helpers/msix-repair/MsixRepair.csproj --configuration Release --no-restore
+      - name: Probe Repair capability without changing package state
+        timeout-minutes: 2
+        shell: pwsh
+        run: |
+          ./tests/helpers/msix-repair/Invoke-Probe.ps1 `
+            -HelperPath ./tests/helpers/msix-repair/bin/Release/net8.0-windows10.0.19041.0/win-x64/MsixRepair.exe
+      - name: Prove Repair probe hard timeout
+        timeout-minutes: 1
+        shell: pwsh
+        run: |
+          $result = ./tests/helpers/msix-repair/Invoke-Probe.ps1 `
+            -HelperPath ./tests/helpers/msix-repair/bin/Release/net8.0-windows10.0.19041.0/win-x64/MsixRepair.exe `
+            -TimeoutFixture | ConvertFrom-Json
+          if ($result.probe_completed -or -not $result.probe_timed_out -or $result.repair_supported) {
+            throw 'The isolated Repair probe did not produce the required timeout evidence.'
+          }
 
   docs:
     name: Documentation build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -66,3 +222,6 @@ jobs:
           cache-dependency-path: docs/pnpm-lock.yaml
       - run: pnpm --dir docs install --frozen-lockfile
       - run: pnpm --dir docs build
+      - name: Validate generated Store privacy routes
+        shell: pwsh
+        run: ./packaging/store/Test-PublicPrivacy.ps1 -DocumentationOutput ./docs/dist

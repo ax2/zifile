@@ -6,7 +6,7 @@ description: ZiFile 的分层、crate 边界与任务执行模型。
 ## 分层
 
 ```text
-Iced UI ── versioned IPC ── isolated Worker ── zifile-core ── Provider
+Iced UI / Dioxus accessibility candidate ── versioned IPC ── isolated Worker ── zifile-core ── Provider
 CLI ────────────────────────────────────────────┘
                                                    │
                                            Windows 文件系统
@@ -24,7 +24,9 @@ CLI ─────────────────────────�
 
 ### 桌面 UI
 
-首选 Iced，以单向状态更新组织界面；Windows 特性通过 `windows-rs` 封装在独立 crate 中。耗时工作只返回消息和进度，不在 UI 线程执行。
+当前发布基线为 Iced，以单向状态更新组织界面；Dioxus/WebView2 候选验证标准 DOM 到 Windows UI Automation 的语义路径。两者共享同一 Worker IPC，不在 UI 进程解析归档。Windows 特性通过 `windows-rs` 封装。
+
+两套 UI 还共享一个容量为 32（含运行中任务）的内存 FIFO 调度器。打开、重载、校验、解压和创建在提交时快照请求并依次启动独立 Worker；任务完成或取消后才启动下一项。完成消息携带单调 ID，陈旧/重复完成事件不会推进队列。用户可以清空等待项而不误取消当前 Worker；待处理请求随清空或退出直接释放，不持久化其中的路径或密码。
 
 ### Worker
 

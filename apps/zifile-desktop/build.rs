@@ -1,4 +1,6 @@
-fn main() {
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../../packaging/msix/Assets/ZiFile.ico");
     println!("cargo:rerun-if-changed=application.manifest");
 
@@ -13,6 +15,8 @@ fn main() {
             .set("CompanyName", "ZiCode")
             .set("LegalCopyright", "Copyright (c) ZiCode contributors")
             .set("OriginalFilename", "zifile-desktop.exe");
-        resource.compile().expect("compile Windows resources");
+        resource.compile()?;
     }
+
+    Ok(())
 }

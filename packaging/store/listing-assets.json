@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "status": "ready",
+  "requirements_source": "https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/screenshots-and-images",
+  "assets": [
+    {
+      "kind": "app_tile_icon",
+      "path": "listing-assets/AppTile300x300.png",
+      "width": 300,
+      "height": 300,
+      "sha256": "C1805A4271701152D5B1F043070625575C48F2926E474B5E2568C8288019F702"
+    }
+  ]
+}

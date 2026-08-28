@@ -9,4 +9,6 @@ docs/.astro/
 docs/.starlight/
 artifacts/
 /dist/
+/tests/helpers/msix-repair/bin/
+/tests/helpers/msix-repair/obj/
 .cargo/config.toml
