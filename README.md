@@ -4,11 +4,17 @@ ZiFile is a modern, open-source archive and file utility for Windows. It is
 being written from scratch with Rust, including the desktop UI, and is licensed
 under MIT.
 
-The project is currently in **Stage 1 — Alpha development**. ZIP, encrypted
+The project is currently in **Stage 3 — Release candidate preparation**. ZIP, encrypted
 ZIP, 7z, TAR compositions and common compression streams have working create,
 list, integrity-test and safe-extraction paths shared by the CLI and Iced
 desktop application. RAR 1.3–7 and Windows CAB are available as pure-Rust,
 read-only beta providers.
+
+The candidate is feature-complete for the currently supported archive contract:
+the source, x64/ARM64 builds, package audits, reproducibility checks and release
+rehearsals are automated. A stable 1.0 release is intentionally still gated on
+trusted signing, real foreground Windows validation, physical ARM64, WACK,
+Partner Center/Microsoft Store certification and WinGet acceptance.
 
 The desktop UI is available in Simplified Chinese and English, follows the
 system language on first launch, and persists only the selected language and
