@@ -648,6 +648,19 @@ if ($releaseSource -match [Regex]::Escape('${{ inputs.version }}')) {
 if ($releaseSource -notmatch [Regex]::Escape('Test-Screenshots.ps1 -RequireComplete')) {
     throw 'The tagged release workflow does not require completed Store screenshots.'
 }
+foreach ($requiredStageReleaseToken in @(
+    "if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')",
+    'publish-stage:',
+    'needs: [windows, sbom]',
+    'pattern: windows-*',
+    'prerelease: true',
+    'RELEASE-ASSETS.txt',
+    'SHA256SUMS-stage.txt'
+)) {
+    if ($releaseSource -notmatch [Regex]::Escape($requiredStageReleaseToken)) {
+        throw "The release workflow omits stage-release token: $requiredStageReleaseToken"
+    }
+}
 if ($releaseSource -notmatch [Regex]::Escape('.audit.json')) {
     throw 'The release workflow does not stage MSIX audit evidence.'
 }
@@ -938,6 +951,7 @@ if ($releaseWindowsJobIndex -lt 0 -or $releaseWindowsTimeoutIndex -lt 0 -or $rel
 }
 Assert-WorkflowJobTimeout -Source $releaseWorkflowSource -Job 'sbom' -Minutes 20 -Workflow 'Release'
 Assert-WorkflowJobTimeout -Source $releaseWorkflowSource -Job 'publish' -Minutes 30 -Workflow 'Release'
+Assert-WorkflowJobTimeout -Source $releaseWorkflowSource -Job 'publish-stage' -Minutes 30 -Workflow 'Release'
 $reproducibilityWorkflowSource = Get-Content -Raw -LiteralPath $reproducibilityWorkflow
 foreach ($requiredReproducibilityToken in @(
     'cancel-in-progress: true',

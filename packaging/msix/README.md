@@ -70,7 +70,7 @@ Implemented packaging features:
 The desktop executable requires its matching Worker. GitHub release staging therefore publishes
 both architecture-suffixed files; complete runnable directories retain the canonical sibling name.
 
-Tagged GitHub releases build with formal `ZIFILE_MSIX_IDENTITY` and
+Stable tagged GitHub releases build with formal `ZIFILE_MSIX_IDENTITY` and
 `ZIFILE_MSIX_PUBLISHER` plus `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME` environment
 variables, then enter the protected
 `production-signing` Environment. DigiCert Binary Signing signs the staged EXEs,
@@ -78,6 +78,10 @@ DLL, and MSIX with the cloud-held key. `Test-SignedReleaseArtifacts.ps1` require
 valid signatures, one exact Publisher, and timestamps before regenerating audits
 and checksums; publishing downloads only `signed-windows-*`. Manual workflow runs
 may select `none` for unsigned validation or `digicert-stm` for a protected rehearsal.
+Hyphenated stage tags such as `v0.1.0-alpha.1` and `v1.0.0-rc.1` publish the unsigned
+dual-architecture build outputs, audits, checksums, SBOMs, and provenance as a GitHub
+pre-release without entering production signing; these packages are for milestone
+validation only and must not be submitted to WinGet or Microsoft Store.
 Provisioning, approval, credential rotation, emergency stop, revocation, and evidence retention are
 defined in `docs/src/content/docs/development/signing-operations.md` and machine-checked by
 `scripts/Test-SigningOperationsDocs.ps1`.
