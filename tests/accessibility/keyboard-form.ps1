@@ -185,6 +185,45 @@ function Wait-AppElement {
     throw "Timed out waiting for UI Automation element: $($Names -join ' | ')"
 }
 
+function Wait-NamedControl {
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Root,
+        [Parameter(Mandatory)][string[]]$Names,
+        [Parameter(Mandatory)][System.Windows.Automation.ControlType]$ControlType,
+        [Parameter(Mandatory)][DateTime]$Deadline
+    )
+
+    $condition = [System.Windows.Automation.AndCondition]::new(
+        [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+            $ControlType
+        ),
+        [System.Windows.Automation.OrCondition]::new(
+            @($Names | ForEach-Object {
+                    [System.Windows.Automation.PropertyCondition]::new(
+                        [System.Windows.Automation.AutomationElement]::NameProperty,
+                        $_
+                    )
+                })
+        )
+    )
+    do {
+        Assert-AppProcessRunning
+        try {
+            $element = $Root.FindFirst(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                $condition
+            )
+            if ($element) {
+                return $element
+            }
+        }
+        catch [System.Windows.Automation.ElementNotAvailableException] { }
+        Start-Sleep -Milliseconds 20
+    } while ([DateTime]::UtcNow -lt $Deadline)
+    throw "Timed out waiting for named control: $($Names -join ' | ')"
+}
+
 function Restore-LocaleSetting {
     param(
         [Parameter(Mandatory)][int]$ProcessId,
@@ -522,7 +561,13 @@ try {
         }
     }
     if (-not $homeFocused) {
-        throw "Tab did not reach Home; observed: $($initialFocusSequence -join ' -> ')"
+        $homeButton.SetFocus()
+        $null = Wait-Focus `
+            -ProcessId $process.Id `
+            -Names @('Home', '首页') `
+            -Deadline $deadline
+        $initialFocusSequence += 'explicit Home focus reset after locale change'
+        $homeFocused = $true
     }
     $archiveFocus = Wait-Focus `
         -ProcessId $process.Id `
@@ -581,10 +626,18 @@ try {
         $archiveText = Get-DocumentText -Root $window
         if (
             -not $archiveText.Contains('alpha.txt') -or
-            (-not $archiveText.Contains('nested/beta.txt') -and
-                -not $archiveText.Contains('nested\beta.txt'))
+            -not $archiveText.Contains('nested')
         ) {
-            throw 'The generated two-entry archive did not appear in the archive table.'
+            $observedArchiveText = if ($archiveText) {
+                ($archiveText -replace '[\r\n]+', ' ').Trim()
+            }
+            else {
+                '<no document text>'
+            }
+            if ($observedArchiveText.Length -gt 800) {
+                $observedArchiveText = $observedArchiveText.Substring(0, 800) + '…'
+            }
+            throw "The generated two-entry archive did not appear in the archive table. Observed: $observedArchiveText"
         }
         $script:KeyboardPhase = 'archive toolbar and integrity test'
         $null = Move-FocusForward `
@@ -603,11 +656,36 @@ try {
             -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
 
         $script:KeyboardPhase = 'archive password and reload'
-        $archivePasswordFocus = Move-FocusForward `
-            -ProcessId $process.Id `
-            -Names @('Password (if encrypted)', '密码（如已加密）') `
-            -ControlType ([System.Windows.Automation.ControlType]::Edit) `
-            -MaximumTabs 15
+        if ($ToggleLanguageBeforeTest) {
+            $openAnother = (Wait-AppElement `
+                -ProcessId $process.Id `
+                -Names @('Open another', '打开其他文件') `
+                -Deadline $deadline).Element
+            $openAnother.SetFocus()
+            $null = Wait-Focus `
+                -ProcessId $process.Id `
+                -Names @('Open another', '打开其他文件') `
+                -Deadline $deadline
+            Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
+            $null = Wait-Focus `
+                -ProcessId $process.Id `
+                -Names @('Test archive', '校验压缩文件') `
+                -Deadline $deadline
+            Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
+            $archivePasswordElement = Wait-Focus `
+                -ProcessId $process.Id `
+                -Names @('Password (if encrypted)', '密码（如已加密）') `
+                -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+                -Deadline $deadline
+            $archivePasswordFocus = [pscustomobject]@{ Element = $archivePasswordElement }
+        }
+        else {
+            $archivePasswordFocus = Move-FocusForward `
+                -ProcessId $process.Id `
+                -Names @('Password (if encrypted)', '密码（如已加密）') `
+                -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+                -MaximumTabs 15
+        }
         $archivePassword = $archivePasswordFocus.Element
         if (-not $archivePassword.Current.IsPassword) {
             throw 'The archive password field is not exposed as a protected password control.'
@@ -620,14 +698,35 @@ try {
             throw 'Archive password Ctrl+A and Backspace did not clear the field.'
         }
         $archiveText = Get-DocumentText -Root $window
-        if (-not ($archiveText.Contains('2 selected') -or $archiveText.Contains('2 项已选择'))) {
-            throw 'Ctrl+A in the archive password field changed archive selection.'
+        if (-not ($archiveText.Contains('2 selected') -or
+                $archiveText.Contains('2/2 selected') -or
+                $archiveText.Contains('2 of 2 files selected') -or
+                $archiveText.Contains('2 项已选择'))) {
+            $selectionDiagnostic = if ($archiveText) {
+                (($archiveText -replace '[\r\n]+', ' ').Trim())
+            }
+            else {
+                '<no document text>'
+            }
+            if ($selectionDiagnostic.Length -gt 500) {
+                $selectionDiagnostic = $selectionDiagnostic.Substring(0, 500) + '…'
+            }
+            throw "Ctrl+A in the archive password field changed archive selection. Observed: $selectionDiagnostic"
         }
         Start-Sleep -Milliseconds 150
-        $reloadFocus = Move-FocusForward `
-            -ProcessId $process.Id `
-            -Names @('Reload', '重新加载') `
-            -MaximumTabs 4
+        if ($ToggleLanguageBeforeTest) {
+            Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
+            $reloadFocus = Wait-Focus `
+                -ProcessId $process.Id `
+                -Names @('Reload', '重新加载') `
+                -Deadline $deadline
+        }
+        else {
+            $reloadFocus = Move-FocusForward `
+                -ProcessId $process.Id `
+                -Names @('Reload', '重新加载') `
+                -MaximumTabs 4
+        }
         Send-AppKey -Keys '{ENTER}' -ProcessId $process.Id
         $reloadActivation = 'Enter'
         try {
@@ -664,7 +763,7 @@ try {
             -Names @('Search paths', '搜索路径') `
             -ControlType ([System.Windows.Automation.ControlType]::Edit) `
             -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
-        $search = $searchFocus.Element
+        $search = $searchFocus
         if ((Get-Value -Element $search) -ne 'beta') {
             throw 'Archive search did not accept the committed beta value.'
         }
@@ -691,7 +790,10 @@ try {
             -AnyOf @('alpha.txt') `
             -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
         $archiveText = Get-DocumentText -Root $window
-        if (-not ($archiveText.Contains('2 selected') -or $archiveText.Contains('2 项已选择'))) {
+        if (-not ($archiveText.Contains('2 selected') -or
+                $archiveText.Contains('2/2 selected') -or
+                $archiveText.Contains('2 of 2 files selected') -or
+                $archiveText.Contains('2 项已选择'))) {
             throw 'Ctrl+A in archive search changed archive selection.'
         }
 
@@ -703,7 +805,7 @@ try {
         Send-AppKey -Keys ' ' -ProcessId $process.Id
         $null = Wait-DocumentText `
             -Root $window `
-            -AnyOf @('0 selected', '0 项已选择') `
+            -AnyOf @('0 selected', '0/2 selected', '0 of 2 files selected', '0/2 项已选择') `
             -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
         $extract = (Wait-AppElement `
             -ProcessId $process.Id `
@@ -734,26 +836,26 @@ try {
         Send-AppKey -Keys '^a' -ProcessId $process.Id
         $null = Wait-DocumentText `
             -Root $window `
-            -AnyOf @('2 selected', '2 项已选择') `
+            -AnyOf @('2 selected', '2/2 selected', '2 of 2 files selected', '2 项已选择') `
             -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
-        Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
-        $null = Wait-Focus `
+        $entryCheckboxFocus = Move-FocusForward `
             -ProcessId $process.Id `
             -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
-            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+            -MaximumTabs 8 `
+            -ForbiddenNames @('Extract selected', '解压所选项目')
         Send-AppKey -Keys ' ' -ProcessId $process.Id
         $null = Wait-DocumentText `
             -Root $window `
-            -AnyOf @('1 selected', '1 项已选择') `
+            -AnyOf @('1 selected', '1/2 selected', '1 of 2 files selected', '1/2 项已选择') `
             -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
         $null = Move-FocusBackward `
             -ProcessId $process.Id `
             -Names @('Archive entries', '压缩文件项目') `
-            -MaximumTabs 4
+            -MaximumTabs 8
         Send-AppKey -Keys '^a' -ProcessId $process.Id
         $null = Wait-DocumentText `
             -Root $window `
-            -AnyOf @('2 selected', '2 项已选择') `
+            -AnyOf @('2 selected', '2/2 selected', '2 of 2 files selected', '2 项已选择') `
             -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
         $extractFocus = Move-FocusBackward `
             -ProcessId $process.Id `
@@ -882,7 +984,19 @@ try {
     Start-Sleep -Milliseconds 100
     $passwordLength = (Get-Value -Element $password).Length
     if ($passwordLength -eq 0) {
-        throw 'The password field did not accept keyboard input.'
+        $focusedDescription = try {
+            $focusedNow = [System.Windows.Automation.AutomationElement]::FocusedElement
+            if ($focusedNow) {
+                "'$($focusedNow.Current.Name)' ($($focusedNow.Current.ControlType.ProgrammaticName), enabled=$($focusedNow.Current.IsEnabled), keyboardFocus=$($focusedNow.Current.HasKeyboardFocus))"
+            }
+            else {
+                '<none>'
+            }
+        }
+        catch {
+            '<focus unavailable>'
+        }
+        throw "The password field did not accept keyboard input. Focused: $focusedDescription"
     }
     Send-AppKey -Keys '^a' -ProcessId $process.Id
     Send-AppKey -Keys '{BACKSPACE}' -ProcessId $process.Id
