@@ -68,6 +68,10 @@ All notable changes to ZiFile are documented here. The format follows
   the Windows foreground before invoking UI Automation and includes bounded last
   document text in timeout diagnostics instead of treating a background run as
   real foreground evidence.
+- Extend the accessible keyboard smoke with a deterministic two-entry archive
+  workflow covering integrity testing, reload, scoped search and selection,
+  conflict policy, pagination state, and extract-button state; retain an
+  explicit legacy create-form isolation switch for focused diagnostics.
 - Dual-architecture Release packaging jobs now have a 90-minute hard timeout,
   enforced by packaging-policy smoke coverage, so tests or MSIX builds cannot
   leave a manual rehearsal running without a bounded result.
