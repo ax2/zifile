@@ -32,27 +32,6 @@ jobs:
         architecture: [x64, arm64]
     steps:
       - uses: actions/checkout@v7
-      - name: Normalize Windows checkout line endings
-        shell: pwsh
-        run: |
-          git config --local core.autocrlf false
-          git config --local core.eol lf
-          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-          foreach ($relativePath in @(
-            'tests/accessibility/keyboard-form.ps1',
-            'tests/reproducibility/windows-build.ps1'
-          )) {
-            $path = Join-Path $PWD $relativePath
-            $content = [System.IO.File]::ReadAllText($path)
-            $content = $content.Replace("`r`n", "`n").Replace("`r", "`n")
-            [System.IO.File]::WriteAllText($path, $content, $utf8NoBom)
-          }
-          git reset --quiet HEAD -- tests/accessibility/keyboard-form.ps1 tests/reproducibility/windows-build.ps1
-          $dirty = @(& git status --porcelain=v1 --untracked-files=all)
-          if ($LASTEXITCODE -ne 0) { throw 'git status failed after checkout normalization' }
-          if ($dirty.Count -ne 0) {
-            throw "Checkout remained dirty after line-ending normalization: $($dirty -join '; ')"
-          }
       - uses: dtolnay/rust-toolchain@1.93.0
         with:
           targets: ${{ matrix.architecture == 'x64' && 'x86_64-pc-windows-msvc' || 'aarch64-pc-windows-msvc' }}
