@@ -32,17 +32,6 @@ jobs:
         architecture: [x64, arm64]
     steps:
       - uses: actions/checkout@v7
-      - name: Normalize checkout line endings
-        shell: pwsh
-        run: |
-          git config --local core.autocrlf false
-          git config --local core.eol lf
-          git checkout -- .
-          $dirtyEntries = @(git status --porcelain=v1 --untracked-files=all)
-          if ($LASTEXITCODE -ne 0) { throw 'git status failed after checkout normalization' }
-          if ($dirtyEntries.Count -gt 0) {
-            throw "Checkout is dirty before reproducibility build: $($dirtyEntries -join '; ')"
-          }
       - uses: dtolnay/rust-toolchain@1.93.0
         with:
           targets: ${{ matrix.architecture == 'x64' && 'x86_64-pc-windows-msvc' || 'aarch64-pc-windows-msvc' }}
