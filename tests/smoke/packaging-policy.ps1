@@ -670,6 +670,12 @@ foreach ($requiredStageReleaseToken in @(
 if ($releaseSource -match [Regex]::Escape('sha256sum release/* > release/SHA256SUMS-stage.txt')) {
     throw 'The stage release checksum manifest must not hash itself.'
 }
+if ($releaseSource -notmatch [Regex]::Escape("if: (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')) || inputs.signing_provider == 'digicert-stm'")) {
+    throw 'The production signing job must be limited to stable tags or an explicit manual signing rehearsal.'
+}
+if ($releaseSource -match [Regex]::Escape("if: startsWith(github.ref, 'refs/tags/v') || inputs.signing_provider == 'digicert-stm'")) {
+    throw 'The production signing job must not run automatically for prerelease tags.'
+}
 if ($releaseSource -notmatch [Regex]::Escape('.audit.json')) {
     throw 'The release workflow does not stage MSIX audit evidence.'
 }
