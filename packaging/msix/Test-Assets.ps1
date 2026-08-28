@@ -25,6 +25,68 @@ foreach ($file in @($catalog, $manifest, $generator)) {
 
 Add-Type -AssemblyName System.Drawing
 
+function Get-ImagePixelHash {
+    param([Parameter(Mandatory)][byte[]]$Bytes)
+
+    $stream = [IO.MemoryStream]::new($Bytes, $false)
+    $bitmap = [Drawing.Bitmap]::new($stream)
+    try {
+        $pixels = [byte[]]::new($bitmap.Width * $bitmap.Height * 4)
+        $offset = 0
+        for ($y = 0; $y -lt $bitmap.Height; $y++) {
+            for ($x = 0; $x -lt $bitmap.Width; $x++) {
+                $pixel = $bitmap.GetPixel($x, $y)
+                $pixels[$offset++] = $pixel.A
+                $pixels[$offset++] = $pixel.R
+                $pixels[$offset++] = $pixel.G
+                $pixels[$offset++] = $pixel.B
+            }
+        }
+        return [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData($pixels)
+        )
+    }
+    finally {
+        $bitmap.Dispose()
+        $stream.Dispose()
+    }
+}
+
+function Get-ImageFilePixelHash {
+    param([Parameter(Mandatory)][string]$Path)
+
+    return Get-ImagePixelHash -Bytes ([IO.File]::ReadAllBytes($Path))
+}
+
+function Get-IconFramePixelHashes {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    if ($bytes.Length -lt 6) {
+        throw 'Cannot inspect pixel content of a truncated ICO.'
+    }
+    $count = [int][BitConverter]::ToUInt16($bytes, 4)
+    $directoryEnd = 6 + (16 * $count)
+    if ($bytes.Length -lt $directoryEnd) {
+        throw 'Cannot inspect pixel content of an ICO with a truncated directory.'
+    }
+    $hashes = @()
+    for ($index = 0; $index -lt $count; $index++) {
+        $entryOffset = 6 + (16 * $index)
+        $length = [uint64][BitConverter]::ToUInt32($bytes, $entryOffset + 8)
+        $imageOffset = [uint64][BitConverter]::ToUInt32($bytes, $entryOffset + 12)
+        if ($length -gt [uint64][int]::MaxValue -or
+            $imageOffset -gt [uint64][int]::MaxValue -or
+            ($imageOffset + $length) -gt [uint64]$bytes.Length) {
+            throw 'Cannot inspect pixel content of an ICO frame outside its payload.'
+        }
+        $payload = [byte[]]::new([int]$length)
+        [Array]::Copy($bytes, [int]$imageOffset, $payload, 0, [int]$length)
+        $hashes += Get-ImagePixelHash -Bytes $payload
+    }
+    return $hashes
+}
+
 function Read-BigEndianUInt32 {
     param(
         [Parameter(Mandatory)][byte[]]$Bytes,
@@ -278,7 +340,17 @@ if ($VerifyGenerator) {
             $committedHash = (Get-FileHash -LiteralPath (Join-Path $assets $name) -Algorithm SHA256).Hash
             $generatedHash = (Get-FileHash -LiteralPath (Join-Path $fixture $name) -Algorithm SHA256).Hash
             if ($committedHash -cne $generatedHash) {
-                throw "Committed MSIX asset differs from deterministic generator output: $name"
+                if ($name -eq 'ZiFile.ico') {
+                    $committedPixels = @(Get-IconFramePixelHashes -Path (Join-Path $assets $name))
+                    $generatedPixels = @(Get-IconFramePixelHashes -Path (Join-Path $fixture $name))
+                }
+                else {
+                    $committedPixels = @(Get-ImageFilePixelHash -Path (Join-Path $assets $name))
+                    $generatedPixels = @(Get-ImageFilePixelHash -Path (Join-Path $fixture $name))
+                }
+                if (($committedPixels -join ',') -cne ($generatedPixels -join ',')) {
+                    throw "Committed MSIX asset differs from deterministic generator output: $name"
+                }
             }
         }
         $generatorMatches = $true
