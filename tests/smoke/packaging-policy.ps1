@@ -606,7 +606,9 @@ foreach ($requiredSigningWorkflowToken in @(
     'Test-SignedReleaseArtifacts.ps1',
     'signed-windows-${{ matrix.architecture }}',
     'pattern: signed-windows-*',
-    'Attest signed Windows artifacts'
+    'Attest signed Windows artifacts',
+    'Refresh signed artifact checksums',
+    'Where-Object { $_.FullName -ne $checksum }'
 )) {
     if ($releaseSource -notmatch [Regex]::Escape($requiredSigningWorkflowToken)) {
         throw "The release workflow omits cloud-signing token: $requiredSigningWorkflowToken"

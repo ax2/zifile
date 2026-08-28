@@ -238,6 +238,20 @@ jobs:
             -ExpectedPublisher $env:ZIFILE_MSIX_PUBLISHER `
             -ExpectedPublisherDisplayName $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME `
             -Provider $env:ZIFILE_SIGNING_PROVIDER
+      - name: Refresh signed artifact checksums
+        shell: pwsh
+        run: |
+          $arch = '${{ matrix.architecture }}'
+          $output = "artifacts-$arch"
+          $checksum = Join-Path $output "SHA256SUMS-$arch.txt"
+          Get-ChildItem -LiteralPath $output -File |
+            Where-Object { $_.FullName -ne $checksum } |
+            Sort-Object Name |
+            ForEach-Object {
+              $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              "{0}  {1}" -f $hash, $_.Name
+            } |
+            Set-Content -LiteralPath $checksum
       - name: Remove ephemeral client authentication certificate
         if: always()
         shell: pwsh
