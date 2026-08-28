@@ -43,7 +43,7 @@ description: ZiFile 的外部分发门禁、所需材料与可重复命令。
 6. 复核已准备的双语商店说明、隐私说明和认证备注，部署公开隐私页，采集正式候选包的双语桌面截图，并填写年龄分级与市场。
 7. 上传通过验证的 MSIX 包并提交认证；公开 Release 附带已通过本地签后一致性门禁的 WinGet 清单，再运行官方 `winget validate` 并提交社区仓库 PR。
 
-未完成这些外部门禁时，任何 Alpha 构建都不得标记为“Microsoft Store 已就绪”或“已签名”。
+未完成这些外部门禁时，任何候选构建都不得标记为“Microsoft Store 已就绪”或“已签名”。
 
 运行 WACK 前先对目标 MSIX 与同目录 `.audit.json` 执行 `Test-WackReadiness.ps1 -ExpectedIdentityName $env:ZIFILE_MSIX_IDENTITY -ExpectedPublisher $env:ZIFILE_MSIX_PUBLISHER -ExpectedPublisherDisplayName $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME -RequireReady`。预检通过只表示工具、会话、架构、Partner Center 三字段、哈希、最低系统版本和签名满足启动条件；最终仍以 WACK 生成的正式报告为准。
 

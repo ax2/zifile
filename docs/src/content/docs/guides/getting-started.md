@@ -3,7 +3,7 @@ title: 快速上手
 description: 使用 ZiFile 浏览、校验、解压和创建压缩文件。
 ---
 
-ZiFile 目前仍是 Alpha 候选，尚未发布 Microsoft Store 或 WinGet 正式版本。只使用本仓库 GitHub Releases 或项目维护者提供的候选产物；稳定版发布后，本页会补充精确的安装渠道。不要为了安装开发包而导入未知根证书或关闭 Windows 安全检查。
+ZiFile 目前是 Stage 3 Release Candidate，尚未发布 Microsoft Store 或 WinGet 正式版本。只使用本仓库 GitHub Releases 或项目维护者提供的候选产物；稳定版发布后，本页会补充精确的安装渠道。不要为了安装开发包而导入未知根证书或关闭 Windows 安全检查。
 
 ## 打开和检查归档
 

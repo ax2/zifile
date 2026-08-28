@@ -35,7 +35,7 @@ ZiFile 会把 Worker 崩溃、协议错误或资源限制转换为任务错误�
 
 未签名 `.Dev` MSIX 不是正式发行物，某些 Windows 版本会拒绝其 Publisher。不要导入测试根证书、关闭 SmartScreen 或修改系统信任策略。使用完整可运行目录进行开发验证，等待正式可信签名或 Microsoft Store 包用于生产安装。
 
-Explorer 菜单只有在正式包成功安装并激活 Shell 扩展后才可能出现；当前 Alpha 不能把注册存在等同于可信安装和菜单生命周期验证。
+Explorer 菜单只有在正式包成功安装并激活 Shell 扩展后才可能出现；当前 Release Candidate 不能把注册存在等同于可信安装和菜单生命周期验证。
 
 ## 安全地报告问题
 

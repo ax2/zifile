@@ -35,7 +35,7 @@ ZiFile converts Worker crashes, protocol failures, and resource-limit exits into
 
 An unsigned `.Dev` MSIX is not a production artifact, and some Windows versions reject its Publisher. Do not import a test root, disable SmartScreen, or weaken system trust policy. Use the complete runnable directory for development verification and wait for a publicly trusted or Microsoft Store package for production installation.
 
-The Explorer menu can appear only after a formal package installs and activates the Shell extension. The current Alpha does not treat registration markup as proof of trusted installation or lifecycle behavior.
+The Explorer menu can appear only after a formal package installs and activates the Shell extension. The current Release Candidate does not treat registration markup as proof of trusted installation or lifecycle behavior.
 
 ## Report safely
 
