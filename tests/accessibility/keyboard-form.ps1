@@ -105,6 +105,20 @@ function Get-AppWindows {
     )
 }
 
+function Get-AppWindow {
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [Parameter(Mandatory)][IntPtr]$NativeWindowHandle
+    )
+
+    foreach ($window in @(Get-AppWindows -ProcessId $ProcessId)) {
+        if ([IntPtr]$window.Current.NativeWindowHandle -eq $NativeWindowHandle) {
+            return $window
+        }
+    }
+    throw 'ZiFile native window was not found after the UI tree was rebuilt.'
+}
+
 function Find-NamedElement {
     param(
         [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Root,
@@ -535,6 +549,28 @@ try {
     if ($script:ZiFileWindowHandle -eq [IntPtr]::Zero) {
         throw 'ZiFile did not expose a native window handle for keyboard activation.'
     }
+    if (-not $SkipArchiveWorkflow) {
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('alpha.txt', 'nested/beta.txt', 'nested\\beta.txt') `
+            -Deadline $deadline
+        $startupHome = Wait-AppElement `
+            -ProcessId $process.Id `
+            -Names @('Home', '首页') `
+            -Deadline $deadline
+        $startupHomeInvoke = [System.Windows.Automation.InvokePattern]$startupHome.Element.GetCurrentPattern(
+            [System.Windows.Automation.InvokePattern]::Pattern
+        )
+        $startupHomeInvoke.Invoke()
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('Files, packed beautifully.', '让文件整理更轻松。') `
+            -Deadline $deadline
+        $homeResult = Wait-AppElement `
+            -ProcessId $process.Id `
+            -Names @('Home', '首页') `
+            -Deadline $deadline
+    }
     $homeButton = $homeResult.Element
     $homeName = $homeButton.Current.Name
     $window.SetFocus()
@@ -586,6 +622,12 @@ try {
         -Deadline $deadline
     $createName = $createFocus.Current.Name
     Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
+    $aboutFocus = Wait-Focus `
+        -ProcessId $process.Id `
+        -Names @('About', '关于') `
+        -Deadline $deadline
+    $aboutName = $aboutFocus.Current.Name
+    Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
     $themeFocus = Wait-Focus `
         -ProcessId $process.Id `
         -Names @('Light', 'Dark', '浅色', '深色') `
@@ -602,6 +644,11 @@ try {
     $null = Wait-Focus `
         -ProcessId $process.Id `
         -Names @('Light', 'Dark', '浅色', '深色') `
+        -Deadline $deadline
+    Send-AppKey -Keys '+{TAB}' -ProcessId $process.Id
+    $null = Wait-Focus `
+        -ProcessId $process.Id `
+        -Names @('About', '关于') `
         -Deadline $deadline
     Send-AppKey -Keys '+{TAB}' -ProcessId $process.Id
     $null = Wait-Focus `
@@ -729,6 +776,7 @@ try {
         }
         Send-AppKey -Keys '{ENTER}' -ProcessId $process.Id
         $reloadActivation = 'Enter'
+        $window = Get-AppWindow -ProcessId $process.Id -NativeWindowHandle $script:ZiFileWindowHandle
         try {
             $null = Wait-DocumentText `
                 -Root $window `
@@ -889,12 +937,8 @@ try {
             -Root $window `
             -AnyOf @('No archive open', '尚未打开压缩文件') `
             -Deadline $deadline
-        Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
-        $null = Wait-Focus `
-            -ProcessId $process.Id `
-            -Names @('Create', '创建') `
-            -Deadline $deadline
-        Send-AppKey -Keys '{ENTER}' -ProcessId $process.Id
+        $script:KeyboardPhase = 'Ctrl+N transition to create form'
+        Send-AppKey -Keys '^n' -ProcessId $process.Id
         $null = Wait-DocumentText `
             -Root $window `
             -AnyOf @('Choose sources, format and compression.', '选择来源、格式与压缩等级。') `
@@ -1049,6 +1093,7 @@ try {
                 $homeName,
                 $archiveName,
                 $createName,
+                $aboutName,
                 $themeName,
                 $languageName
             )
