@@ -664,7 +664,7 @@ try {
             -Names @('Search paths', '搜索路径') `
             -ControlType ([System.Windows.Automation.ControlType]::Edit) `
             -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
-        $search = $searchFocus
+        $search = $searchFocus.Element
         if ((Get-Value -Element $search) -ne 'beta') {
             throw 'Archive search did not accept the committed beta value.'
         }
