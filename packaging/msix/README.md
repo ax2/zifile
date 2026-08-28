@@ -1,5 +1,13 @@
 # MSIX packaging
 
+## Code signing policy
+
+Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+The application is pending and this statement is not a claim that development
+or current release packages have been signed by SignPath Foundation. See the
+[canonical Code signing policy](../../CODE-SIGNING-POLICY.md) before changing
+the provider, MSIX publisher identity, or release workflow.
+
 `Test-Assets.ps1` validates the complete reviewed Windows icon matrix: 58 PNGs,
 including 11 scale-qualified package assets and all 14 app-list target sizes in
 default, dark-unplated, and light-unplated forms. It also checks exact dimensions,

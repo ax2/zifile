@@ -21,6 +21,8 @@ GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID 
 
 Partner Center 需要先手动预留名称并完成首个提交；之后可以接入 Store Submission API。签名策略见 [ADR-0006](/zifile/architecture/adr-0006-release-signing/)：Store 完成商店通道最终签名，GitHub/WinGet 使用云 HSM 托管的公开受信任签名，生产私钥不得导出到 GitHub Secret。Release workflow 已移除 PFX，并接入 DigiCert Binary Signing 的受保护 simple-signing 路径；没有真实证书证据前，1.0 签名门禁仍保持 `pending`。
 
+公开的[代码签名政策](/zifile/development/code-signing-policy/)记录 SignPath Foundation 申请状态、发布角色、来源证明边界、隐私说明以及独立的 Partner Center MSIX 身份。申请获批且 MSIX 身份决策完成评审前，不将 SignPath Foundation 接入正式发布工作流。
+
 推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE。稳定标签（例如 `v1.0.0`）随后在受保护的 `production-signing` Environment 中签署桌面/CLI/Worker EXE、Explorer DLL 和 MSIX；签后门禁要求所有文件具有同一 Publisher、有效系统信任链和时间戳，并重新生成包审计、SHA-256 与来源证明。稳定发布任务只下载 `signed-windows-*` 产物，再生成 WinGet 1.12 多文件清单候选和 GitHub Release。带连字符的阶段标签（例如 `v0.1.0-alpha.1`、`v0.1.0-beta.1`、`v1.0.0-rc.1`）不跳过构建，而是发布未签名开发包、独立 EXE、审计、校验和、SBOM 与构建证明到 GitHub Pre-release；它们不能提交 WinGet 或 Store。WinGet 候选使用社区仓库的标准目录，并在上传前把正式 URL、版本、架构和清单 SHA-256 与两份签后本地 MSIX 精确核对；官方 `winget validate` 与社区接受仍是发布后的独立证据。没有正式凭据时也可以用 `signing_provider=none` 做不公开的手动双架构验证。未签名 `.Dev` 包使用微软固定 OID Publisher 并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
 
 手动 Release 可选择 `digicert-stm` 做完整签名演练。构建阶段要求仓库 Variables `ZIFILE_MSIX_IDENTITY`、`ZIFILE_MSIX_PUBLISHER`、`ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME`；受保护 Environment 提供 Variables `SM_HOST`、`SM_KEYPAIR_ALIAS` 和 Secrets `SM_API_KEY`、`SM_CLIENT_CERT_FILE_B64`、`SM_CLIENT_CERT_PASSWORD`。客户端认证证书只用于登录签名服务，写入 Runner 临时目录并在作业结束前删除；代码签名私钥始终留在云 HSM。

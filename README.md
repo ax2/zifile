@@ -70,6 +70,7 @@ pnpm --dir docs build
 - [Desktop usage and accessibility](docs/src/content/docs/development/desktop.md)
 - [Release process](docs/src/content/docs/development/releasing.md)
 - [Production signing operations](docs/src/content/docs/development/signing-operations.md)
+- [Code signing policy](CODE-SIGNING-POLICY.md)
 - [1.0 release readiness manifest](release/readiness.json)
 - [Stage 0 work log](docs/src/content/docs/releases/stage-0.md)
 - [Stage 1 work log](docs/src/content/docs/releases/stage-1.md)
@@ -99,3 +100,11 @@ pure-Rust permissively licensed `rars` provider behind ZiFile's safety and Worke
 boundaries. Trusted-package shell activation, signing, accessibility
 certification and Store submission are still in
 progress, so no production release has been tagged yet.
+
+## Code signing policy
+
+Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+The application is being prepared and is not yet approved; current release
+artifacts must not be described as SignPath Foundation signed. See the
+[Code signing policy](CODE-SIGNING-POLICY.md) for roles, provenance, privacy,
+and the separation between WinGet and the Partner Center Store identity.

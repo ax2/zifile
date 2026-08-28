@@ -1,5 +1,13 @@
 # WinGet packaging
 
+## Code signing policy
+
+Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+The application is pending and this statement is not a claim that any current
+artifact has been signed by SignPath Foundation. WinGet manifests must use the
+final verified artifact and its post-signing SHA-256. See the [canonical Code
+signing policy](../../CODE-SIGNING-POLICY.md).
+
 ZiFile uses a schema 1.12 multi-file manifest for the signed x64 and ARM64
 MSIX packages published by a GitHub release. Generate a submission candidate
 only after the release URLs and SHA-256 values are final:
