@@ -178,6 +178,19 @@ pub fn format_archive_modified(locale: Locale, value: Option<&ArchiveTimestamp>)
     formatted
 }
 
+/// Maps stable Worker diagnostics to user-facing localized text while keeping
+/// backend-specific error details intact for all other failures.
+pub fn format_worker_error(locale: Locale, error: &str) -> String {
+    if error.eq_ignore_ascii_case("operation cancelled") {
+        return if locale == Locale::ZhCn {
+            "操作已取消".to_owned()
+        } else {
+            "Operation cancelled".to_owned()
+        };
+    }
+    error.to_owned()
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Text {
     ArchiveStudio,
@@ -290,5 +303,21 @@ mod tests {
         );
         assert!(format_archive_modified(Locale::ZhCn, Some(&value)).ends_with("无时区"));
         assert_eq!(format_archive_modified(Locale::En, None), "—");
+    }
+
+    #[test]
+    fn worker_cancellation_error_is_localized_without_rewriting_backend_errors() {
+        assert_eq!(
+            format_worker_error(Locale::ZhCn, "operation cancelled"),
+            "操作已取消"
+        );
+        assert_eq!(
+            format_worker_error(Locale::En, "Operation Cancelled"),
+            "Operation cancelled"
+        );
+        assert_eq!(
+            format_worker_error(Locale::ZhCn, "archive checksum mismatch"),
+            "archive checksum mismatch"
+        );
     }
 }

@@ -30,7 +30,7 @@ mod settings;
 mod taskbar;
 mod worker_client;
 
-use i18n::{Locale, Text, format_archive_modified};
+use i18n::{Locale, Text, format_archive_modified, format_worker_error};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
@@ -1131,7 +1131,7 @@ fn finish_worker(
         ),
         (kind, Err(error)) => (
             format!(
-                "{}: {error}",
+                "{}: {}",
                 match kind {
                     OperationKind::List => choose(locale, "Open failed", "打开失败"),
                     OperationKind::Test => {
@@ -1139,7 +1139,8 @@ fn finish_worker(
                     }
                     OperationKind::Extract => choose(locale, "Extraction failed", "解压失败"),
                     OperationKind::Create => choose(locale, "Creation failed", "创建失败"),
-                }
+                },
+                format_worker_error(locale, &error)
             ),
             StatusKind::Error,
         ),

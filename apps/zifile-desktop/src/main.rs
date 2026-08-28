@@ -32,7 +32,7 @@ use zifile_core::{
 };
 use zifile_worker_protocol::WorkerRequest;
 
-use i18n::{Locale, Text, format_archive_modified};
+use i18n::{Locale, Text, format_archive_modified, format_worker_error};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
@@ -455,8 +455,9 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     summary.skipped
                 ),
                 Err(error) => format!(
-                    "{}: {error}",
-                    choose(state.locale, "Extraction failed", "解压失败")
+                    "{}: {}",
+                    choose(state.locale, "Extraction failed", "解压失败"),
+                    format_worker_error(state.locale, &error)
                 ),
             };
             return continue_queue(state, id);

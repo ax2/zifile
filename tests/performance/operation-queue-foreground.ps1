@@ -27,6 +27,50 @@ namespace ZiFileQueueForeground
 
         [DllImport("user32.dll")]
         public static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        public static extern bool ShowWindow(IntPtr windowHandle, int command);
+
+        [DllImport("user32.dll")]
+        public static extern bool BringWindowToTop(IntPtr windowHandle);
+
+        [DllImport("user32.dll")]
+        public static extern uint GetWindowThreadProcessId(IntPtr windowHandle, out uint processId);
+
+        [DllImport("user32.dll")]
+        public static extern bool AttachThreadInput(uint sourceThreadId, uint targetThreadId, bool attach);
+
+        [DllImport("kernel32.dll")]
+        public static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll")]
+        public static extern bool AllowSetForegroundWindow(int processId);
+
+        public const int SwRestore = 9;
+
+        public static bool TryActivateWindow(IntPtr windowHandle)
+        {
+            ShowWindow(windowHandle, SwRestore);
+            var foreground = GetForegroundWindow();
+            var foregroundThread = GetWindowThreadProcessId(foreground, out _);
+            var targetThread = GetWindowThreadProcessId(windowHandle, out var targetProcess);
+            var currentThread = GetCurrentThreadId();
+            var attachedToForeground = foregroundThread != 0 && foregroundThread != currentThread &&
+                AttachThreadInput(currentThread, foregroundThread, true);
+            var attachedToTarget = targetThread != 0 && targetThread != currentThread &&
+                AttachThreadInput(currentThread, targetThread, true);
+            try
+            {
+                AllowSetForegroundWindow((int)targetProcess);
+                BringWindowToTop(windowHandle);
+                return SetForegroundWindow(windowHandle);
+            }
+            finally
+            {
+                if (attachedToTarget) AttachThreadInput(currentThread, targetThread, false);
+                if (attachedToForeground) AttachThreadInput(currentThread, foregroundThread, false);
+            }
+        }
     }
 }
 '@
@@ -68,9 +112,15 @@ function New-ArchiveFixture {
 
 function Wait-WindowElement {
     param([Parameter(Mandatory)][int]$ProcessId, [Parameter(Mandatory)][DateTime]$Deadline)
-    $condition = [System.Windows.Automation.PropertyCondition]::new(
-        [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
-        $ProcessId
+    $condition = [System.Windows.Automation.AndCondition]::new(
+        [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+            $ProcessId
+        ),
+        [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+            [System.Windows.Automation.ControlType]::Window
+        )
     )
     do {
         $window = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
@@ -91,7 +141,7 @@ function Set-TestWindowForeground {
     $handle = [IntPtr]$Window.Current.NativeWindowHandle
     if ($handle -eq [IntPtr]::Zero) { throw 'ZiFile exposed a zero native window handle.' }
     do {
-        $null = [ZiFileQueueForeground.NativeMethods]::SetForegroundWindow($handle)
+        $null = [ZiFileQueueForeground.NativeMethods]::TryActivateWindow($handle)
         if ([ZiFileQueueForeground.NativeMethods]::GetForegroundWindow() -eq $handle) { return }
         try { $Window.SetFocus() } catch { }
         if ([ZiFileQueueForeground.NativeMethods]::GetForegroundWindow() -eq $handle) { return }

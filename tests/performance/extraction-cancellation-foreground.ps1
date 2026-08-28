@@ -63,9 +63,15 @@ function New-ArchiveFixture {
 
 function Wait-WindowElement {
     param([Parameter(Mandatory)][int]$ProcessId, [Parameter(Mandatory)][DateTime]$Deadline)
-    $condition = [System.Windows.Automation.PropertyCondition]::new(
-        [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
-        $ProcessId
+    $condition = [System.Windows.Automation.AndCondition]::new(
+        [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+            $ProcessId
+        ),
+        [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+            [System.Windows.Automation.ControlType]::Window
+        )
     )
     do {
         $window = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
@@ -133,17 +139,25 @@ function Wait-DocumentAnyText {
         [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Root,
         [Parameter(Mandatory)][string[]]$AnyOf,
         [Parameter(Mandatory)][DateTime]$Deadline
-    )
+)
+    $lastText = $null
     do {
         try {
             $text = Get-DocumentText -Root $Root
+            if ($text) { $lastText = $text }
             if ($text -and @($AnyOf | Where-Object { $text.Contains($_) }).Count -gt 0) { return $text }
         }
         catch [System.Windows.Automation.ElementNotAvailableException] { }
         catch [System.InvalidOperationException] { }
         Start-Sleep -Milliseconds 20
     } while ([DateTime]::UtcNow -lt $Deadline)
-    throw "Timed out waiting for document text: $($AnyOf -join ' | ')"
+    $diagnostic = if ([string]::IsNullOrWhiteSpace($lastText)) {
+        '<no UI Automation document text observed>'
+    } else {
+        $normalized = ($lastText -replace '\s+', ' ').Trim()
+        $normalized.Substring(0, [Math]::Min(800, $normalized.Length))
+    }
+    throw "Timed out waiting for document text: $($AnyOf -join ' | '). Last document text: $diagnostic"
 }
 
 function Get-WorkerChildren {
@@ -188,9 +202,14 @@ try {
         [System.Windows.Automation.InvokePattern]::Pattern
     )).Invoke()
     $cancelledText = Wait-DocumentAnyText -Root $window -AnyOf @(
-        'Extraction failed: Cancelled',
-        '解压失败: Cancelled'
+        'Extraction failed: Operation cancelled',
+        '解压失败: 操作已取消'
     ) -Deadline $deadline
+    $cancellationStatus = if ($cancelledText.Contains('Extraction failed: Operation cancelled')) {
+        'Extraction failed: Operation cancelled'
+    } else {
+        '解压失败: 操作已取消'
+    }
     Wait-WorkersGone -ParentProcessId $process.Id -Deadline $deadline
 
     $files = if (Test-Path -LiteralPath $destination -PathType Container) {
@@ -209,7 +228,7 @@ try {
         fixture_entry_bytes = $EntryBytes
         fixture_generated = $generatedFixture
         active_cancelled = $true
-        cancellation_status_observed = if ($cancelledText.Contains('Extraction failed')) { 'Extraction failed: Cancelled' } else { '解压失败: Cancelled' }
+        cancellation_status_observed = $cancellationStatus
         committed_full_files = $files.Count
         partial_output_files = 0
         partial_output_files_verified = $true
