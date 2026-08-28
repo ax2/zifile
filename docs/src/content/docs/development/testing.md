@@ -16,7 +16,7 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 
 ## 测试层级
 
-当前验证注记：`keyboard-form.ps1` 的历史局部回合不能替代 2026-08-28 fresh full-workflow 结果；该回合在初始导航阶段观察到“关于”焦点出现在预期的主题控件之前，因此完整键盘门禁仍为 pending。失败边界和对应源码版本保存在项目 Stage 4 档案中。
+当前验证注记：`keyboard-form.ps1` 的 2026-08-28 fresh full-workflow 已在本机 x64 可访问候选上通过。测试先等待启动归档加载完成并回到首页，Reload 后刷新异步重建的 UIA 根节点，无归档转场使用产品定义的 `Ctrl+N` 快捷键；结构化证据保存在项目 Stage 4 档案中。该结果只覆盖本机 x64 UI Automation，不替代 Narrator、IME、高对比度、DPI 或正式辅助技术认证。
 
 | 类型 | 目标 |
 | --- | --- |
@@ -84,7 +84,7 @@ RAR 校验基准使用确定性的 8 MiB RAR 5 method-3 归档，并加入低频
 
 `tests/performance/archive-load-cancellation.ps1` 使用相同的确定性 100,000 条目 ZIP，在候选界面暴露已启用的取消按钮后立即调用，要求最终 live status 为取消错误、不得出现成功打开状态、对应 Worker 必须退出，并在结束时关闭测试实例和删除临时 ZIP。最终五轮基线的取消完成中位数/p95 为 930.78/1088.73 ms；五轮确认时 Worker 数均为 0。该计时从 UI Automation 调用取消开始，到界面收到 Worker 的最终取消结果为止。
 
-`tests/accessibility/keyboard-form.ps1` 从候选原生窗口根开始发送真实 Tab/Shift+Tab/Enter 和表单按键，并通过 UI Automation 读取 WebView2 内部焦点。它验证首页→归档→创建→主题→语言顺序、反向导航、归档/创建页激活、创建页 disabled 按钮不获得焦点、格式选择为 7z、压缩等级 `6→7→6`、密码键入后用 Ctrl+A/Backspace 清空，以及两个来源按钮可达。默认流程还创建两个条目的 ZIP，验证归档列表、完整性校验、归档密码框的局部 Ctrl+A、Reload、搜索提交与局部 Ctrl+A、归档全选/清空、冲突策略、单页分页禁用和解压按钮状态；`-SkipArchiveWorkflow` 仅用于隔离旧的创建表单回归。固定测试密码只在进程内使用，JSON 不记录其值。脚本在每次发送前要求前台原生句柄精确属于本次 ZiFile；用户切换到其他窗口时立即失败并在 `finally` 中关闭测试实例。默认持久化语言下，Windows x64 已有完整独立前台回合通过证据；`-ToggleLanguageBeforeTest -SkipArchiveWorkflow` 另已验证切换到另一语言后的创建页键盘流程。当前英文完整归档回合仍未写成通过证据。原始 JSON 见项目档案；这些证据仍不替代 Narrator、IME、高对比度、DPI 和正式辅助技术认证。
+`tests/accessibility/keyboard-form.ps1` 从候选原生窗口根开始发送真实 Tab/Shift+Tab/Enter 和表单按键，并通过 UI Automation 读取 WebView2 内部焦点。它验证首页→归档→创建→主题→语言顺序、反向导航、归档/创建页激活、创建页 disabled 按钮不获得焦点、格式选择为 7z、压缩等级 `6→7→6`、密码键入后用 Ctrl+A/Backspace 清空，以及两个来源按钮可达。默认流程还创建两个条目的 ZIP，验证归档列表、完整性校验、归档密码框的局部 Ctrl+A、Reload、搜索提交与局部 Ctrl+A、归档全选/清空、冲突策略、单页分页禁用和解压按钮状态；`-SkipArchiveWorkflow` 仅用于隔离旧的创建表单回归。固定测试密码只在进程内使用，JSON 不记录其值。脚本在每次发送前要求前台原生句柄精确属于本次 ZiFile；用户切换到其他窗口时立即失败并在 `finally` 中关闭测试实例。默认持久化语言下，Windows x64 已有完整独立前台归档工作流通过证据；`-ToggleLanguageBeforeTest -SkipArchiveWorkflow` 另已验证切换到另一语言后的创建页键盘流程。原始 JSON 见项目档案；这些证据仍不替代 Narrator、IME、高对比度、DPI 和正式辅助技术认证。
 
 可访问候选会在对应语义控件上公开实际处理的 `Ctrl+O`、`Ctrl+N`、`F1`、`Escape` 和归档区域 `Ctrl+A`，源码回归同时锁定处理器与 `aria-keyshortcuts` 元数据；这证明接线一致，不替代屏幕阅读器的真实朗读验证。
 

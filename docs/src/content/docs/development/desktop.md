@@ -43,7 +43,7 @@ Worker 的字节进度（无字节总量时回退到条目进度）同步到 Win
 
 ## 已验证与待验证
 
-当前 fresh full-workflow 键盘回合尚未通过：初始导航阶段的 `FocusedElement` 先到达“关于”而不是脚本预期的主题控件。历史局部回合和代码级语义测试仍然有效，但不能替代这次失败边界；完整键盘遍历、Narrator、IME、高对比度和 DPI 门禁继续保持待验证。
+2026-08-28 fresh full-workflow 键盘回合已通过本机 x64 可访问候选：正反向导航、ZIP 归档校验与 Reload、密码框和搜索作用域 Ctrl+A、选择/冲突策略、解压状态以及创建表单均完成。该结果只覆盖可重复的 UI Automation 前台会话；Narrator、IME、高对比度、DPI、物理 ARM64 和正式辅助技术认证继续待验证。
 
 自动测试与 Criterion 已覆盖 100,000 个模拟条目的过滤和有界分页；Windows 实机已检查 1,200 项 ZIP 的三页翻页、搜索、中英文、深浅主题及 `Ctrl+N`。Dioxus 候选另以真实 2 项 ZIP 验证归档区 `Ctrl+A`、动态选择标签与 live status，并以真实 100,000 项 ZIP 验证 Worker 列出、500 行有界 UIA 表格、搜索、多页导航和加载取消。五轮加载取消均进入最终取消状态，且对应 Worker 已退出。
 

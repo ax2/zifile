@@ -25,7 +25,7 @@ ZiFile 的上架质量要求包含键盘、Narrator/UI Automation、高对比度
 
 ## 当前证据
 
-> 当前验证注记（2026-08-28）：历史局部键盘回合不能替代当前 fresh full-workflow 结果。最新回合在初始导航阶段观察到“关于”焦点出现在预期的主题控件之前，因此完整键盘门禁仍为 pending；该失败边界已记录在项目档案。
+> 当前验证注记（2026-08-28）：`keyboard-form.ps1` 的 fresh full-workflow 已在本机 x64 可访问候选上通过。测试修复了启动归档加载与首页导航竞态、Reload 后异步 UIA 根节点重建，以及无归档页面错误使用 Tab 代替 `Ctrl+N` 的测试假设。结果已记录在项目档案；该证据只覆盖本机 x64 UI Automation，不等同于 Narrator、IME、高对比度、DPI 或正式辅助技术认证。
 
 仓库已加入需显式启用 `accessible-ui` feature 的 `zifile-desktop-accessible` 候选。它复用设置、任务栏、版本化 Worker IPC 和核心安全限制，包含首页、命令行打开、归档列表/筛选/分页/选择、完整性校验、解压配置、创建来源/格式/压缩等级/密码、进度与取消。
 
