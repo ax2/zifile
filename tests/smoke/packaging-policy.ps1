@@ -353,9 +353,6 @@ finally {
         }
     }
 }
-$null = Get-ExpectedFailure -Pattern 'does not contain release heading' -Action {
-    & $releaseNotes -ExpectedVersion $versionResult.tag
-}
 $releaseFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
     'zifile-release-notes-{0}' -f [Guid]::NewGuid().ToString('N')
 )))
@@ -371,13 +368,18 @@ try {
 # Changelog
 
 ## [Unreleased]
+"@ | Set-Content -LiteralPath (Join-Path $releaseFixture 'CHANGELOG.md') -Encoding utf8NoBOM
+    $null = Get-ExpectedFailure -Pattern 'does not contain release heading' -Action {
+        & $releaseNotes -RepositoryRoot $releaseFixture -ExpectedVersion $versionResult.tag
+    }
+    @"
 
 ## [$($versionResult.version)] - 2026-08-26
 
 ### Added
 
 - Candidate release evidence.
-"@ | Set-Content -LiteralPath (Join-Path $releaseFixture 'CHANGELOG.md') -Encoding utf8NoBOM
+"@ | Add-Content -LiteralPath (Join-Path $releaseFixture 'CHANGELOG.md') -Encoding utf8NoBOM
     $taggedNotes = & $releaseNotes -RepositoryRoot $releaseFixture -ExpectedVersion $versionResult.tag |
         ConvertFrom-Json
     if (-not $taggedNotes.ready_for_tag -or $taggedNotes.release_entries -ne 1) {
