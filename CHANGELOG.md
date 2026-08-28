@@ -4,6 +4,26 @@ All notable changes to ZiFile are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.0-alpha.1] - 2026-08-28
+
+### Added
+
+- Initial Windows alpha milestone for the Rust workspace, including the Iced
+  desktop UI, CLI, isolated Worker, and Astro Starlight documentation site.
+- ZIP, 7z, TAR-family, gzip, Zstandard, XZ, Bzip2, LZ4, Brotli, RAR
+  read-only beta, and CAB read-only beta archive workflows.
+- Bilingual archive browsing, creation, extraction, integrity testing, search,
+  selection, pagination, conflict policies, password unlock, and cancellation.
+- Windows x64/ARM64 packaging, checksums, SBOM, provenance, and staged GitHub
+  Release automation.
+
+### Fixed
+
+- Stabilized the accessible keyboard workflow across asynchronous archive load,
+  reload, navigation, selection, and create-form state changes.
+- Recomputed stable-release checksums after cloud signing replaces the staged
+  executable and package files.
+
 ## [Unreleased]
 
 ### Fixed
