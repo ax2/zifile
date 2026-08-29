@@ -20,6 +20,7 @@ fn archive_with_100k_entries() -> ArchiveInfo {
                 compressed_size: 1,
                 is_directory: false,
                 encrypted: false,
+                checksum: None,
                 modified: None,
             })
             .collect(),

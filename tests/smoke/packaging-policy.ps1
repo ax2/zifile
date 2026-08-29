@@ -12,6 +12,8 @@ $cabInteroperability = Join-Path $repoRoot 'tests\interoperability\cab-windows.p
 $zipMethodCorpus = Join-Path $repoRoot 'tests\interoperability\zip-method-corpus.ps1'
 $zipLegacyCorpus = Join-Path $repoRoot 'tests\interoperability\zip-legacy-corpus.ps1'
 $zipZstdCorpus = Join-Path $repoRoot 'tests\interoperability\zip-zstd-corpus.ps1'
+$windowsTools = Join-Path $repoRoot 'tests\interoperability\windows-tools.ps1'
+$contractPolicy = Join-Path $repoRoot 'tests\smoke\contract-policy.ps1'
 $wackReadiness = Join-Path $repoRoot 'packaging\msix\Test-WackReadiness.ps1'
 $versionConsistency = Join-Path $repoRoot 'scripts\Test-VersionConsistency.ps1'
 $releaseNotes = Join-Path $repoRoot 'scripts\Test-ReleaseNotes.ps1'
@@ -35,7 +37,7 @@ $embeddedIconAudit = Join-Path $repoRoot 'packaging\msix\Test-EmbeddedIcon.ps1'
 $storeListingAssets = Join-Path $repoRoot 'packaging\store\Test-ListingAssets.ps1'
 $storeListingAssetSmoke = Join-Path $repoRoot 'tests\smoke\store-listing-assets.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground, $msixAssets, $embeddedIconAudit, $storeListingAssets, $storeListingAssetSmoke)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $windowsTools, $contractPolicy, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground, $msixAssets, $embeddedIconAudit, $storeListingAssets, $storeListingAssetSmoke)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -595,6 +597,9 @@ if ($buildSource -notmatch [Regex]::Escape("Test-Package.ps1")) {
 }
 $releaseSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\release.yml')
 $lifecycleWorkflowSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflows\msix-lifecycle.yml')
+if ($releaseSource -notmatch [Regex]::Escape('Free code signing provided by SignPath.io, certificate by SignPath Foundation.')) {
+    throw 'The stage release workflow must preserve the SignPath Foundation attribution in generated prerelease notes.'
+}
 foreach ($requiredSigningWorkflowToken in @(
     'signing_provider:',
     'environment: production-signing',
@@ -607,7 +612,6 @@ foreach ($requiredSigningWorkflowToken in @(
     'timestamp: true',
     'Test-SignedReleaseArtifacts.ps1',
     'signed-windows-${{ matrix.architecture }}',
-    'pattern: signed-windows-*',
     'Attest signed Windows artifacts',
     'Refresh signed artifact checksums',
     'Where-Object { $_.FullName -ne $checksum }'
@@ -644,7 +648,7 @@ if ($releaseSource -notmatch [Regex]::Escape('Test-ReleaseNotes.ps1 @arguments')
 }
 if ($releaseSource -notmatch [Regex]::Escape('Test-ReleaseReadiness.ps1 @readinessArguments') -or
     $releaseSource -notmatch [Regex]::Escape('$readinessArguments.RequireReleaseReady = $true')) {
-    throw 'The release workflow does not reject unresolved gates for stable tags.'
+    throw 'The release workflow does not retain the explicit formal-readiness option.'
 }
 if ($releaseSource -match [Regex]::Escape('${{ inputs.version }}')) {
     throw 'The release workflow still accepts a second mutable version source.'
@@ -670,8 +674,8 @@ foreach ($requiredStageReleaseToken in @(
 if ($releaseSource -match [Regex]::Escape('sha256sum release/* > release/SHA256SUMS-stage.txt')) {
     throw 'The stage release checksum manifest must not hash itself.'
 }
-if ($releaseSource -notmatch [Regex]::Escape("if: (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')) || inputs.signing_provider == 'digicert-stm'")) {
-    throw 'The production signing job must be limited to stable tags or an explicit manual signing rehearsal.'
+if ($releaseSource -notmatch [Regex]::Escape("if: inputs.signing_provider == 'digicert-stm'")) {
+    throw 'The production signing job must be limited to an explicit manual signing rehearsal.'
 }
 if ($releaseSource -match [Regex]::Escape("if: startsWith(github.ref, 'refs/tags/v') || inputs.signing_provider == 'digicert-stm'")) {
     throw 'The production signing job must not run automatically for prerelease tags.'
@@ -679,10 +683,33 @@ if ($releaseSource -match [Regex]::Escape("if: startsWith(github.ref, 'refs/tags
 if ($releaseSource -notmatch [Regex]::Escape('.audit.json')) {
     throw 'The release workflow does not stage MSIX audit evidence.'
 }
+foreach ($requiredIdentitySelectionToken in @(
+    '$useFormalIdentity',
+    ([char]39 + '${{ inputs.signing_provider }}' + [char]39 + ' -eq ' + [char]39 + 'digicert-stm' + [char]39),
+    ([char]39 + '${{ inputs.require_release_ready }}' + [char]39 + ' -eq ' + [char]39 + 'true' + [char]39),
+    'if ($useFormalIdentity)',
+    'Build-Package.ps1 @arguments'
+)) {
+    if ($releaseSource -notmatch [Regex]::Escape($requiredIdentitySelectionToken)) {
+        throw "The release workflow does not guard formal MSIX identity selection: $requiredIdentitySelectionToken"
+    }
+}
+foreach ($requiredPublicReleaseToken in @(
+    'needs: [windows, sbom]',
+    'pattern: windows-*',
+    'prerelease: false',
+    'public unsigned Windows build',
+    'Verify the included SHA256SUMS file'
+)) {
+    if ($releaseSource -notmatch [Regex]::Escape($requiredPublicReleaseToken)) {
+        throw "The stable GitHub release does not publish the unsigned public build: $requiredPublicReleaseToken"
+    }
+}
 $manifestSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'packaging\msix\AppxManifest.xml')
 foreach ($requiredShellToken in @(
     'windows.comServer',
     'windows.fileExplorerContextMenus',
+    'Directory\Background',
     'zifile-shell.dll',
     '2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531',
     '2D39AD2E-1B36-4F4F-8E09-589F0B1D2BC3',
@@ -751,21 +778,51 @@ foreach ($requiredExtractShellToken in @(
     'EXTRACT_COMMAND_CLSID',
     '--extract-here',
     'ECS_HIDDEN',
+    'E_PENDING',
+    'ok_to_be_slow',
     'shell_icon_resource',
-    'zifile-desktop.exe,0'
+    'zifile-desktop.exe,0',
+    'detect_format',
+    'path.is_file()',
+    'symlink_metadata',
+    'file_type().is_symlink()',
+    'WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT',
+    'file_attributes()',
+    'is_real_file_or_directory'
 )) {
     if ($shellSource -notmatch [Regex]::Escape($requiredExtractShellToken)) {
         throw "The Rust shell extension omits extract command behavior: $requiredExtractShellToken"
     }
 }
-foreach ($requiredExtractExtension in @(
-    'zip', 'zipx', 'cbz', '7z', 'cb7', 'rar', 'cbr', 'cab', 'tar', 'cbt',
-    'gz', 'tgz', 'zst', 'tzst', 'xz', 'txz', 'lzma', 'bz', 'bz2', 'tbz',
-    'tbz2', 'lz4', 'br'
+foreach ($requiredShellLifetimeToken in @(
+    'LIVE_OBJECTS',
+    'SERVER_LOCKS',
+    'update_server_locks',
+    'unload_result',
+    'DllCanUnloadNow'
 )) {
-    if ($shellSource -notmatch [Regex]::Escape(('"{0}"' -f $requiredExtractExtension))) {
-        throw "The Explorer extract command omits a packaged archive extension: $requiredExtractExtension"
+    if ($shellSource -notmatch [Regex]::Escape($requiredShellLifetimeToken)) {
+        throw "The Rust shell extension omits COM lifetime accounting: $requiredShellLifetimeToken"
     }
+}
+foreach ($requiredBackgroundShellToken in @(
+    'IObjectWithSite',
+    'IServiceProvider',
+    'IShellBrowser',
+    'IFolderView',
+    'SID_STopLevelBrowser',
+    'current_folder_path',
+    'create_sources',
+    'deduplicate_paths',
+    'paths_have_same_identity',
+    'validate_create_paths'
+)) {
+    if ($shellSource -notmatch [Regex]::Escape($requiredBackgroundShellToken)) {
+        throw "The Rust shell extension omits folder-background resolution: $requiredBackgroundShellToken"
+    }
+}
+if ($shellSource -match [Regex]::Escape('EXTRACT_ARCHIVE_EXTENSIONS')) {
+    throw 'The Explorer extract command must reuse the core extension registry instead of a duplicate allowlist.'
 }
 $startupSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'apps\zifile-desktop\src\startup.rs')
 if ($startupSource -notmatch [Regex]::Escape('ExtractHere') -or
@@ -773,17 +830,46 @@ if ($startupSource -notmatch [Regex]::Escape('ExtractHere') -or
     throw 'The shared desktop startup parser omits Explorer extract mode.'
 }
 $coreSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'crates\zifile-core\src\lib.rs')
+$coreArchiveSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'crates\zifile-core\src\archive.rs')
+$createValidationSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'apps\zifile-desktop\src\create_validation.rs')
 if ($coreSource -notmatch [Regex]::Escape('OPEN_ARCHIVE_EXTENSIONS')) {
     throw 'The core does not expose the shared desktop extension registry.'
 }
+foreach ($requiredCreateValidationToken in @(
+    'CreateSourceIssue::LinkSource',
+    'is_link_like',
+    'symlink_metadata',
+    'file_type().is_symlink()',
+    'WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT',
+    'file_attributes()'
+)) {
+    if ($createValidationSource -notmatch [Regex]::Escape($requiredCreateValidationToken)) {
+        throw "The desktop create preflight omits link-like source protection: $requiredCreateValidationToken"
+    }
+}
+foreach ($requiredDestinationSafetyToken in @(
+    'reject_symlink_components',
+    'metadata_is_link_like',
+    'file_attributes',
+    'WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT'
+)) {
+    if ($coreArchiveSource -notmatch [Regex]::Escape($requiredDestinationSafetyToken)) {
+        throw "Core extraction destination safety omits: $requiredDestinationSafetyToken"
+    }
+}
 foreach ($requiredCoreExtension in @(
     'zip', 'zipx', 'cbz', 'epub', '7z', 'cb7', 'rar', 'cbr', 'cab', 'tar', 'cbt',
-    'gz', 'tgz', 'zst', 'tzst', 'xz', 'txz', 'lzma', 'bz', 'bz2', 'tbz', 'tbz2',
+    'gz', 'tar.gz', 'tgz', 'zst', 'tar.zst', 'tzst', 'xz', 'tar.xz', 'txz', 'tar.lzma', 'lzma',
+    'bz', 'bz2', 'tar.bz2', 'tbz', 'tbz2',
     'lz4', 'br'
 )) {
     if ($coreSource -notmatch [Regex]::Escape(('"{0}"' -f $requiredCoreExtension))) {
         throw "The shared desktop extension registry omits: $requiredCoreExtension"
     }
+}
+if ($coreSource -notmatch [Regex]::Escape('COMPOUND_ARCHIVE_EXTENSIONS') -or
+    $startupSource -notmatch [Regex]::Escape('COMPOUND_ARCHIVE_EXTENSIONS')) {
+    throw 'Core format detection and desktop extraction naming must share the compound archive registry.'
 }
 foreach ($desktopSourcePath in @(
     (Join-Path $repoRoot 'apps\zifile-desktop\src\main.rs'),
@@ -793,9 +879,45 @@ foreach ($desktopSourcePath in @(
     if ($desktopSource -notmatch [Regex]::Escape('OPEN_ARCHIVE_EXTENSIONS')) {
         throw "The desktop archive dialog does not use the shared extension registry: $desktopSourcePath"
     }
+    if ($desktopSource -notmatch [Regex]::Escape('is_openable_archive_path')) {
+        throw "The desktop drop handler does not use shared signature-first classification: $desktopSourcePath"
+    }
+    if ($desktopSource -notmatch [Regex]::Escape('append_unique_paths')) {
+        throw "The desktop source handler does not use shared Windows-aware path deduplication: $desktopSourcePath"
+    }
+    if ($desktopSourcePath -match '\\main\.rs$' -and
+        ($desktopSource -notmatch [Regex]::Escape('Task::perform') -or
+         $desktopSource -notmatch [Regex]::Escape('FileDropClassified'))) {
+        throw "The default desktop drop probe must run through an asynchronous Task: $desktopSourcePath"
+    }
+    if ($desktopSourcePath -match '\\accessible_main\.rs$' -and
+        ($desktopSource -notmatch [Regex]::Escape('spawn_blocking') -or
+         $desktopSource -notmatch [Regex]::Escape('handle_classified_drop'))) {
+        throw "The accessible desktop drop probe must run through spawn_blocking: $desktopSourcePath"
+    }
     if ($desktopSource -notmatch [Regex]::Escape('automatic_extract_destination') -or
         $desktopSource -notmatch [Regex]::Escape('extraction_destination')) {
         throw "The desktop does not implement the Explorer extract startup workflow: $desktopSourcePath"
+    }
+}
+$desktopLibrarySource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'apps\zifile-desktop\src\lib.rs')
+foreach ($requiredDropClassificationToken in @(
+    'detect_format(path)',
+    'detect_format_from_path(path)',
+    'format.capabilities().list',
+    'path.is_file()'
+)) {
+    if ($desktopLibrarySource -notmatch [Regex]::Escape($requiredDropClassificationToken)) {
+        throw "The shared desktop drop classifier omits signature-first behavior: $requiredDropClassificationToken"
+    }
+}
+foreach ($requiredSourceIdentityToken in @(
+    'append_unique_paths',
+    'paths_have_same_identity',
+    'to_lowercase'
+)) {
+    if ($desktopLibrarySource -notmatch [Regex]::Escape($requiredSourceIdentityToken)) {
+        throw "The shared desktop source deduplication omits Windows path identity behavior: $requiredSourceIdentityToken"
     }
 }
 foreach ($requiredAssociation in @('.cbz', '.cb7', '.cbr', '.cbt', '.tzst', '.txz', '.lzma', '.bz', '.tbz', '.tbz2')) {
@@ -805,6 +927,9 @@ foreach ($requiredAssociation in @('.cbz', '.cb7', '.cbr', '.cbt', '.tzst', '.tx
     if ($packageAuditSource -notmatch [Regex]::Escape("'$requiredAssociation'")) {
         throw "The package audit omits supported archive alias: $requiredAssociation"
     }
+}
+if ($manifestSource -match [Regex]::Escape('<uap:FileType>.tar.lzma</uap:FileType>')) {
+    throw 'The MSIX manifest must not declare the compound .tar.lzma suffix; Appx FileType accepts one extension component.'
 }
 if ($manifestSource -match [Regex]::Escape('<uap:FileType>.epub</uap:FileType>')) {
     throw 'The MSIX manifest must not take over EPUB by default.'
@@ -888,7 +1013,11 @@ foreach ($requiredForegroundQueueToken in @(
     'Refusing to run the foreground queue smoke because ZiFile is not the foreground window.',
     'foreground_window_verified = $true',
     '<no UI Automation document text observed>',
-    '[Math]::Min(500, $normalized.Length)'
+    '[Math]::Min(500, $normalized.Length)',
+    'WorkerDelayMilliseconds',
+    'ZIFILE_TEST_WORKER_DELAY_MS',
+    'Get-ButtonDiagnostics',
+    '[Math]::Min($buttons.Count, 32)'
 )) {
     if ($operationQueueForegroundSource -notmatch [Regex]::Escape($requiredForegroundQueueToken)) {
         throw "The foreground operation-queue smoke omits required ownership token: $requiredForegroundQueueToken"
@@ -898,12 +1027,27 @@ $ciSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot '.github\workflow
 foreach ($ciTimeout in @(
     @{ Job = 'rust'; Minutes = 45 },
     @{ Job = 'rar-interoperability'; Minutes = 30 },
+    @{ Job = 'performance'; Minutes = 30 },
     @{ Job = 'licenses'; Minutes = 15 },
     @{ Job = 'fuzz'; Minutes = 20 },
     @{ Job = 'repair-helper'; Minutes = 15 },
     @{ Job = 'docs'; Minutes = 15 }
 )) {
     Assert-WorkflowJobTimeout -Source $ciSource -Job $ciTimeout.Job -Minutes $ciTimeout.Minutes -Workflow 'CI'
+}
+foreach ($requiredPerformanceToken in @(
+    'Rust performance benchmarks',
+    'cargo bench -p zifile-core --bench format_detection --locked',
+    'cargo bench -p zifile-core --bench archive_throughput --locked',
+    '--sample-size 10 --save-baseline ci',
+    'name: rust-performance',
+    'target/benchmarks/*',
+    'target/criterion',
+    'if: always()'
+)) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredPerformanceToken)) {
+        throw "CI does not execute or retain performance evidence: $requiredPerformanceToken"
+    }
 }
 if ($ciSource -notmatch [Regex]::Escape('./scripts/Test-VersionConsistency.ps1')) {
     throw 'CI does not enforce version consistency.'
@@ -1061,6 +1205,47 @@ foreach ($requiredCabCiToken in @(
         throw "CI does not publish the CAB interoperability gate or evidence: $requiredCabCiToken"
     }
 }
+$windowsToolsSource = Get-Content -Raw -LiteralPath $windowsTools
+foreach ($requiredWindowsToolsToken in @(
+    'tar.exe -c --lzma -f',
+    'reference.tar.lzma',
+    '--format tar-lzma',
+    'tar.exe -x --lzma -f',
+    'ZIP, tar.gz, tar.lzma and 7z'
+)) {
+    if ($windowsToolsSource -notmatch [Regex]::Escape($requiredWindowsToolsToken)) {
+        throw "The Windows reference interoperability gate omits required token: $requiredWindowsToolsToken"
+    }
+}
+foreach ($requiredWindowsToolsCiToken in @(
+    'windows-tools.ps1 -SkipBuild',
+    'Upload Windows reference-tool interoperability evidence',
+    'target/windows-tools-interoperability.json'
+)) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredWindowsToolsCiToken)) {
+        throw "CI does not publish the Windows reference interoperability evidence: $requiredWindowsToolsCiToken"
+    }
+}
+foreach ($requiredContractPolicyToken in @(
+    'formats',
+    'tar-lzma',
+    'runtime_error_exit_code = 1',
+    'syntax_error_exit_code = 2',
+    'bilingual_contract_docs_checked'
+)) {
+    $contractPolicySource = Get-Content -Raw -LiteralPath $contractPolicy
+    if ($contractPolicySource -notmatch [Regex]::Escape($requiredContractPolicyToken)) {
+        throw "The CLI contract smoke omits required token: $requiredContractPolicyToken"
+    }
+}
+foreach ($requiredContractCiToken in @(
+    'CLI contract smoke test',
+    'contract-policy.ps1 -SkipBuild'
+)) {
+    if ($ciSource -notmatch [Regex]::Escape($requiredContractCiToken)) {
+        throw "CI does not execute the CLI contract smoke: $requiredContractCiToken"
+    }
+}
 $zipMethodCorpusSource = Get-Content -Raw -LiteralPath $zipMethodCorpus
 foreach ($requiredZipMethodToken in @(
     "name = 'deflate64'",
@@ -1210,6 +1395,8 @@ foreach ($requiredLivePrivacyToken in @(
     zipx_association_wired = $true
     archive_alias_ingress_wired = $true
     cab_interoperability_wired = $true
+    windows_tools_interoperability_wired = $true
+    cli_contract_smoke_wired = $true
     zip_method_corpus_wired = $true
     zip_legacy_corpus_wired = $true
     zip_zstd_corpus_wired = $true

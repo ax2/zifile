@@ -10,8 +10,8 @@ description: ZiFile 当前已验证和计划中的压缩与归档格式能力矩
 | ZIP | 是 | 是 | 是 | AES | 已实现 |
 | 7z | 是 | 是 | 是 | AES | 已实现 |
 | TAR | 是 | 是 | 是 | 否 | 已实现 |
-| TAR + gzip/zstd/xz/bzip2 | 是 | 是 | 是 | 否 | 已实现 |
-| 单流 gzip/zstd/xz/bzip2/lz4/brotli | 单条目 | 是 | 是 | 否 | 已实现 |
+| TAR + gzip/zstd/xz/LZMA/bzip2 | 是 | 是 | 是 | 否 | 已实现 |
+| 单流 gzip/zstd/xz/lzma/bzip2/lz4/brotli | 单条目 | 是 | 是 | 否 | 已实现 |
 | RAR 1.3–7 | 是 | 是 | 否 | 读取 | Beta |
 | Windows CAB | 是 | 是 | 否 | 否 | Beta |
 
@@ -19,13 +19,15 @@ ZIP 读取支持 Store、Deflate、Deflate64、BZip2、LZMA、XZ、Zstandard 与
 
 `.zipx` 会作为 ZIP 读取别名识别，并已加入两套桌面打开对话框和 Windows 安装包文件关联；ZiFile 默认仍创建普通 `.zip` 归档。
 
-桌面打开对话框也会显示常见漫画、TAR 家族、LZMA 与 Bzip2 别名，例如 CBZ/CB7/CBR/CBT、TXZ/TZST/TBZ2、`.lzma` 和 `.bz`。Windows 安装包注册面向归档的别名，但不会默认接管 `.epub`；EPUB 仍可在 ZiFile 中手动选择并作为 ZIP 内容检查。
+桌面打开对话框也会显示常见漫画、TAR 家族、LZMA 与 Bzip2 别名，例如 CBZ/CB7/CBR/CBT、TXZ/TZST/TBZ2、`.tar.lzma`、`.lzma` 和 `.bz`。其中 `.tar.lzma` 使用 TAR + LZMA-alone，普通 `.lzma` 使用 LZMA-alone 解码器，`.xz` 使用 XZ 解码器；Windows 安装包注册单段归档后缀，但 Appx 清单不接受 `.tar.lzma` 这种复合后缀，因此它可在 ZiFile 打开对话框中选择，却不会被 MSIX 默认文件关联接管；`.epub` 也不会默认接管，仍可在 ZiFile 中手动选择并作为 ZIP 内容检查。
 
 历史 ZIP 的 Shrink、Reduce 1–4 与 Implode 方法也支持只读解码。固定上游语料用于校验 ZiFile 解压后的字节与已知内容完全一致，7-Zip 则独立识别归档所用方法；这些过时算法不会作为新归档的创建选项。
 
-创建 ZIP、7z 和 TAR 组合时可以选择多个文件或文件夹。单流 gzip、Zstandard、XZ、Bzip2、LZ4 和 Brotli 必须恰好选择一个现有文件；若要压缩目录或多个项目，请选择对应的 TAR 组合格式。桌面端会在打开保存对话框前检查这一要求。
+创建 ZIP、7z 和 TAR 组合（包括 TAR + LZMA）时可以选择多个文件或文件夹。单流 gzip、Zstandard、XZ、LZMA、Bzip2、LZ4 和 Brotli 必须恰好选择一个现有文件；若要压缩目录或多个项目，请选择对应的 TAR 组合格式。桌面端会在打开保存对话框前检查这一要求。
 
-创建界面的压缩等级范围由所选编码器决定：ZIP、7z、gzip 和 XZ 为 0–9，Zstandard 为 0–22，Bzip2 为 1–9，Brotli 为 0–11。纯 TAR 不压缩，当前 LZ4 编码器使用固定设置，因此这两种格式不会显示无效的等级滑块。CLI 的 `zifile formats` 会公开相同范围；`create --level` 会拒绝越界值，TAR/LZ4 显式传入等级也会被拒绝，避免静默钳制或忽略。7z 会把所选等级写入 LZMA2 参数，加密时仍沿用相同等级而不是退回后端默认值。
+解压单流格式时，`.lzma` 和 `.bz` 等历史别名会沿用原始文件名主体，不会因为格式的规范后缀不同而额外生成 `.out`。
+
+创建界面的压缩等级范围由所选编码器决定：ZIP、7z、gzip、XZ 和 LZMA 为 0–9，Zstandard 为 0–22，Bzip2 为 1–9，Brotli 为 0–11。纯 TAR 不压缩，当前 LZ4 编码器使用固定设置，因此这两种格式不会显示无效的等级滑块。CLI 的 `zifile formats` 会公开相同范围；`create --level` 会拒绝越界值，TAR/LZ4 显式传入等级也会被拒绝，避免静默钳制或忽略。7z 会把所选等级写入 LZMA2 参数，加密时仍沿用相同等级而不是退回后端默认值。
 
 RAR 创建不在计划内。只读浏览、完整性测试和选择性解压使用纯 Rust 的 `rars` Provider（MIT OR Apache-2.0）。ZiFile 会拒绝不安全路径、链接和 RAR 5+ 重定向，执行声明大小与实际解码大小限制，先写临时文件，并在隔离 Worker 中处理归档。密码保护的 RAR 可以读取，密码不会持久化。
 

@@ -363,6 +363,53 @@ function Send-AppKey {
     [System.Windows.Forms.SendKeys]::SendWait($Keys)
 }
 
+function Send-FocusNavigationUntilChanges {
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [Parameter(Mandatory)][string]$Keys,
+        [Parameter(Mandatory)][string[]]$PreviousNames,
+        [ValidateRange(1, 3)][int]$Attempts = 3
+    )
+
+    for ($attempt = 0; $attempt -lt $Attempts; $attempt++) {
+        Send-AppKey -Keys $Keys -ProcessId $ProcessId
+        Start-Sleep -Milliseconds 40
+        $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+        if ($focused -and $PreviousNames -notcontains $focused.Current.Name) {
+            return $focused
+        }
+    }
+    throw "Keyboard navigation '$Keys' did not move focus away from: $($PreviousNames -join ' | ')."
+}
+
+function Send-TabUntilFocusChanges {
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [Parameter(Mandatory)][string[]]$PreviousNames,
+        [ValidateRange(1, 3)][int]$Attempts = 3
+    )
+
+    return Send-FocusNavigationUntilChanges `
+        -ProcessId $ProcessId `
+        -Keys '{TAB}' `
+        -PreviousNames $PreviousNames `
+        -Attempts $Attempts
+}
+
+function Send-ShiftTabUntilFocusChanges {
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [Parameter(Mandatory)][string[]]$PreviousNames,
+        [ValidateRange(1, 3)][int]$Attempts = 3
+    )
+
+    return Send-FocusNavigationUntilChanges `
+        -ProcessId $ProcessId `
+        -Keys '+{TAB}' `
+        -PreviousNames $PreviousNames `
+        -Attempts $Attempts
+}
+
 function Wait-Focus {
     param(
         [Parameter(Mandatory)][int]$ProcessId,
@@ -408,9 +455,11 @@ function Move-FocusForward {
     $sequence = @()
     for ($index = 0; $index -lt $MaximumTabs; $index++) {
         Assert-AppProcessRunning
-        Send-AppKey -Keys '{TAB}' -ProcessId $ProcessId
-        Start-Sleep -Milliseconds 20
-        $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+        $previous = [System.Windows.Automation.AutomationElement]::FocusedElement
+        $previousNames = if ($previous) { @($previous.Current.Name) } else { @('<none>') }
+        $focused = Send-TabUntilFocusChanges `
+            -ProcessId $ProcessId `
+            -PreviousNames $previousNames
         if (-not $focused) {
             $sequence += '<none>'
             continue
@@ -441,9 +490,11 @@ function Move-FocusBackward {
     $sequence = @()
     for ($index = 0; $index -lt $MaximumTabs; $index++) {
         Assert-AppProcessRunning
-        Send-AppKey -Keys '+{TAB}' -ProcessId $ProcessId
-        Start-Sleep -Milliseconds 20
-        $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+        $previous = [System.Windows.Automation.AutomationElement]::FocusedElement
+        $previousNames = if ($previous) { @($previous.Current.Name) } else { @('<none>') }
+        $focused = Send-ShiftTabUntilFocusChanges `
+            -ProcessId $ProcessId `
+            -PreviousNames $previousNames
         if (-not $focused) {
             $sequence += '<none>'
             continue
@@ -609,7 +660,9 @@ try {
         -ProcessId $process.Id `
         -Names @('Home', '首页') `
         -Deadline $deadline
-    Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
+    $null = Send-TabUntilFocusChanges `
+        -ProcessId $process.Id `
+        -PreviousNames @('Home', '首页')
     $archiveFocus = Wait-Focus `
         -ProcessId $process.Id `
         -Names @('Archive', '压缩文件') `

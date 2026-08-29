@@ -96,9 +96,10 @@ defined in `docs/src/content/docs/development/signing-operations.md` and machine
 
 The MSIX also registers `zifile.exe` as an App Execution Alias. Users can disable aliases in
 Windows Settings, so automation must not assume that the alias is always enabled. The packaged
-shell DLL exposes “Create archive with ZiFile” for files and directories, then launches the
+shell DLL exposes “Create archive with ZiFile” for files, directories, and folder backgrounds, then launches the
 desktop create page with the selected paths. A second command is visible for one supported archive
-and launches `--extract-here`; after signature-first listing, the desktop extracts all regular files
+and launches `--extract-here`; EPUB is included because it is inspected as ZIP content, while it is
+not registered as the default `.epub` app. After signature-first listing, the desktop extracts all regular files
 to a sibling folder matching the archive stem with rename-on-conflict behavior. Encrypted archives
 remain in the visible password retry flow. The DLL never performs archive work or handles passwords
 inside Explorer.

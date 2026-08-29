@@ -16,7 +16,7 @@ Detection uses both signatures and extensions. If an extension disagrees with th
 
 ## Extract safely
 
-Select all or individual entries, choose a destination and conflict policy, then start extraction. ZiFile rejects traversal, absolute paths, Windows device names, case collisions, unsafe links, and content beyond entry-count, expanded-size, or compression-ratio limits. Treat such a rejection as a reason to verify the archive's source, not as a prompt to disable safety boundaries.
+Select all or individual entries, choose a destination and conflict policy, then start extraction. ZiFile rejects traversal, absolute paths, Windows device names, case collisions, unsafe links, extraction destinations containing symbolic links, junctions, or reparse points, and content beyond entry-count, expanded-size, or compression-ratio limits. Treat such a rejection as a reason to verify the archive's source, not as a prompt to disable safety boundaries.
 
 Work runs in an isolated Worker. Pressing `Escape` or choosing **Cancel** requests cooperative cancellation and terminates the Worker when necessary. Files already completed are not presented as if extraction had transactional rollback.
 
@@ -26,7 +26,7 @@ Work runs in an isolated Worker. Pressing `Escape` or choosing **Cancel** reques
 2. Add files or folders, or drop sources onto the window.
 3. Choose a format, compression level, optional password, and output path.
 
-ZIP, 7z, and TAR compositions accept multiple files and folders. gzip, Zstandard, XZ, Bzip2, LZ4, and Brotli are single-file streams and require exactly one existing file; use the matching TAR composition for a directory. RAR and CAB are read-only and cannot be created.
+ZIP, 7z, and TAR compositions accept multiple files and folders. gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli are single-file streams and require exactly one existing file; use the matching TAR composition for a directory. RAR and CAB are read-only and cannot be created.
 
 ## Queue and settings
 

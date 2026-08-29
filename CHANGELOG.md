@@ -4,6 +4,22 @@ All notable changes to ZiFile are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.0] - 2026-08-29
+
+### Added
+
+- First usable public Windows release of ZiFile with ZIP, 7z, TAR families,
+  common single-stream formats, read-only RAR/CAB support, Explorer commands,
+  bilingual desktop UI, CLI, isolated Worker, and x64/ARM64 artifacts.
+- Public GitHub Release automation that publishes unsigned Windows packages,
+  standalone executables, checksums, SBOMs, audits, and WinGet manifest candidates
+  directly from a matching version tag.
+
+### Changed
+
+- Stabilized the archive browser, cancellation and FIFO operation queue, and
+  refreshed the desktop visual hierarchy for a more professional Windows UI.
+
 ## [0.1.0-alpha.1] - 2026-08-28
 
 ### Added
@@ -26,7 +42,174 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add an explicit bilingual checksum-copy action to both desktop archive tables,
+  with clipboard failure surfaced as an error status.
+- Add a bilingual `Show in File Explorer` action to both desktop archive
+  headers, selecting the currently open archive in its containing folder.
+- Keep the accessible archive browser lightweight during high-frequency progress
+  updates for large archives, while retaining queue, cancel, open, and reveal actions.
+- Keep the desktop queue in its busy state while handing work directly from a
+  completed Worker to the next queued operation, avoiding a transient full-table
+  render between large-archive operations.
+- Added independent standalone LZMA creation and detection through `lzma-rust2`; `.lzma` no longer shares the user-visible XZ format label.
+- Keep formal Store identity values out of unsigned prerelease and manual
+  validation packages; only stable tags and explicit cloud-signing rehearsals
+  pass them to the MSIX builder, preserving the development identity elsewhere.
+- Automatically add the selected format's canonical extension when a save
+  dialog name has no extension, consistently across both desktop UIs while
+  preserving an explicit user-entered extension.
+- Keep the Iced and Dioxus create pages aligned by reporting source additions,
+  removals, and clears through shared bilingual status copy.
+- Give the default Iced operation footer explicit informational and error
+  states, with danger styling for worker failures and invalid operations.
+- Correct the archive empty state so an in-progress Worker load is shown as
+  opening instead of being reported as a failure in either desktop UI.
+- Align Iced search feedback with the accessible candidate by showing match
+  counts and removing the misleading “Page 1 / 1” display for zero results.
+- Added decoded-content SHA-256 checksums to archive integrity-test results;
+  the CLI prints a stable checksum table and both desktop archive tables show
+  the values after a successful test.
+- Hardened the Windows 11 Explorer context-menu extension with bilingual
+  tooltips, filesystem-path validation for create commands, and the required
+  `E_PENDING` fast path when Explorer disallows slow state evaluation.
+- Added the create command to Windows 11 folder-background menus so users can
+  archive the current folder without first selecting an item.
+- Extended the Explorer extract command to EPUB files, matching the core's
+  signature-first ZIP inspection without claiming `.epub` as the default app.
+- Added COM object and `LockServer` lifetime accounting so Explorer can unload
+  the shell DLL when no command, factory, or server lock remains.
+- Made folder-background creation robust when Explorer supplies an empty item
+  array by resolving the current folder through the Explorer site instead of
+  assuming a selected path.
+- Deduplicate Explorer create sources inside the Shell extension before
+  launching the desktop, using the same Windows case- and slash-insensitive
+  path identity rule while keeping extract invocation strict about one item.
+- Apply the Explorer command-line budget after create-source deduplication, so
+  repeated spellings cannot cause a false over-limit rejection.
+- Apply the same command-line budget to folder-background creation, so an
+  unusually deep current folder is rejected before a desktop process starts.
+- Align Explorer Shell state checks with core path safety by rejecting junctions
+  and Windows reparse-point sources before the context-menu command is enabled.
+- Apply the same junction/reparse-point source check to both desktop create
+  forms before they open the save dialog, keeping UI preflight and Worker
+  behavior consistent.
+- Made archive creation refuse an existing output file with a structured
+  destination-conflict error, preserving the existing file across all
+  temporary-file-backed creators while extraction keeps its explicit conflict
+  policy.
+- Made the real foreground queue smoke deterministic with a bounded test-only
+  Worker startup delay and fresh UI Automation button lookup after redraws;
+  cancellation remains observed during the delay and production defaults stay
+  disabled.
+- Preserve the original output stem when extracting legacy `.lzma` and `.bz`
+  single-stream aliases instead of appending an unnecessary `.out` suffix.
+- Decode actual LZMA-alone `.lzma` streams with the pure-Rust `lzma-rust2`
+  provider instead of routing them through the XZ decoder.
+- Add TAR + LZMA-alone (`.tar.lzma`) creation, listing, integrity testing,
+  extraction, and CLI/UI format selection with the same safety limits as other
+  TAR compositions.
+- Execute Windows Criterion format-detection and archive-throughput benchmarks
+  in a bounded CI job and retain their performance evidence for 30 days.
+- Include TAR + LZMA-alone creation and integrity throughput in the core
+  benchmark suite using a bounded 1 MiB sample.
+- Add bidirectional TAR + LZMA-alone interoperability against Windows
+  `tar.exe`, with a structured no-user-data CI evidence artifact.
+- Reject empty Markdown pages in the bilingual documentation locale-parity
+  check, so a present but blank mirror cannot pass documentation CI.
+- Centralize the stable creation-format order in the core capability registry so
+  the Iced and accessible desktop menus cannot drift apart as providers evolve.
+- Reuse the core format capability registry in the Explorer extract command and
+  require a real file, preventing archive-looking directories from showing a
+  misleading extraction action.
+- Reject symbolic links, junctions, and Windows reparse points in extraction
+  destinations and existing output parents; preflight a non-directory target
+  before parsing the archive so invalid destinations fail early and cannot
+  redirect output outside the selected folder.
+- Block creation before the save dialog when a previously selected source has
+  disappeared, with bilingual recovery guidance in both desktop UIs.
+- Share signature-first drag-and-drop classification between both desktop UIs,
+  while retaining extension fallback for formats without universal magic bytes.
+- Run drag-and-drop probing off the UI event thread in both desktop variants,
+  so slow or remote files cannot block the window while they are classified.
+- Move open, extraction-destination, source-selection, and archive-save dialogs
+  off the UI event thread in both desktop variants, with a re-entry guard that
+  prevents duplicate native dialogs while one is active.
+- Share Windows-aware source path deduplication between both desktop variants,
+  preventing duplicate roots when Explorer, file pickers, or drag-and-drop use
+  different casing or slash separators.
+- Apply Unicode-aware Windows path normalization so non-ASCII case variants are
+  deduplicated consistently with ordinary Latin paths.
+- Align matching-folder naming with the core format registry so unsupported
+  `.tar.lz4`, `.tar.br`, and `.tar.bz` combinations are not presented as
+  supported extraction formats.
+- Centralize supported TAR compound suffixes and aliases in the core registry,
+  so format detection and Explorer matching-folder naming cannot drift apart.
+- Check cancellation before creating archive parents or extraction destinations,
+  avoiding avoidable empty directories when an operation is already cancelled.
+- Return a stable destination-conflict error when extraction is pointed at an
+  existing file, preserving that file instead of exposing a raw directory I/O error.
+- Treat Unicode case variants as one archive entry name on Windows, preventing
+  entries such as `Ä.txt` and `ä.txt` from colliding only after extraction.
+- Reject symbolic-link creation sources in both desktop forms before opening the
+  save dialog, matching the core link-entry policy with bilingual guidance.
+- Replace completed temporary archive outputs atomically instead of deleting the
+  existing file first, preserving the previous file if the final replacement fails.
+- Include the common `tar.gz`, `tar.zst`, `tar.xz`, and `tar.bz2` compound suffixes
+  in the shared open-file dialog filter so supported TAR compositions are discoverable.
+- Extend the packaging policy smoke to explicitly lock those compound suffixes in
+  the core open-extension contract.
+- Expand the Windows Foundation smoke into a real CLI round-trip matrix for
+  TAR+Zstandard, TAR+XZ, TAR+Bzip2, gzip, Zstandard, XZ, Bzip2, LZ4, and Brotli;
+  each case now creates, integrity-tests, extracts, and checks Unicode or stream
+  output content.
+- Detect renamed TAR+gzip, TAR+Zstandard, TAR+XZ, and TAR+Bzip2 archives by
+  probing a bounded decoded TAR header, keeping drag-and-drop, Explorer, and
+  CLI opening behavior consistent without scanning an unbounded input.
+- Route stable Worker errors through the shared bilingual formatter in both
+  desktop UIs, translating password, unknown-format, destination-conflict,
+  safety-limit, unsupported-operation, and cancellation messages while keeping
+  backend-specific diagnostic details intact.
+- Reject archive destinations that are equal to or inside a source tree before
+  creating its parent or temporary output, preventing self-inclusion and
+  leaving no directory side effect on this recoverable input error.
+- Use overflow-free exact arithmetic for expansion-ratio limits so fractional
+  boundary cases cannot be rounded down by integer division.
+- Apply the configured expansion-ratio limit to single-stream listing without
+  silently widening a zero limit to one compressed byte of output.
+- Check cumulative TAR entry sizes against expanded-size and ratio limits
+  immediately after each header is parsed, before compressed payloads are skipped.
+- Persist language and theme preferences through a flushed, durable temporary
+  file replacement on Windows, and surface save failures in both desktop UIs.
+- Inject the fixed SignPath Foundation attribution into every generated stage
+  prerelease Release Notes entry while retaining GitHub's generated changes.
+- Keep the Worker progress stream continuous through archive preflight while
+  resetting counters cleanly when integrity testing or extraction begins.
+- Add a localized Clear search action to the default Iced archive browser and
+  reuse the same label in the accessible UI.
+- Show a localized empty-state message when an archive folder or search has no
+  visible entries in either desktop UI.
+- Distinguish password-related open failures from corrupt, unsupported, or
+  ordinary I/O failures so only the former presents an Unlock retry flow.
+- Ignore stale Worker completions before they can mutate either desktop UI's
+  active operation state or archive contents.
+
 ### Fixed
+
+- Align both desktop create forms for single-stream formats: Add files opens
+  a single-file picker, Add folder is rejected defensively, and Dioxus create
+  preflight failures now use error semantics instead of informational status.
+- Announce the selected create format's source requirements in the accessible
+  Dioxus status region, matching the default Iced form when the format changes.
+- Cover create-format state transitions with direct tests for level clamping,
+  password clearing, and bilingual source-requirement status updates.
+- Keep the currently visible archive while a replacement open request is
+  queued or rejected by a full operation queue; the Iced view now switches
+  only when the queued Worker actually starts.
+- Make the Explorer extract command use signature-first format detection during
+  permitted slow state evaluation, so renamed valid archives are discoverable and
+  invalid files with a forged archive suffix stay hidden.
 
 - Move keyboard focus to the labelled main region after accessible-desktop page
   changes, while leaving focus untouched during progress and status-only renders.
@@ -44,7 +227,7 @@ All notable changes to ZiFile are documented here. The format follows
   candidate so focus remains visible on both light surfaces and cyan active controls,
   while forced-colors mode continues to use Windows system colors.
 - Require WACK readiness to compare the package audit against all three exact Partner Center identity fields and persist structured failures for incomplete audits, preventing a signed or malformed test identity from entering formal certification preflight.
-- Keep WinGet file-extension metadata synchronized with all 24 archive extensions accepted by the desktop open workflow, including RAR, CAB, ZIPX, comic-book aliases, and TAR stream aliases.
+- Keep WinGet file-extension metadata synchronized with all 29 archive extensions accepted by the desktop open workflow, including RAR, CAB, ZIPX, comic-book aliases, and TAR stream aliases.
 
 ### Added
 
@@ -106,7 +289,7 @@ All notable changes to ZiFile are documented here. The format follows
   refuses explicit levels for fixed-setting formats.
 - Encrypted 7z/RAR header retry views in both desktop interfaces, including correct
   7z AES entry flags after a password-protected archive is unlocked.
-- TAR, tar.gz, tar.zst, tar.xz and tar.bz2 archive compositions.
+- TAR, tar.gz, tar.zst, tar.xz, tar.lzma and tar.bz2 archive compositions.
 - gzip, Zstandard, XZ, Bzip2, LZ4 and Brotli single-stream operations.
 - Signature-based detection and a shared safe extraction policy covering traversal,
   links, Windows device names, case collisions, conflicts and expansion limits.
@@ -124,9 +307,9 @@ All notable changes to ZiFile are documented here. The format follows
 - Store privacy-route gates that verify both localized Astro outputs during CI and
   the deployed public HTTPS pages after every GitHub Pages publication.
 - Security-focused fuzz targets and archive throughput benchmarks.
-- Permanent malformed/truncated-header regression coverage for all 15 supported archive
+- Permanent malformed/truncated-header regression coverage for all 16 supported archive
   and compression format classes, requiring both list and integrity-test rejection.
-- Bidirectional ZIP and tar.gz interoperability tests against Windows reference tools.
+- Bidirectional ZIP, tar.gz, tar.lzma and 7z interoperability tests against Windows reference tools.
 - Simplified Chinese and English desktop UI with system-locale detection and persisted
   language/theme preferences; passwords are never included in settings.
 - Archive-path search and bounded 500-row pagination, with a 100,000-entry regression test.

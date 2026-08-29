@@ -14,6 +14,9 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 - libFuzzer 目标可编译
 - 发布凭据策略和 MSIX 审计接线冒烟测试
 
+文档 locale 检查不仅要求中文页与英文页一一对应，还会剥离 front matter
+后拒绝空 Markdown 正文，避免文件存在但生成页面为空白时仍通过 CI。
+
 ## 测试层级
 
 当前验证注记：`keyboard-form.ps1` 的 2026-08-28 fresh full-workflow 已在本机 x64 可访问候选上通过。测试先等待启动归档加载完成并回到首页，Reload 后刷新异步重建的 UIA 根节点，无归档转场使用产品定义的 `Ctrl+N` 快捷键；结构化证据保存在项目 Stage 4 档案中。该结果只覆盖本机 x64 UI Automation，不替代 Narrator、IME、高对比度、DPI 或正式辅助技术认证。
@@ -28,13 +31,21 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 | 性能测试 | 吞吐、压缩率、峰值内存、启动和大列表 |
 | 冒烟测试 | CLI、桌面启动、安装、升级、文件关联和卸载 |
 
-固定负向矩阵为全部 15 类受支持格式构造带正确签名或扩展提示、但截断/损坏的最小输入，并要求 List 与完整性校验都返回普通错误而不 panic。它补充而不替代持续 libFuzzer campaign、历史 7z 崩溃夹具和第三方真实语料。
+固定负向矩阵为全部 17 类受支持格式构造带正确签名或扩展提示、但截断/损坏的最小输入，并要求 List 与完整性校验都返回普通错误而不 panic。它补充而不替代持续 libFuzzer campaign、历史 7z 崩溃夹具和第三方真实语料。
 
 基础冒烟还会向真实 `zifile-worker.exe` 发送版本化 list 请求，要求最终完整进度快照先于 metadata、Unicode entry 和唯一结束事件；随后对 32 MiB 随机输入启动 7z 创建并发送取消控制消息，验证 Worker 在时限内退出、目标不存在且没有临时文件残留。桌面协议单测覆盖缺少终结事件和逐条条目重建；Windows 实机检查验证桌面可通过 Job Object Worker 打开并校验 7z。
 
-列出和完整性校验分别使用兼容旧入口的 `ListOptions` 与 `TestOptions`，为 ZIP、7z、RAR、CAB、TAR 组合和六种压缩流提供统一进度与协作取消。列出阶段按扫描条目推进，单压缩流还按实际解码字节反馈；无法预知总数时两套 UI 显示“正在扫描”，完成后再发布一致的最终总量。Worker 每 100 ms 发送有界进度，并在操作返回后补发最终快照，避免小归档只出现初始 0%；预取消回归要求在解析前返回 `Cancelled`，各格式往返测试同时验证最终进度不变量。
+Foundation smoke 还使用实际 Windows CLI 对主要可创建格式执行完整往返：TAR+Zstandard、TAR+XZ、TAR+Bzip2、gzip、Zstandard、XZ、LZMA、Bzip2、LZ4 和 Brotli；每个场景都创建归档、执行完整性校验、解压，并断言 Unicode 文件或单流输出内容。ZIP、TAR+gzip、TAR+LZMA 和 AES 7z 由同一冒烟流程中的独立场景覆盖，因此这组矩阵不是只检查能力表或“文件存在”。
+
+列出和完整性校验分别使用兼容旧入口的 `ListOptions` 与 `TestOptions`，为 ZIP、7z、RAR、CAB、TAR 组合和七种压缩流提供统一进度与协作取消。列出阶段按扫描条目推进，单压缩流还按实际解码字节反馈；无法预知总数时两套 UI 显示“正在扫描”，完成后再发布一致的最终总量。完整性校验和解压的内部预检会复用同一进度通道，但在主体阶段开始时重置已扫描计数，避免流式文件在真正写出前错误显示为 100%。Worker 每 100 ms 发送有界进度，并在操作返回后补发最终快照，避免小归档只出现初始 0%；预取消回归要求在解析前返回 `Cancelled`，各格式往返测试同时验证最终进度不变量。
+
+CAB 文件名收集辅助路径也使用调用方的条目上限并检查协作取消，避免临时名称集合脱离统一的资源边界。
+
+完整性校验在解码普通文件内容的同时计算稳定的小写十六进制 SHA-256；目录和仅列出归档时不生成校验和。结果通过现有 `ArchiveEntryInfo`/Worker 事件传递，旧版缺少可选字段的事件仍可反序列化。ZIP、7z、TAR 家族、单流、RAR 和 CAB 的回归会验证校验结果与进度完成状态一致，CLI 和两套桌面表格会展示同一值；表格中的复制操作还会验证双语动作文案、原生 Iced 剪贴板接线和可访问 UI 的 Clipboard API 失败回退。
 
 CLI 密码单测覆盖显式 opt-in、CRLF/LF 删除、前后空格保留和缺失/空输入拒绝。基础冒烟还要求 CLI 帮助仅暴露 `--password-stdin`，并通过标准输入真实创建、校验和解压 AES 7z；固定测试密码不输出到结果。
+
+两套桌面 UI 共用稳定 Worker 错误的双语格式化入口。单测覆盖取消、需要密码、无法识别格式、目标冲突和安全限制，并要求路径或后端诊断细节不被丢弃；未知后端错误保持原文，便于排障。
 
 压缩等级契约单测覆盖各编码器的有效范围、核心层边界钳制和固定等级格式。CLI 单测要求 `zifile formats` 公开每种格式的区间、`fixed` 或 `none`，并在创建前拒绝格式级越界值和固定格式的显式等级，避免命令行输入被核心层静默钳制或忽略。基础冒烟还会启动真实 `zifile.exe`，核对能力表关键行、ZIP 10 被拒绝、TAR 显式等级被拒绝且省略等级可创建。7z 集成回归分别创建等级 0 与 9 的归档，读取公开的 LZMA2 coder properties 并要求两者不同，从归档元数据证明 UI/CLI 传入的等级确实生效，而不是只验证参数经过 Worker。
 
@@ -46,11 +57,50 @@ CLI 密码单测覆盖显式 opt-in、CRLF/LF 删除、前后空格保留和缺�
 
 核心测试 `active_cancellation_does_not_commit_a_partial_zip_output` 在首个解压进度数据块后取消 ZIP 解压，要求返回 `Cancelled` 且原子目标文件不存在；本地重复五次通过。该单测增强了核心层证据，但不能替代真实桌面队列验收。
 
+创建流程的路径回归会拒绝与来源相同或位于来源目录内部的目标，先解析已存在祖先目录并进行 Windows 大小写无关的路径关系判断，再创建目标父目录；因此不会把临时输出重新遍历为输入，也不会在可恢复错误上留下空目录。
+
+解压目标若已存在且是普通文件，会在创建目录前返回结构化的 `DestinationExists`，保留原文件内容；这与目录内条目的冲突策略分开验证，避免把“目标本身不是目录”误报为不稳定的底层 I/O 错误。
+
+解压目标本身及每个已有输出父路径都会拒绝符号链接、junction 和 reparse point；回归测试确认链接目标不会收到任何文件，避免宿主目录中的预先存在链接绕过归档路径策略。
+
+创建归档时，如果输出文件已经存在，所有临时文件提交路径都会在最终提交前返回结构化的 `DestinationExists`，并保留原文件内容；这与解压条目的显式覆盖策略分开，避免在不同操作系统上出现不一致的覆盖或底层重命名错误。
+
+展开比限制使用无溢出的精确乘法比较，而不是整数除法；例如在 `1000:1` 上限下，`2001` 字节展开自 `2` 字节压缩数据会被拒绝，不会因截断为 `1000` 而放行。
+
+偏好设置回归在临时目录中替换已有配置，确认写入完整的双语语言/主题内容，并确认临时文件在成功提交后清理；Windows 实现使用带 `MOVEFILE_WRITE_THROUGH` 的替换路径。
+
+单流格式的列出阶段也使用调用方提供的展开比上限；配置为 `0` 时严格禁止任何解码输出，不会被隐式放宽为至少允许一个压缩字节的输出。gzip 回归覆盖这一边界，避免列表阶段与声明式条目检查产生不同的安全策略。
+
+TAR 及其五种压缩组合在解析每个头部后立即累计声明的条目大小，并在跳过压缩载荷前与展开体积、展开比上限比较；因此列出阶段不会为了读到下一个头部而先解码超出预算的载荷。回归矩阵覆盖 TAR、TAR+gzip、TAR+Zstandard、TAR+XZ、TAR+LZMA 和 TAR+Bzip2。
+
+两套创建 UI 现在也会在保存对话框前拒绝符号链接、junction 和 reparse point 来源，与核心层的链接拒绝策略保持一致；Windows Explorer Shell 菜单也会在状态查询阶段执行相同检查，避免菜单或创建按钮先显示可用、点击后才由 Worker 报错；创建表单以双语恢复提示明确说明链接类来源，并要求用户选择原始文件或文件夹。
+
+Windows 条目冲突键使用 Unicode 小写规则；Windows 专属 ZIP 回归用 `Ä.txt` 与 `ä.txt` 验证列表阶段先拒绝大小写变体，避免两个条目在实际文件系统中落到同一路径。
+
 性能门禁需要多轮运行和稳定基线，不能用一次共享 CI 结果直接判定回归。
+
+CI 另外运行 Windows `performance` job，实际执行 `format_detection` 与 `archive_throughput` Criterion 基准，固定 10 个样本并保存文本输出、Criterion 基线和 HTML 数据为 30 天 artifact。Criterion 的相对回归提示需要结合相同机器的历史基线复核；该 job 的成功首先证明基准确实执行且没有运行时失败。
+
+`archive_throughput` 同时测量 ZIP Deflate 与 TAR + LZMA-alone；后者使用独立的 1 MiB 样本分别测量创建和校验，确保新增组合格式也有可重复的吞吐观测。
+
+`tests/smoke/contract-policy.ps1` 锁定 CLI 的 6 个公开命令、15 个创建格式、17 行 `formats` 能力矩阵、双语公开契约文档，以及运行时错误码 1 和参数语法错误码 2；它在 Windows CI 的 Foundation smoke 后运行，最终 1.0 冻结仍需在发布提交上完成。
+
+共享桌面测试还覆盖拖放分类：有效归档的内容签名优先于扩展名，改名归档仍进入浏览流程；对外层签名相同的改名 TAR+gzip、TAR+Zstandard、TAR+XZ 和 TAR+Bzip2，会在最多 1 MiB 压缩输入与 512 字节解码头的有界探测中识别内层 TAR；已知扩展在探测失败时保留兼容回退，普通文件和归档命名目录不会被误判为可打开归档。
+Iced 和 Dioxus 的入口回归同时锁定探测在异步/阻塞线程池路径上执行，防止文件头读取回到 UI 事件线程。
+
+文件对话框回归锁定两套 UI 的打开归档、选择解压目录、添加文件/文件夹和保存归档入口均不在 UI 事件线程直接等待；Iced 使用受控 Tokio 阻塞任务，Dioxus 使用 `AsyncFileDialog`。活动对话框门禁防止重复点击创建多个原生窗口，取消和完成路径都会释放门禁。
+
+归档浏览回归还要求两套 UI 在当前文件夹为空或搜索无匹配时显示双语空状态，而不是渲染一个看似未加载的空表格；搜索清除动作会保留目录并回到第一页。
+
+打开失败回归会区分密码/加密诊断与损坏、未知格式及普通 I/O 错误：只有可能需要密码时才显示密码输入和“解锁”重试；两套 UI 还会在应用结果前拒绝陈旧 Worker 完成事件，避免旧任务覆盖当前归档或忙碌状态。
+
+创建页回归还要求默认 Iced 与可访问 Dioxus 对来源添加、移除和清空使用相同的双语状态播报；状态会包含本次变化和剩余总数，不能只更新列表而让辅助技术或用户失去反馈。
+
+保存路径回归要求两个桌面端在用户省略扩展名时补上所选格式的规范后缀，并保留用户明确输入的其他后缀；复合格式例如 TAR + gzip 必须生成完整的 `.tar.gz`，不能只生成 `.gz`。
 
 `tests/reproducibility/windows-build.ps1` 在两个全新目标目录使用固定 Rust 1.93.0、锁文件、单作业构建与 MSVC `/Brepro`，比较默认桌面、可访问候选、CLI、Worker 和 Explorer DLL。云端 32813453959 在新工具链上得到双架构各 4/5；schema v2 运行 32822543635 进一步确认默认 Iced EXE 的 `.rdata` 首差异是 `glutin_wgl_sys` 生成绑定内嵌的 `build-a`/`build-b` target 路径。脚本现用 `CARGO_ENCODED_RUSTFLAGS` 与 `--remap-path-prefix` 把两个根映射到同一虚拟路径；修复后 32826187552 的 x64/ARM64 都达到 5/5 且 `reproducible=true`。
 
-Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.exe`，分别对 ZIP、tar.gz 与 7z 执行双向互操作：参考工具创建的包由 ZiFile 校验和解压，ZiFile 创建的包由参考工具解压并逐文件核对（含 Unicode 路径）。
+Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.exe`，分别对 ZIP、tar.gz、tar.lzma 与 7z 执行双向互操作；其中 `tar.exe --lzma` 验证 LZMA-alone 组合格式。参考工具创建的包由 ZiFile 校验和解压，ZiFile 创建的包由参考工具解压并逐文件核对；ZIP、tar.gz 与 7z 场景包含 Unicode 路径，tar.lzma 反向场景同时核对 ASCII 文件内容以避免把 Windows 参考工具的代码页差异误当作 ZiFile 结果。每次运行上传不含用户数据的结构化证据。
 
 新增的官方 7-Zip 语料门禁使用 GitHub Windows Runner 上的 `7z.exe`，覆盖 Copy、LZMA、LZMA2+BCJ、Deflate、BZip2、PPMd，以及带文件名加密的 LZMA2+AES；反向还要求官方 7-Zip 校验并解压 ZiFile 创建的普通与 AES 归档。所有场景逐文件比较 SHA-256，并上传不含密码的 JSON 证据。CI 32836336921 使用 7-Zip 26.02 完成 9/9 场景，证据 JSON SHA-256 为 `06278BB8B96AB683A3C117BA5E30F1B4AB1CF89F1BBF01E72BAC0CC26B49DB14`。
 
@@ -62,7 +112,7 @@ CAB 解码阶段负向回归保留合法元数据并翻转首个 CFDATA 压缩�
 
 修改时间测试先为源文件和目录设置确定时间，创建 ZIP、7z 与 TAR 家族归档，再要求列表元数据和解压后的文件/目录均保留预期值；独立创建的 RAR 5 与 CAB 夹具覆盖只读 Provider。协议测试会反序列化没有可选时间字段的旧版 `archive_entry` 事件，两套桌面程序还共用格式化测试，明确区分 UTC 与归档格式未保存时区的时间。
 
-每次 CI 会编译 libFuzzer 目标；每周定时工作流对路径策略、格式识别和归档解析器各运行 180 秒有界 fuzz，失败时保留崩溃产物 14 天。归档目标用带格式签名的变异输入覆盖 ZIP、7z、RAR、CAB、四种 TAR 组合和六种单流格式，限制输入为 256 KiB、RSS 为 2 GiB、单输入为 10 秒；目标内部还使用 256 条目、4 MiB 展开量、64 倍压缩比和 32 层路径的严格限制。Windows/MSVC 本地 `cargo-fuzz` 因 `sevenz-rust2` DLL 与 libFuzzer 入口点参数冲突无法链接，Rust 编译检查可通过；动态 campaign 以 Linux GNU 定时工作流为验收环境。损坏、截断、炸弹及更多 libarchive 变体仍需继续扩展。
+每次 CI 会编译 libFuzzer 目标；每周定时工作流对路径策略、格式识别和归档解析器各运行 180 秒有界 fuzz，失败时保留崩溃产物 14 天。归档目标用带格式签名的变异输入覆盖 ZIP、7z、RAR、CAB、六个 TAR 格式和七种单流格式，限制输入为 256 KiB、RSS 为 2 GiB、单输入为 10 秒；目标内部还使用 256 条目、4 MiB 展开量、64 倍压缩比和 32 层路径的严格限制。Windows/MSVC 本地 `cargo-fuzz` 因 `sevenz-rust2` DLL 与 libFuzzer 入口点参数冲突无法链接，Rust 编译检查可通过；动态 campaign 以 Linux GNU 定时工作流为验收环境。损坏、截断、炸弹及更多 libarchive 变体仍需继续扩展。
 
 首轮归档解析器 campaign 32733658052 在约 569,000 次执行后发现 292 字节输入可令 `sevenz-rust2` 0.20.2 的文件数量分配触发 `capacity overflow`。第二轮 campaign 32803785688 又发现 173 字节输入可触发 ASan 超大内存分配；这类 OOM 不能由 `catch_unwind` 可靠隔离。两份输入均已转为永久集成测试和 fuzz 启动重放夹具。项目因此升级到 Rust 1.93.0 与带有元数据计数边界修复的 `sevenz-rust2` 0.22.0；Provider 的 panic 边界继续作为纵深防御。升级后的定向 campaign 32813469578 强制重放两份样本，并在 181 秒内继续执行 498,937 次、峰值 RSS 370 MiB，未产生新崩溃产物。
 
@@ -84,7 +134,7 @@ RAR 校验基准使用确定性的 8 MiB RAR 5 method-3 归档，并加入低频
 
 `tests/performance/archive-load-cancellation.ps1` 使用相同的确定性 100,000 条目 ZIP，在候选界面暴露已启用的取消按钮后立即调用，要求最终 live status 为取消错误、不得出现成功打开状态、对应 Worker 必须退出，并在结束时关闭测试实例和删除临时 ZIP。最终五轮基线的取消完成中位数/p95 为 930.78/1088.73 ms；五轮确认时 Worker 数均为 0。该计时从 UI Automation 调用取消开始，到界面收到 Worker 的最终取消结果为止。
 
-`tests/accessibility/keyboard-form.ps1` 从候选原生窗口根开始发送真实 Tab/Shift+Tab/Enter 和表单按键，并通过 UI Automation 读取 WebView2 内部焦点。它验证首页→归档→创建→主题→语言顺序、反向导航、归档/创建页激活、创建页 disabled 按钮不获得焦点、格式选择为 7z、压缩等级 `6→7→6`、密码键入后用 Ctrl+A/Backspace 清空，以及两个来源按钮可达。默认流程还创建两个条目的 ZIP，验证归档列表、完整性校验、归档密码框的局部 Ctrl+A、Reload、搜索提交与局部 Ctrl+A、归档全选/清空、冲突策略、单页分页禁用和解压按钮状态；`-SkipArchiveWorkflow` 仅用于隔离旧的创建表单回归。固定测试密码只在进程内使用，JSON 不记录其值。脚本在每次发送前要求前台原生句柄精确属于本次 ZiFile；用户切换到其他窗口时立即失败并在 `finally` 中关闭测试实例。默认持久化语言下，Windows x64 已有完整独立前台归档工作流通过证据；`-ToggleLanguageBeforeTest -SkipArchiveWorkflow` 另已验证切换到另一语言后的创建页键盘流程。原始 JSON 见项目档案；这些证据仍不替代 Narrator、IME、高对比度、DPI 和正式辅助技术认证。
+`tests/accessibility/keyboard-form.ps1` 从候选原生窗口根开始发送真实 Tab/Shift+Tab/Enter 和表单按键，并通过 UI Automation 读取 WebView2 内部焦点。它验证首页→归档→创建→主题→语言顺序、反向导航、归档/创建页激活、创建页 disabled 按钮不获得焦点、格式选择为 7z、压缩等级 `6→7→6`、密码键入后用 Ctrl+A/Backspace 清空，以及两个来源按钮可达。默认流程还创建两个条目的 ZIP，验证归档列表、完整性校验、归档密码框的局部 Ctrl+A、Reload、搜索提交与局部 Ctrl+A、归档全选/清空、冲突策略、单页分页禁用和解压按钮状态；`-SkipArchiveWorkflow` 仅用于隔离旧的创建表单回归。固定测试密码只在进程内使用，JSON 不记录其值。脚本在每次发送前要求前台原生句柄精确属于本次 ZiFile；正向和反向导航若因窗口焦点同步仍停留在当前控件，只允许有限重发，随后仍要求精确值和下一个控件；用户切换到其他窗口时立即失败并在 `finally` 中关闭测试实例。默认持久化语言下，Windows x64 已有完整独立前台归档工作流通过证据；`-ToggleLanguageBeforeTest -SkipArchiveWorkflow` 另已验证切换到另一语言后的创建页键盘流程。原始 JSON 见项目档案；这些证据仍不替代 Narrator、IME、高对比度、DPI 和正式辅助技术认证。
 
 可访问候选会在对应语义控件上公开实际处理的 `Ctrl+O`、`Ctrl+N`、`F1`、`Escape` 和归档区域 `Ctrl+A`，源码回归同时锁定处理器与 `aria-keyshortcuts` 元数据；这证明接线一致，不替代屏幕阅读器的真实朗读验证。
 
@@ -98,9 +148,11 @@ RAR 校验基准使用确定性的 8 MiB RAR 5 method-3 归档，并加入低频
 
 可访问候选的普通深色/浅色主题使用双层焦点环：外层按主题选择亮色或深色，内层使用反差色，从而同时覆盖正文表面和青色激活控件；Windows 强制颜色模式改用 `Highlight` 与 `Canvas`。Rust 源码回归锁定这三个主题分支和双层接线，但真实可见焦点仍需前台键盘与高对比度回合确认。
 
-`tests/performance/operation-queue-foreground.ps1` 生成 10 万条目归档，在真实窗口中提交三次完整性校验，并验证取消当前、下一项启动、清空等待队列与 Worker 回收。脚本用独立的 3 秒有界窗口激活重试证明 ZiFile 原生句柄正是 Windows 前台窗口；无法取得前台资格时拒绝运行，不能把后台 UIA 调用记为真实前台证据。等待文案超时时会附带最多 500 个字符的最后可见 Document 文本，且仍在 `finally` 中关闭进程并删除临时夹具。
+`tests/performance/operation-queue-foreground.ps1` 默认生成 10 万个、每项 1 KiB 的确定性 ZIP 条目，在真实窗口中提交三次完整性校验，并验证取消当前、下一项启动、清空等待队列与 Worker 回收；`-EntrySizeBytes` 可在受控范围内调整夹具工作量。为避免真实磁盘速度让排队窗口变得偶然，脚本默认通过仅测试用的 `ZIFILE_TEST_WORKER_DELAY_MS` 给每个 Worker 操作增加 10 秒启动窗口，`-WorkerDelayMilliseconds` 可在 0 到 10 秒内调整，延迟期间仍监听取消，生产默认值为关闭。脚本用独立的 3 秒有界窗口激活重试证明 ZiFile 原生句柄正是 Windows 前台窗口；无法取得前台资格时拒绝运行，不能把后台 UIA 调用记为真实前台证据。等待文案超时时会附带最多 500 个字符的最后可见 Document 文本；按钮等待超时还会附带最多 32 个按钮的名称与 `IsEnabled` 状态，且仍在 `finally` 中关闭进程并删除临时夹具。
 
-`tests/smoke/packaging-policy.ps1` 在每次 Windows CI 中动态解析当前二十七个发行、语料与仓库政策 PowerShell 脚本，并验证缺失/部分 Partner Center Identity、非法 Name/X.500 Publisher、缺失云签名输入、非法 provider、开发 Identity、未签名 OID Publisher、无效签名产物和未完成的 1.0 就绪清单都会被拒绝，形式正确的输入及 11/11 带证据就绪夹具会被接受；它还要求签后审计、仅签后发布、最小权限、签名超时/并发控制、轮换/应急停止/吊销运维手册，以及版本、发布说明、贡献者、安全和发布就绪门禁均接入 CI。所有 CI、文档部署、SBOM 和 GitHub Release 发布 Job 都有按工作负载设置的硬超时，并由 Job 作用域检查防止误命中同文件其他上限。双架构可复现构建另受 120 分钟硬超时、同分支旧任务取消、矩阵独立结论和失败证据保留约束保护；前台队列脚本的真实窗口所有权与有界诊断也受防退化检查。真实账号、云 HSM 签名和 x64/ARM64 包内容审计不能由策略冒烟替代。
+`tests/smoke/packaging-policy.ps1` 在每次 Windows CI 中动态解析当前三十三个发行、语料与仓库政策 PowerShell 脚本，并验证缺失/部分 Partner Center Identity、非法 Name/X.500 Publisher、缺失云签名输入、非法 provider、开发 Identity、未签名 OID Publisher、无效签名产物和未完成的 1.0 就绪清单都会被拒绝，形式正确的输入及 11/11 带证据就绪夹具会被接受；它还要求签后审计、仅签后发布、最小权限、签名超时/并发控制、轮换/应急停止/吊销运维手册，以及版本、发布说明、贡献者、安全和发布就绪门禁均接入 CI。所有 CI、文档部署、SBOM 和 GitHub Release 发布 Job 都有按工作负载设置的硬超时，并由 Job 作用域检查防止误命中同文件其他上限。双架构可复现构建另受 120 分钟硬超时、同分支旧任务取消、矩阵独立结论和失败证据保留约束保护；前台队列脚本的真实窗口所有权与有界诊断也受防退化检查。真实账号、云 HSM 签名和 x64/ARM64 包内容审计不能由策略冒烟替代。
+
+Explorer Shell 的策略检查要求 `zifile-shell` 复用核心格式识别和能力注册表，并要求解压项目是实际文件；它拒绝重新出现的独立后缀白名单，从源头防止核心格式、文件关联和右键菜单支持范围发生漂移。创建页共享预检还覆盖来源在选择后消失的情况，避免在保存对话框之后才暴露可恢复的输入错误。
 
 `tests/smoke/store-listing.ps1` 验证简体中文和英文 Store JSON 都满足 Partner Center 的描述、短描述、功能、关键词、系统要求、许可与 HTTPS URL 限制，并要求两份可读文档逐段、逐功能包含结构化 JSON 的权威文案。负向样本证明超长功能、过多关键词及描述中的 URL 会被拒绝。该门禁验证文字材料，不替代截图、年龄分级、正式 Identity 或认证。
 

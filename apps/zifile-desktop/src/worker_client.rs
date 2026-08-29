@@ -312,6 +312,7 @@ mod tests {
                     compressed_size: 2,
                     is_directory: false,
                     encrypted: false,
+                    checksum: None,
                     modified: None,
                 },
             },

@@ -106,10 +106,12 @@ enum FormatArg {
     TarGzip,
     TarZstd,
     TarXz,
+    TarLzma,
     TarBzip2,
     Gzip,
     Zstandard,
     Xz,
+    Lzma,
     Bzip2,
     Lz4,
     Brotli,
@@ -124,10 +126,12 @@ impl From<FormatArg> for ArchiveFormat {
             FormatArg::TarGzip => Self::TarGzip,
             FormatArg::TarZstd => Self::TarZstd,
             FormatArg::TarXz => Self::TarXz,
+            FormatArg::TarLzma => Self::TarLzma,
             FormatArg::TarBzip2 => Self::TarBzip2,
             FormatArg::Gzip => Self::Gzip,
             FormatArg::Zstandard => Self::Zstandard,
             FormatArg::Xz => Self::Xz,
+            FormatArg::Lzma => Self::Lzma,
             FormatArg::Bzip2 => Self::Bzip2,
             FormatArg::Lz4 => Self::Lz4,
             FormatArg::Brotli => Self::Brotli,
@@ -181,10 +185,20 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             let password = read_password(password_stdin)?;
             let info = test_archive(&archive, password.as_deref())?;
             println!(
-                "OK: {} entries, {} expanded bytes",
+                "OK: {} entries, {} expanded bytes, {} SHA-256 checksums",
                 info.entries.len(),
-                info.total_size
+                info.total_size,
+                info.entries
+                    .iter()
+                    .filter(|entry| entry.checksum.is_some())
+                    .count()
             );
+            println!("SHA256\tPATH");
+            for entry in info.entries {
+                if let Some(checksum) = entry.checksum {
+                    println!("{checksum}\t{}", entry.path.display());
+                }
+            }
         }
         Command::Extract {
             archive,
@@ -392,10 +406,12 @@ mod tests {
                 "tar-gzip",
                 "tar-zstd",
                 "tar-xz",
+                "tar-lzma",
                 "tar-bzip2",
                 "gzip",
                 "zstandard",
                 "xz",
+                "lzma",
                 "bzip2",
                 "lz4",
                 "brotli",
@@ -412,6 +428,7 @@ mod tests {
         assert!(matrix.contains("gzip\tyes\tyes\tyes\tsingle-file\t0-9\tno\tAlpha"));
         assert!(matrix.contains("ZIP\tyes\tyes\tyes\tfiles-or-directories\t0-9\tyes\tAlpha"));
         assert!(matrix.contains("Zstandard\tyes\tyes\tyes\tsingle-file\t0-22\tno\tAlpha"));
+        assert!(matrix.contains("LZMA\tyes\tyes\tyes\tsingle-file\t0-9\tno\tAlpha"));
         assert!(matrix.contains("Bzip2\tyes\tyes\tyes\tsingle-file\t1-9\tno\tAlpha"));
         assert!(matrix.contains("Brotli\tyes\tyes\tyes\tsingle-file\t0-11\tno\tAlpha"));
         assert!(matrix.contains("TAR\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha"));
