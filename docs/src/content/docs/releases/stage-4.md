@@ -46,5 +46,6 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 - 文档 locale 检查现在同时要求 31 对中英文页面存在且正文非空；剥离 front matter 后的空 Markdown 页面会使检查失败，防止文件存在但生成页面为空白。
 - 完整 `cargo test --workspace --all-targets --all-features --locked` 通过，覆盖 CLI、core、42 项归档回归、Iced、可访问候选、Shell、Worker、协议和 Criterion 基准目标。
+- 默认 Iced 窗口现在居中启动，并限制为不小于 920×620，避免归档表格、搜索工具栏和创建控件在调整窗口时被压缩到不可用；新增窗口设置回归测试。
 - Astro 静态构建生成 63 个页面，0 errors/warnings/hints；用户文档、Node/PowerShell 语法、打包策略和工作树卫生检查通过。
 - 这些是本地代码与文档证据，不改变 11 项外部发布门禁的 `pending` 状态，也不替代可信签名、Store/WinGet、ARM64 实机、WACK 或真实辅助技术验证。

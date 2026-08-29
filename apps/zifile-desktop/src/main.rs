@@ -59,9 +59,18 @@ pub fn main() -> iced::Result {
         .title(title)
         .theme(theme)
         .subscription(subscription)
-        .window_size((1_180.0, 780.0))
+        .window(window_settings())
         .antialiasing(true)
         .run()
+}
+
+fn window_settings() -> iced::window::Settings {
+    iced::window::Settings {
+        size: iced::Size::new(1_180.0, 780.0),
+        min_size: Some(iced::Size::new(920.0, 620.0)),
+        position: iced::window::Position::Centered,
+        ..Default::default()
+    }
 }
 
 fn initialize() -> (ZiFile, Task<Message>) {
@@ -1920,6 +1929,18 @@ mod tests {
     use super::*;
     use zifile_core::ArchiveEntryInfo;
     use zifile_desktop::entry_view::{filtered_entry_count, sorted_filtered_entry_page};
+
+    #[test]
+    fn default_window_settings_keep_the_layout_readable() {
+        let settings = window_settings();
+
+        assert_eq!(settings.size, iced::Size::new(1_180.0, 780.0));
+        assert_eq!(settings.min_size, Some(iced::Size::new(920.0, 620.0)));
+        assert!(matches!(
+            settings.position,
+            iced::window::Position::Centered
+        ));
+    }
 
     #[test]
     fn create_input_guidance_is_bilingual_and_matches_capabilities() {
