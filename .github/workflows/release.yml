@@ -333,8 +333,8 @@ jobs:
         shell: pwsh
         run: |
           $version = '${{ github.ref_name }}'.TrimStart('v')
-          $x64 = Get-ChildItem -LiteralPath release -Filter '*windows-x64.msix' | Select-Object -Single
-          $arm64 = Get-ChildItem -LiteralPath release -Filter '*windows-arm64.msix' | Select-Object -Single
+          $x64 = Get-ChildItem -LiteralPath release -Filter '*windows-x64.msix' | Select-Object -First 1
+          $arm64 = Get-ChildItem -LiteralPath release -Filter '*windows-arm64.msix' | Select-Object -First 1
           $base = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
           ./packaging/winget/Generate-Manifests.ps1 `
             -Version $version `
