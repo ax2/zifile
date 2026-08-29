@@ -17,7 +17,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、15 个创建格式、17 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；当前工作区已切换到 `v0.1.0`，公开 GitHub Release 将通过匹配 tag 自动生成。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0` 已通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -28,6 +28,12 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 ## 发布结果
 
 稳定 1.0 尚未发布；`v0.1.0` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+
+## 2026-08-29 正式公开版本结果
+
+- [`v0.1.0` Release](https://github.com/ax2/zifile/releases/tag/v0.1.0) 已发布；tag 与 `main` 提交 `a601738` 一致，Release 为非 Draft、非 prerelease。
+- 发布工作流生成并上传 x64/ARM64 MSIX、桌面端/CLI/Worker/Shell 可运行文件、SHA-256、SBOM、审计文件和 WinGet 清单候选；Release 明确标注为未签名 GitHub 构建。
+- 这次发布验证了 GitHub 分发链路，但不关闭可信签名、WinGet 社区接纳、Microsoft Store、WACK、物理 ARM64 和完整辅助功能门禁。
 
 ## 2026-08-29 质量收口记录
 
