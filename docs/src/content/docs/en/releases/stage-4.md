@@ -17,7 +17,7 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 - `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, fifteen creation formats, seventeen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
 - `release/readiness.json` binds stable tags to accessibility, queue, trusted-install, ARM64, screenshot, WACK, WinGet, Store, Partner Center, and signing evidence.
 - The Release workflow derives dual-architecture builds, audits, checksums, SBOMs, provenance, and GitHub Releases from the workspace version; ordinary public releases use unsigned artifacts, while formal signing can be enabled explicitly through workflow inputs.
-- `v0.1.0-alpha.1` is publicly available as a prerelease; the workspace is now set to `v0.1.0`, whose public GitHub Release will be generated from the matching tag.
+- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0` has now been published as a public GitHub Release from the matching tag.
 
 ## Required to finish
 
@@ -28,6 +28,12 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 ## Release result
 
 Stable 1.0 has not been published; `v0.1.0` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+
+## 2026-08-29 public release result
+
+- The [`v0.1.0` Release](https://github.com/ax2/zifile/releases/tag/v0.1.0) is published; its tag and `main` commit `a601738` match, and the Release is neither a draft nor a prerelease.
+- The release workflow generated and uploaded x64/ARM64 MSIX packages, desktop/CLI/Worker/Shell runnable files, SHA-256 checksums, SBOMs, audit files, and a WinGet manifest candidate. The Release identifies the build as unsigned GitHub distribution.
+- This validates the GitHub distribution path but does not close trusted signing, WinGet community acceptance, Microsoft Store, WACK, physical ARM64, or full accessibility gates.
 
 ## 2026-08-29 quality closeout
 

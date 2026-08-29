@@ -12,8 +12,8 @@ read-only beta providers.
 
 The current build is feature-complete for the currently supported archive contract:
 the source, x64/ARM64 builds, package audits, reproducibility checks and release
-rehearsals are automated. The public `v0.1.0` GitHub release uses unsigned
-artifacts; a stable 1.0 release is still gated on
+rehearsals are automated. The public [`v0.1.0` GitHub release](https://github.com/ax2/zifile/releases/tag/v0.1.0)
+uses unsigned artifacts; a stable 1.0 release is still gated on
 trusted signing, real foreground Windows validation, physical ARM64, WACK,
 Partner Center/Microsoft Store certification and WinGet acceptance.
 
