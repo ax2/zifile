@@ -44,6 +44,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Give the default desktop window a centered startup position and a 920×620
+  minimum size so archive tables and creation controls remain usable when the
+  window is resized.
 - Add an explicit bilingual checksum-copy action to both desktop archive tables,
   with clipboard failure surfaced as an error status.
 - Add a bilingual `Show in File Explorer` action to both desktop archive
