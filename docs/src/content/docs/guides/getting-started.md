@@ -16,7 +16,7 @@ ZiFile 目前是 Stage 3 Release Candidate，尚未发布 Microsoft Store 或 Wi
 
 ## 安全解压
 
-选择全部或部分条目，指定目标文件夹和冲突策略，然后开始解压。ZiFile 默认拒绝路径穿越、绝对路径、Windows 设备名、大小写冲突、不安全链接以及超过条目数、展开大小或压缩倍率限制的内容。遇到这类拒绝时，应核对归档来源，不要通过关闭安全边界重试。
+选择全部或部分条目，指定目标文件夹和冲突策略，然后开始解压。ZiFile 默认拒绝路径穿越、绝对路径、Windows 设备名、大小写冲突、不安全链接、包含符号链接/junction/reparse point 的目标路径以及超过条目数、展开大小或压缩倍率限制的内容。遇到这类拒绝时，应核对归档来源，不要通过关闭安全边界重试。
 
 任务在隔离 Worker 中运行。按 `Escape` 或选择“取消”会先请求协作取消，必要时终止 Worker；已经完整写入的文件不会被误报为事务式回滚。
 
@@ -26,7 +26,7 @@ ZiFile 目前是 Stage 3 Release Candidate，尚未发布 Microsoft Store 或 Wi
 2. 添加文件或文件夹，也可以把来源拖入窗口。
 3. 选择格式、压缩等级和可选密码，再选择保存位置。
 
-ZIP、7z 和 TAR 组合支持多个文件与文件夹。gzip、Zstandard、XZ、Bzip2、LZ4 和 Brotli 是单文件流，必须恰好选择一个现有文件；需要压缩目录时，请改用对应 TAR 组合。RAR 与 CAB 只支持读取，不支持创建。
+ZIP、7z 和 TAR 组合支持多个文件与文件夹。gzip、Zstandard、XZ、LZMA、Bzip2、LZ4 和 Brotli 是单文件流，必须恰好选择一个现有文件；需要压缩目录时，请改用对应 TAR 组合。RAR 与 CAB 只支持读取，不支持创建。
 
 ## 队列与设置
 

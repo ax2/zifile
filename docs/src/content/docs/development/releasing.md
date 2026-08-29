@@ -23,9 +23,11 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 
 公开的[代码签名政策](/zifile/development/code-signing-policy/)记录 SignPath Foundation 申请状态、发布角色、来源证明边界、隐私说明以及独立的 Partner Center MSIX 身份。申请获批且 MSIX 身份决策完成评审前，不将 SignPath Foundation 接入正式发布工作流。
 
-推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE。稳定标签（例如 `v1.0.0`）随后在受保护的 `production-signing` Environment 中签署桌面/CLI/Worker EXE、Explorer DLL 和 MSIX；签后门禁要求所有文件具有同一 Publisher、有效系统信任链和时间戳，并重新生成包审计、SHA-256 与来源证明。稳定发布任务只下载 `signed-windows-*` 产物，再生成 WinGet 1.12 多文件清单候选和 GitHub Release。带连字符的阶段标签（例如 `v0.1.0-alpha.1`、`v0.1.0-beta.1`、`v1.0.0-rc.1`）不跳过构建，而是发布未签名开发包、独立 EXE、审计、校验和、SBOM 与构建证明到 GitHub Pre-release；它们不能提交 WinGet 或 Store。WinGet 候选使用社区仓库的标准目录，并在上传前把正式 URL、版本、架构和清单 SHA-256 与两份签后本地 MSIX 精确核对；官方 `winget validate` 与社区接受仍是发布后的独立证据。没有正式凭据时也可以用 `signing_provider=none` 做不公开的手动双架构验证。未签名 `.Dev` 包使用微软固定 OID Publisher 并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
+推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE，并直接发布公开的 GitHub Release。稳定标签（例如 `v1.0.0`）默认发布未签名的可用 Windows 包、独立 EXE、审计、校验和、SBOM、WinGet 清单候选与构建证明；Release Notes 会明确提示未签名状态，用户应先核对 SHA-256。带连字符的阶段标签（例如 `v0.1.0-alpha.1`、`v0.1.0-beta.1`、`v1.0.0-rc.1`）发布相同的未签名产物到 GitHub Pre-release；它们不能提交 WinGet 或 Store。正式签名仍保留为 Release workflow 的 `digicert-stm` 手动选项，只有显式勾选 `require_release_ready` 时才要求 Partner Center、Store 截图和全部 1.0 readiness 门禁。未签名 `.Dev` 包使用微软固定 OID Publisher 并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
 
-手动 Release 可选择 `digicert-stm` 做完整签名演练。构建阶段要求仓库 Variables `ZIFILE_MSIX_IDENTITY`、`ZIFILE_MSIX_PUBLISHER`、`ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME`；受保护 Environment 提供 Variables `SM_HOST`、`SM_KEYPAIR_ALIAS` 和 Secrets `SM_API_KEY`、`SM_CLIENT_CERT_FILE_B64`、`SM_CLIENT_CERT_PASSWORD`。客户端认证证书只用于登录签名服务，写入 Runner 临时目录并在作业结束前删除；代码签名私钥始终留在云 HSM。
+阶段预发布的 workflow 会自动在 Release Notes 中加入 `Free code signing provided by SignPath.io, certificate by SignPath Foundation.`，同时保留 GitHub 自动生成的变更说明。这是基金会署名/申请说明，不代表当前未签名开发包已经获得受信任签名。
+
+手动 Release 可选择 `digicert-stm` 做完整签名演练，并可选择 `require_release_ready` 打开正式门禁。构建阶段要求仓库 Variables `ZIFILE_MSIX_IDENTITY`、`ZIFILE_MSIX_PUBLISHER`、`ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME`；受保护 Environment 提供 Variables `SM_HOST`、`SM_KEYPAIR_ALIAS` 和 Secrets `SM_API_KEY`、`SM_CLIENT_CERT_FILE_B64`、`SM_CLIENT_CERT_PASSWORD`。正式身份只在显式签名/正式门禁演练中传给构建器；普通公开发布保留隔离的 `.Dev` 身份。客户端认证证书只用于登录签名服务，写入 Runner 临时目录并在作业结束前删除；代码签名私钥始终留在云 HSM。
 
 正式标签或 `digicert-stm` 演练会在编译前运行 `Test-PartnerCenterIdentity.ps1 -RequireConfigured`。它要求 Name、Publisher 与 Publisher Display Name 同时存在，Name 符合 MSIX 的 3–50 位字母数字/点/横线边界，Publisher 是有效 X.500 distinguished name，并拒绝 `.Dev` 与未签名 OID；Display Name 必须是 Partner Center 开发者账户中的精确值。三个值必须从 Partner Center 原样复制；预检只证明结构和来源约束，不证明账号或名称已经预留。
 
@@ -39,11 +41,11 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 
 Windows Release 使用仓库固定的 Rust 1.93.0、锁文件、单作业 Cargo 构建和 MSVC `/Brepro` 确定性链接。x64/ARM64 测试与打包 Job 各有 90 分钟硬超时；超时按失败处理，不能跳过包审计或产物上传。独立的双构建工作流会在两个隔离目标目录比较五个裸 PE 文件的 SHA-256；方法与证据边界见[可复现 Windows 构建](/zifile/development/reproducible-builds/)。
 
-在打标签前可从 Actions 手动运行 Release 工作流。该模式不接收第二个版本输入，而是使用 `Cargo.toml` 的工作区版本；`none` 保存双架构未签名产物与 SBOM，`digicert-stm` 额外进入受保护环境并保存签后产物与签名审计，两者都跳过公开 Release 和 WinGet 发布。推荐每个阶段使用精确递增的带连字符标签，例如 `v0.1.0-alpha.1`、`v0.1.0-beta.1` 和 `v1.0.0-rc.1`；稳定版本使用无连字符的 `v1.0.0`，会强制通过所有正式门禁。普通 CI 与 Release 都运行版本一致性门禁；标签必须精确匹配 `v<workspace-version>`。CLI、核心 Provider 和 IPC 的兼容边界见[公开契约与版本策略](/zifile/development/contracts/)。
+在打标签前可从 Actions 手动运行 Release 工作流。该模式不接收第二个版本输入，而是使用 `Cargo.toml` 的工作区版本；推送 tag 会自动公开发布，`none` 构建未签名双架构产物，`digicert-stm` 才进入受保护环境并保存签后产物。推荐每个阶段使用精确递增的带连字符标签，例如 `v0.1.0-alpha.1`、`v0.1.0-beta.1` 和 `v1.0.0-rc.1`；稳定版本使用无连字符的 `v1.0.0`，默认也可发布公开 GitHub 构建，需要正式渠道时再显式启用 `require_release_ready`。普通 CI 与 Release 都运行版本一致性门禁；标签必须精确匹配 `v<workspace-version>`。CLI、核心 Provider 和 IPC 的兼容边界见[公开契约与版本策略](/zifile/development/contracts/)。
 
 普通 CI 还会检查 `CHANGELOG.md` 只有一个 `[Unreleased]` 章节。标签发布必须先把本次内容整理为 `## [<workspace-version>] - YYYY-MM-DD`，至少包含一个 Keep a Changelog 分类和一条非占位更新；版本标题缺失、日期无效、空章节或残留 `TODO`/`TBD` 都会在构建前失败。手动 Release 只验证 `[Unreleased]` 结构，便于发布前演练。
 
-仓库以 [`release/readiness.json`](https://github.com/ax2/zifile/blob/main/release/readiness.json) 跟踪 1.0 的 11 项发布阻塞门禁。普通 CI 与预发布演练检查结构和证据格式；无连字符的稳定标签必须通过 `Test-ReleaseReadiness.ps1 -RequireReleaseReady`，任一 `pending` 项都会在构建前拒绝发布。当前状态为 `candidate`，详见 [1.0 发布就绪状态](/zifile/releases/release-readiness/)。
+仓库以 [`release/readiness.json`](https://github.com/ax2/zifile/blob/main/release/readiness.json) 跟踪 1.0 的 11 项正式渠道门禁。普通 CI 与公开发布检查结构和证据格式；只有显式启用 `require_release_ready` 时，才会运行 `Test-ReleaseReadiness.ps1 -RequireReleaseReady` 并在任一 `pending` 项时拒绝构建。当前状态为 `candidate`，详见 [1.0 发布就绪状态](/zifile/releases/release-readiness/)。
 
 手动验证模式还会构建 `-accessible` 后缀的 Dioxus/WebView2 候选 MSIX 与完整可运行目录，并将候选桌面程序以规范的 `zifile-desktop.exe` 名称放入包内。正式标签仍只发布当前默认 UI；候选通过 Narrator、Accessibility Insights、IME、DPI 和双架构运行验证后才允许替换默认发行物。
 

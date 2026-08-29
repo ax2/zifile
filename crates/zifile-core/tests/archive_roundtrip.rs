@@ -182,7 +182,11 @@ fn cab_uncompressed_content_is_supported() {
         &[("plain.txt", b"uncompressed cabinet")],
         cab::CompressionType::None,
     );
-    assert_test_progress(&archive, None);
+    let tested = assert_test_progress(&archive, None);
+    assert_eq!(
+        tested.entries[0].checksum.as_deref(),
+        Some("2f11f6f658b46f5bc356c3bd9891123ad4487a311dbcd4c464e427e2de0cec0c")
+    );
     let output = temp.path().join("cab-none");
     let summary = extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
     assert_eq!(summary.files, 1);
@@ -260,6 +264,7 @@ fn assert_round_trip(format: ArchiveFormat) {
 
     let info = list_archive(&archive, None).unwrap();
     assert_eq!(info.format, format);
+    assert!(info.entries.iter().all(|entry| entry.checksum.is_none()));
     assert!(
         info.entries
             .iter()
@@ -271,7 +276,16 @@ fn assert_round_trip(format: ArchiveFormat) {
         ArchiveTimestampOffset::Utc
     };
     assert_listed_mtime(&archive, "hello.txt", timestamp_offset);
-    assert_test_progress(&archive, None);
+    let tested = assert_test_progress(&archive, None);
+    let hello = tested
+        .entries
+        .iter()
+        .find(|entry| entry.path.ends_with("hello.txt"))
+        .expect("hello.txt should be present after testing");
+    assert_eq!(
+        hello.checksum.as_deref(),
+        Some("ceaceff8e56e9b629eb1ab2d532e2c04746de1c373ce5e62476f3242952df502")
+    );
 
     let output = temp.path().join("output");
     let extract_progress = OperationProgress::default();
@@ -372,6 +386,7 @@ fn tar_family_round_trips() {
         ArchiveFormat::TarGzip,
         ArchiveFormat::TarZstd,
         ArchiveFormat::TarXz,
+        ArchiveFormat::TarLzma,
         ArchiveFormat::TarBzip2,
     ] {
         assert_round_trip(format);
@@ -384,6 +399,7 @@ fn stream_formats_round_trip_single_files() {
         ArchiveFormat::Gzip,
         ArchiveFormat::Zstandard,
         ArchiveFormat::Xz,
+        ArchiveFormat::Lzma,
         ArchiveFormat::Bzip2,
         ArchiveFormat::Lz4,
         ArchiveFormat::Brotli,
@@ -401,7 +417,12 @@ fn stream_formats_round_trip_single_files() {
             &CreateOptions::default(),
         )
         .unwrap();
-        assert_test_progress(&archive, None);
+        let tested = assert_test_progress(&archive, None);
+        assert_eq!(
+            tested.entries[0].checksum.as_deref(),
+            Some("9125b0b04d66059ecef6ba3f492855da873bf1553438bf769b980ade94c785f7"),
+            "failed {format}"
+        );
         let output = temp.path().join("output");
         extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
         assert_eq!(
@@ -410,6 +431,58 @@ fn stream_formats_round_trip_single_files() {
             "failed {format}"
         );
     }
+}
+
+#[test]
+fn lzma_alone_creation_records_the_known_uncompressed_size() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("payload.txt");
+    let payload = b"known LZMA-alone size\n";
+    fs::write(&source, payload).unwrap();
+    let archive = temp.path().join("payload.txt.lzma");
+
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Lzma,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    let bytes = fs::read(&archive).unwrap();
+    assert!(bytes.len() >= 13);
+    assert_eq!(
+        u64::from_le_bytes(bytes[5..13].try_into().unwrap()),
+        payload.len() as u64
+    );
+}
+
+#[test]
+fn lzma_alone_alias_is_decoded_and_keeps_its_output_stem() {
+    // Header plus the small LZMA-alone payload from lzma-rust2's decoder
+    // example: properties 0x5d, 8 MiB dictionary, and 13 output bytes.
+    const LZMA_ALONE_HELLO: [u8; 37] = [
+        0x5d, 0x00, 0x00, 0x80, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x24,
+        0x19, 0x49, 0x98, 0x6f, 0x16, 0x02, 0x8c, 0xe8, 0xe6, 0x5b, 0xb1, 0x47, 0xc6, 0xce, 0xb7,
+        0x63, 0xff, 0xff, 0x3c, 0xac, 0x00, 0x00,
+    ];
+    let temp = tempfile::tempdir().unwrap();
+    let archive = temp.path().join("payload.lzma");
+    fs::write(&archive, LZMA_ALONE_HELLO).unwrap();
+
+    let info = list_archive(&archive, None).unwrap();
+    assert_eq!(info.format, ArchiveFormat::Lzma);
+    assert_eq!(info.entries.len(), 1);
+    assert_eq!(info.entries[0].path, PathBuf::from("payload"));
+    assert_eq!(info.entries[0].size, 13);
+
+    let output = temp.path().join("output");
+    let summary = extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
+    assert_eq!(summary.files, 1);
+    assert_eq!(
+        fs::read_to_string(output.join("payload")).unwrap(),
+        "Hello, world!"
+    );
 }
 
 #[test]
@@ -852,6 +925,30 @@ fn traversal_zip_is_rejected_before_extraction() {
     assert!(!Path::new(temp.path()).join("escape.txt").exists());
 }
 
+#[cfg(windows)]
+#[test]
+fn unicode_case_collisions_are_rejected_before_extraction() {
+    let temp = tempfile::tempdir().unwrap();
+    let archive_path = temp.path().join("unicode-collision.zip");
+    let file = fs::File::create(&archive_path).unwrap();
+    let mut writer = zip::ZipWriter::new(file);
+    for (name, contents) in [
+        ("Ä.txt", b"upper".as_slice()),
+        ("ä.txt", b"lower".as_slice()),
+    ] {
+        writer
+            .start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(contents).unwrap();
+    }
+    writer.finish().unwrap();
+
+    assert!(matches!(
+        list_archive(&archive_path, None),
+        Err(ZiFileError::NameCollision(path)) if path == Path::new("ä.txt")
+    ));
+}
+
 #[test]
 fn existing_destination_obeys_conflict_policy() {
     let temp = tempfile::tempdir().unwrap();
@@ -887,6 +984,204 @@ fn existing_destination_obeys_conflict_policy() {
         fs::read_to_string(output.join("payload.txt")).unwrap(),
         "old"
     );
+
+    let overwritten = extract_archive(
+        &archive,
+        &output,
+        &ExtractOptions {
+            conflict: ConflictPolicy::Overwrite,
+            ..ExtractOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(overwritten.files, 1);
+    assert_eq!(
+        fs::read_to_string(output.join("payload.txt")).unwrap(),
+        "new"
+    );
+}
+
+#[test]
+fn creating_archive_rejects_existing_destination_without_replacing_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("payload.txt");
+    fs::write(&source, "new archive contents").unwrap();
+    let destination = temp.path().join("existing.zip");
+    fs::write(&destination, b"keep this file").unwrap();
+
+    let result = create_archive(
+        &[source],
+        &destination,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    );
+
+    assert!(matches!(
+        result,
+        Err(ZiFileError::DestinationExists(path)) if path == destination
+    ));
+    assert_eq!(fs::read(&destination).unwrap(), b"keep this file");
+}
+
+#[test]
+fn extraction_rejects_a_file_as_the_destination_without_touching_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("payload.txt");
+    fs::write(&source, "new").unwrap();
+    let archive = temp.path().join("payload.zip");
+    create_archive(
+        &[source],
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    let destination = temp.path().join("not-a-directory");
+    fs::write(&destination, "sentinel").unwrap();
+
+    let result = extract_archive(&archive, &destination, &ExtractOptions::default());
+
+    assert!(matches!(
+        result,
+        Err(ZiFileError::DestinationExists(path)) if path == destination
+    ));
+    assert_eq!(fs::read_to_string(destination).unwrap(), "sentinel");
+}
+
+#[cfg(unix)]
+#[test]
+fn extraction_rejects_a_symbolic_link_in_the_destination_without_writing_through_it() {
+    use std::os::unix::fs::symlink;
+
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("payload.txt");
+    fs::write(&source, "new").unwrap();
+    let archive = temp.path().join("payload.zip");
+    create_archive(
+        &[source],
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    let outside = temp.path().join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    let output = temp.path().join("output");
+    symlink(&outside, &output).unwrap();
+
+    let result = extract_archive(
+        &archive,
+        &output,
+        &ExtractOptions {
+            conflict: ConflictPolicy::Overwrite,
+            ..ExtractOptions::default()
+        },
+    );
+
+    assert!(matches!(
+        result,
+        Err(ZiFileError::UnsafeDestination(path)) if path == output
+    ));
+    assert!(!outside.join("payload.txt").exists());
+}
+
+#[cfg(windows)]
+#[test]
+fn extraction_rejects_a_symbolic_link_in_the_destination_without_writing_through_it() {
+    use std::os::windows::fs::symlink_dir;
+
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("payload.txt");
+    fs::write(&source, "new").unwrap();
+    let archive = temp.path().join("payload.zip");
+    create_archive(
+        &[source],
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    let outside = temp.path().join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    let output = temp.path().join("output");
+    if let Err(error) = symlink_dir(&outside, &output) {
+        if error.kind() == std::io::ErrorKind::PermissionDenied {
+            return;
+        }
+        panic!("could not create test symlink: {error}");
+    }
+
+    let result = extract_archive(
+        &archive,
+        &output,
+        &ExtractOptions {
+            conflict: ConflictPolicy::Overwrite,
+            ..ExtractOptions::default()
+        },
+    );
+
+    assert!(matches!(
+        result,
+        Err(ZiFileError::UnsafeDestination(path)) if path == output
+    ));
+    assert!(!outside.join("payload.txt").exists());
+}
+
+#[cfg(unix)]
+fn create_directory_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(windows)]
+fn create_directory_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_dir(target, link)
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn extraction_rejects_a_symbolic_link_output_parent() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source");
+    fs::create_dir_all(source.join("nested")).unwrap();
+    fs::write(source.join("nested/payload.txt"), "new").unwrap();
+    let archive = temp.path().join("nested.zip");
+    create_archive(
+        &[source],
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    let outside = temp.path().join("outside");
+    fs::create_dir_all(&outside).unwrap();
+    let output = temp.path().join("output");
+    fs::create_dir_all(output.join("source")).unwrap();
+    let link = output.join("source/nested");
+    if let Err(error) = create_directory_symlink(&outside, &link) {
+        #[cfg(windows)]
+        if error.kind() == std::io::ErrorKind::PermissionDenied {
+            return;
+        }
+        panic!("could not create test symlink: {error}");
+    }
+
+    let result = extract_archive(
+        &archive,
+        &output,
+        &ExtractOptions {
+            conflict: ConflictPolicy::Overwrite,
+            ..ExtractOptions::default()
+        },
+    );
+
+    assert!(matches!(
+        result,
+        Err(ZiFileError::UnsafeDestination(path)) if path == link
+    ));
+    assert!(!outside.join("payload.txt").exists());
 }
 
 #[test]
@@ -946,6 +1241,65 @@ fn declared_expansion_limit_blocks_output() {
 }
 
 #[test]
+fn stream_listing_honors_zero_expansion_ratio_without_minimum_output() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("payload.txt");
+    fs::write(&source, vec![b'a'; 4096]).unwrap();
+    let archive = temp.path().join("payload.gz");
+    create_archive(
+        &[source],
+        &archive,
+        ArchiveFormat::Gzip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    let result = list_archive_with_limits(
+        &archive,
+        None,
+        SafetyLimits {
+            max_expansion_ratio: 0,
+            ..SafetyLimits::default()
+        },
+    );
+    assert!(matches!(result, Err(ZiFileError::LimitExceeded(_))));
+}
+
+#[test]
+fn tar_listing_honors_declared_expansion_limits_before_skipping_payload() {
+    let formats = [
+        ArchiveFormat::Tar,
+        ArchiveFormat::TarGzip,
+        ArchiveFormat::TarZstd,
+        ArchiveFormat::TarXz,
+        ArchiveFormat::TarLzma,
+        ArchiveFormat::TarBzip2,
+    ];
+    for format in formats {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("payload.txt");
+        fs::write(&source, vec![b'a'; 4096]).unwrap();
+        let archive = temp
+            .path()
+            .join(format!("payload.{}", format.canonical_extension()));
+        create_archive(&[source], &archive, format, &CreateOptions::default()).unwrap();
+
+        let result = list_archive_with_limits(
+            &archive,
+            None,
+            SafetyLimits {
+                max_expansion_ratio: 0,
+                ..SafetyLimits::default()
+            },
+        );
+        assert!(
+            matches!(result, Err(ZiFileError::LimitExceeded(_))),
+            "TAR listing limit was not enforced for {format}"
+        );
+    }
+}
+
+#[test]
 fn tar_symbolic_link_is_rejected() {
     let temp = tempfile::tempdir().unwrap();
     let archive_path = temp.path().join("link.tar");
@@ -983,6 +1337,42 @@ fn signatures_win_over_misleading_extensions() {
 }
 
 #[test]
+fn renamed_tar_compositions_are_detected_from_a_bounded_decoded_header() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("payload.txt");
+    fs::write(&source, "renamed TAR composition").unwrap();
+
+    for format in [
+        ArchiveFormat::TarGzip,
+        ArchiveFormat::TarZstd,
+        ArchiveFormat::TarXz,
+        ArchiveFormat::TarBzip2,
+    ] {
+        let original = temp
+            .path()
+            .join(format!("original.{}", format.canonical_extension()));
+        create_archive(
+            std::slice::from_ref(&source),
+            &original,
+            format,
+            &CreateOptions::default(),
+        )
+        .unwrap();
+        let renamed = temp.path().join(format!("renamed-{format:?}.bin"));
+        fs::rename(&original, &renamed).unwrap();
+
+        assert_eq!(detect_format(&renamed).unwrap(), format);
+        let info = list_archive(&renamed, None).unwrap();
+        assert_eq!(info.format, format);
+        assert!(
+            info.entries
+                .iter()
+                .any(|entry| entry.path == Path::new("payload.txt"))
+        );
+    }
+}
+
+#[test]
 fn cancellation_stops_before_writing_output() {
     let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("cancel.txt");
@@ -1008,7 +1398,56 @@ fn cancellation_stops_before_writing_output() {
         },
     );
     assert!(matches!(result, Err(ZiFileError::Cancelled)));
+    assert!(!output.exists());
     assert!(!output.join("cancel.txt").exists());
+}
+
+#[test]
+fn precancelled_creation_does_not_create_destination_parent() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source.txt");
+    fs::write(&source, b"cancel before create").unwrap();
+    let destination = temp.path().join("not-created").join("archive.zip");
+    let cancellation = CancellationToken::default();
+    cancellation.cancel();
+
+    let result = create_archive(
+        &[source],
+        &destination,
+        ArchiveFormat::Zip,
+        &CreateOptions {
+            cancellation,
+            ..CreateOptions::default()
+        },
+    );
+
+    assert!(matches!(result, Err(ZiFileError::Cancelled)));
+    assert!(!destination.exists());
+    assert!(!destination.parent().unwrap().exists());
+}
+
+#[test]
+fn creation_rejects_a_destination_inside_a_source_before_creating_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source");
+    fs::create_dir_all(&source).unwrap();
+    fs::write(source.join("input.txt"), b"do not self-archive").unwrap();
+    let destination = source.join("generated").join("archive.zip");
+
+    let result = create_archive(
+        std::slice::from_ref(&source),
+        &destination,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    );
+
+    assert!(matches!(
+        result,
+        Err(ZiFileError::InvalidInput(message))
+            if message == "destination cannot be inside a source directory"
+    ));
+    assert!(!destination.exists());
+    assert!(!destination.parent().unwrap().exists());
 }
 
 #[test]

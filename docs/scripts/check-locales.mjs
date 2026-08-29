@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -25,15 +25,26 @@ const missingEnglish = chinesePages.filter((path) => !relativeFiles.has(join('en
 const orphanedEnglish = [...relativeFiles]
   .filter((path) => path.startsWith(`en\\`) || path.startsWith('en/'))
   .filter((path) => !relativeFiles.has(path.replace(/^en[\\/]/, '')));
+const emptyPages = [];
+for (const path of files) {
+  const source = await readFile(path, 'utf8');
+  const body = source.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').trim();
+  if (!body) {
+    emptyPages.push(relative(docsRoot, path));
+  }
+}
 
-if (missingEnglish.length || orphanedEnglish.length) {
+if (missingEnglish.length || orphanedEnglish.length || emptyPages.length) {
   if (missingEnglish.length) {
     console.error(`Missing English mirrors:\n${missingEnglish.join('\n')}`);
   }
   if (orphanedEnglish.length) {
     console.error(`English pages without Chinese mirrors:\n${orphanedEnglish.join('\n')}`);
   }
+  if (emptyPages.length) {
+    console.error(`Empty Markdown pages:\n${emptyPages.join('\n')}`);
+  }
   process.exitCode = 1;
 } else {
-  console.log(`Locale parity verified for ${chinesePages.length} page pairs.`);
+  console.log(`Locale parity and non-empty content verified for ${chinesePages.length} page pairs.`);
 }

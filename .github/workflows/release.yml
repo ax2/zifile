@@ -11,6 +11,11 @@ on:
         options:
           - none
           - digicert-stm
+      require_release_ready:
+        description: Require all formal 1.0, Store, and Partner Center gates before building
+        required: true
+        type: boolean
+        default: false
   push:
     tags:
       - v*
@@ -56,7 +61,7 @@ jobs:
           $version = ./scripts/Test-VersionConsistency.ps1 @arguments | ConvertFrom-Json
           ./scripts/Test-ReleaseNotes.ps1 @arguments
           $readinessArguments = @{}
-          if ('${{ github.event_name }}' -ne 'workflow_dispatch' -and '${{ github.ref_name }}' -notmatch '-') {
+          if ('${{ inputs.require_release_ready }}' -eq 'true') {
             $readinessArguments.RequireReleaseReady = $true
           }
           ./scripts/Test-ReleaseReadiness.ps1 @readinessArguments
@@ -65,8 +70,7 @@ jobs:
             Publisher = $env:ZIFILE_MSIX_PUBLISHER
             PublisherDisplayName = $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME
           }
-          if (('${{ github.event_name }}' -ne 'workflow_dispatch' -and
-               '${{ github.ref_name }}' -notmatch '-') -or
+          if ('${{ inputs.require_release_ready }}' -eq 'true' -or
               '${{ inputs.signing_provider }}' -eq 'digicert-stm') {
             $identityArguments.RequireConfigured = $true
           }
@@ -77,7 +81,7 @@ jobs:
         if: matrix.architecture == 'x64'
         run: cargo test --workspace --all-targets --all-features --locked
       - name: Enforce tagged-release store evidence
-        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+        if: inputs.require_release_ready == true
         shell: pwsh
         run: ./packaging/store/Test-Screenshots.ps1 -RequireComplete
       - name: Build MSIX and runnable executables
@@ -87,10 +91,14 @@ jobs:
             Version = '${{ steps.version.outputs.msix }}'
             Architecture = '${{ matrix.architecture }}'
           }
-          if ($env:ZIFILE_MSIX_IDENTITY) { $arguments.IdentityName = $env:ZIFILE_MSIX_IDENTITY }
-          if ($env:ZIFILE_MSIX_PUBLISHER) { $arguments.Publisher = $env:ZIFILE_MSIX_PUBLISHER }
-          if ($env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME) {
-            $arguments.PublisherDisplayName = $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME
+          $useFormalIdentity = ('${{ inputs.require_release_ready }}' -eq 'true' -or
+            '${{ inputs.signing_provider }}' -eq 'digicert-stm')
+          if ($useFormalIdentity) {
+            if ($env:ZIFILE_MSIX_IDENTITY) { $arguments.IdentityName = $env:ZIFILE_MSIX_IDENTITY }
+            if ($env:ZIFILE_MSIX_PUBLISHER) { $arguments.Publisher = $env:ZIFILE_MSIX_PUBLISHER }
+            if ($env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME) {
+              $arguments.PublisherDisplayName = $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME
+            }
           }
           ./packaging/msix/Build-Package.ps1 @arguments
       - name: Build accessible UI candidate package
@@ -137,7 +145,7 @@ jobs:
 
   sign:
     name: Sign Windows ${{ matrix.architecture }}
-    if: (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')) || inputs.signing_provider == 'digicert-stm'
+    if: inputs.signing_provider == 'digicert-stm'
     needs: windows
     runs-on: windows-2022
     timeout-minutes: 30
@@ -303,7 +311,7 @@ jobs:
   publish:
     name: Publish GitHub release
     if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
-    needs: [sign, sbom]
+    needs: [windows, sbom]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -314,7 +322,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
         with:
-          pattern: signed-windows-*
+          pattern: windows-*
           path: release
           merge-multiple: true
       - uses: actions/download-artifact@v7
@@ -349,6 +357,8 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
+          body: |
+            This is a public unsigned Windows build for GitHub distribution. It is not a Microsoft Store-certified package. Verify the included SHA256SUMS file before installing.
           prerelease: false
           files: release/*
 
@@ -397,5 +407,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
+          body: |
+            Free code signing provided by SignPath.io, certificate by SignPath Foundation.
           prerelease: true
           files: release/*

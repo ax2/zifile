@@ -40,7 +40,7 @@ try {
     if (-not $preflight.ready_for_winget_validate -or -not $preflight.local_installers_verified) {
         throw 'ZiFile preflight did not accept the deterministic WinGet candidate.'
     }
-    if (@($preflight.file_extensions).Count -ne 24 -or
+    if (@($preflight.file_extensions).Count -ne 29 -or
         $preflight.file_extensions -cnotcontains 'rar' -or
         $preflight.file_extensions -cnotcontains 'cab' -or
         $preflight.file_extensions -cnotcontains 'zipx' -or

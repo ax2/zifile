@@ -17,11 +17,10 @@ use std::time::Duration;
 
 use dioxus::prelude::*;
 use dioxus_html::HasFileData;
-use rfd::FileDialog;
+use rfd::AsyncFileDialog;
 use zifile_core::{
     ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy, CreateInputKind,
     OPEN_ARCHIVE_EXTENSIONS, OperationProgress, OperationSummary, ProgressSnapshot, SafetyLimits,
-    detect_format_from_path,
 };
 use zifile_worker_protocol::WorkerRequest;
 
@@ -30,7 +29,12 @@ mod settings;
 mod taskbar;
 mod worker_client;
 
-use i18n::{Locale, Text, format_archive_modified, format_worker_error};
+use i18n::{
+    Locale, Text, archive_empty_state_description, archive_filter_summary, archive_no_matches,
+    create_source_removed_status, create_source_summary, create_sources_added_status,
+    create_sources_cleared_status, format_archive_modified, format_worker_error,
+    worker_error_may_require_password,
+};
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
@@ -41,6 +45,10 @@ use zifile_desktop::entry_view::{
 };
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
+use zifile_desktop::{
+    append_unique_paths as append_unique, ensure_archive_extension, is_openable_archive_path,
+    reveal_in_file_manager,
+};
 
 const STYLES: &str = include_str!("accessible_ui.css");
 const ARCHIVE_FILTER_LIVE: &str = "off";
@@ -53,21 +61,7 @@ const ARIA_SHORTCUT_SELECT_ALL: &str = "Control+A";
 const FOCUS_MAIN_SCRIPT: &str =
     "requestAnimationFrame(() => document.getElementById('main-content')?.focus())";
 const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src dioxus: ws://127.0.0.1:* http://dioxus.index.html https://dioxus.index.html ipc:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
-const CREATE_FORMATS: [ArchiveFormat; 13] = [
-    ArchiveFormat::Zip,
-    ArchiveFormat::SevenZip,
-    ArchiveFormat::Tar,
-    ArchiveFormat::TarGzip,
-    ArchiveFormat::TarZstd,
-    ArchiveFormat::TarXz,
-    ArchiveFormat::TarBzip2,
-    ArchiveFormat::Gzip,
-    ArchiveFormat::Zstandard,
-    ArchiveFormat::Xz,
-    ArchiveFormat::Bzip2,
-    ArchiveFormat::Lz4,
-    ArchiveFormat::Brotli,
-];
+const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
 
 fn main() {
     use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
@@ -139,6 +133,7 @@ struct UiState {
     page: Page,
     archive: Option<ArchiveInfo>,
     pending_archive: Option<PathBuf>,
+    pending_archive_requires_password: bool,
     automatic_extract_destination: Option<PathBuf>,
     selected: HashSet<PathBuf>,
     entry_directory: PathBuf,
@@ -155,6 +150,7 @@ struct UiState {
     status: String,
     status_kind: StatusKind,
     busy: bool,
+    dialog_open: bool,
     cancellation: Option<CancellationToken>,
     progress: Option<OperationProgress>,
     operations: SharedOperationQueue,
@@ -170,6 +166,7 @@ impl Default for UiState {
             page: Page::Home,
             archive: None,
             pending_archive: None,
+            pending_archive_requires_password: false,
             automatic_extract_destination: None,
             selected: HashSet::new(),
             entry_directory: PathBuf::new(),
@@ -186,6 +183,7 @@ impl Default for UiState {
             status: settings.locale.text(Text::Ready).to_owned(),
             status_kind: StatusKind::Informational,
             busy: false,
+            dialog_open: false,
             cancellation: None,
             progress: None,
             operations: Arc::new(Mutex::new(OperationQueue::default())),
@@ -250,15 +248,39 @@ fn App() -> Element {
         }
     });
 
-    let view = state.read().clone();
-    let locale = view.locale;
-    let page = view.page;
-    let theme = if view.dark { "dark" } else { "light" };
-    let main_title = main_title_id(page, view.archive.is_some());
-    let progress = view.progress.as_ref().map(OperationProgress::snapshot);
-    let (status_role, status_live) = status_semantics(view.status_kind);
-    let queued_count = lock_operation_queue(&view.operations).pending_count();
-    let can_cancel = view.cancellation.is_some();
+    let (
+        locale,
+        page,
+        dark,
+        archive_loaded,
+        busy,
+        status_kind,
+        status,
+        progress,
+        cancelled,
+        queued_count,
+        can_cancel,
+    ) = {
+        let view = state.read();
+        (
+            view.locale,
+            view.page,
+            view.dark,
+            view.archive.is_some(),
+            view.busy,
+            view.status_kind,
+            view.status.clone(),
+            view.progress.as_ref().map(OperationProgress::snapshot),
+            view.cancellation
+                .as_ref()
+                .is_some_and(CancellationToken::is_cancelled),
+            lock_operation_queue(&view.operations).pending_count(),
+            view.cancellation.is_some(),
+        )
+    };
+    let theme = if dark { "dark" } else { "light" };
+    let main_title = main_title_id(page, archive_loaded);
+    let (status_role, status_live) = status_semantics(status_kind);
     let queue_summary = operation_queue_summary(locale, queued_count);
     let progress_view = progress.map(|snapshot| {
         (
@@ -266,13 +288,7 @@ fn App() -> Element {
             operation_progress_text(locale, snapshot),
         )
     });
-    taskbar::sync(
-        view.busy,
-        view.cancellation
-            .as_ref()
-            .is_some_and(CancellationToken::is_cancelled),
-        progress,
-    );
+    taskbar::sync(busy, cancelled, progress);
 
     rsx! {
         style { {STYLES} }
@@ -307,10 +323,10 @@ fn App() -> Element {
                     button { class: if page == Page::About { "nav-item active" } else { "nav-item" }, "aria-current": if page == Page::About { "page" } else { "false" }, "aria-keyshortcuts": ARIA_SHORTCUT_ABOUT, onclick: move |_| state.write().page = Page::About, {locale.text(Text::About)} }
                 }
                 div { class: "preferences",
-                    button { onclick: move |_| { let mut value = state.write(); value.dark = !value.dark; save_settings(&value); },
-                        {if view.dark { locale.text(Text::Light) } else { locale.text(Text::Dark) }} }
+                    button { onclick: move |_| { let mut value = state.write(); value.dark = !value.dark; save_settings(&mut value); },
+                        {if dark { locale.text(Text::Light) } else { locale.text(Text::Dark) }} }
                     button { lang: if locale == Locale::ZhCn { "en-US" } else { "zh-CN" },
-                        onclick: move |_| { let mut value = state.write(); value.locale = value.locale.toggle(); let status = value.locale.text(Text::Ready).to_owned(); value.set_status(status); save_settings(&value); },
+                        onclick: move |_| { let mut value = state.write(); value.locale = value.locale.toggle(); let status = value.locale.text(Text::Ready).to_owned(); value.set_status(status); save_settings(&mut value); },
                         {locale.text(Text::SwitchLanguage)} }
                 }
             }
@@ -321,16 +337,16 @@ fn App() -> Element {
                     Page::Create => rsx! { CreatePage { state } },
                     Page::About => rsx! { AboutPage { state } },
                 }
-                footer { class: if view.status_kind == StatusKind::Error { "status-error" } else { "" },
+                footer { class: if status_kind == StatusKind::Error { "status-error" } else { "" },
                     div { id: "operation-status", class: "status-copy", role: status_role, "aria-live": status_live, "aria-atomic": "true",
-                        span { class: "status-dot", "aria-hidden": "true", "•" } span { {view.status.clone()} }
+                        span { class: "status-dot", "aria-hidden": "true", "•" } span { {status} }
                     }
                     output { id: "operation-queue-summary", class: "queue-count", role: "status", "aria-live": "polite", "aria-atomic": "true", {queue_summary} }
                     if let Some((percent, progress_text)) = progress_view {
                         progress { max: "100", value: "{percent}", "aria-label": choose(locale, "Operation progress", "操作进度"), "aria-valuetext": progress_text, "aria-describedby": "operation-status", "aria-live": OPERATION_PROGRESS_LIVE }
                     }
                     button { class: "queue-clear", disabled: queued_count == 0, "aria-describedby": "operation-queue-summary", onclick: move |_| clear_queued(state), {choose(locale, "Clear queue", "清空队列")} }
-                    button { disabled: !view.busy, "aria-describedby": "operation-status", "aria-keyshortcuts": ARIA_SHORTCUT_CANCEL, onclick: move |_| cancel_operation(state), {locale.text(Text::Cancel)} }
+                    button { disabled: !busy, "aria-describedby": "operation-status", "aria-keyshortcuts": ARIA_SHORTCUT_CANCEL, onclick: move |_| cancel_operation(state), {locale.text(Text::Cancel)} }
                 }
             }
         }
@@ -390,9 +406,9 @@ fn AboutPage(state: Signal<UiState>) -> Element {
 
 #[component]
 fn ArchivePage(mut state: Signal<UiState>) -> Element {
-    let view = state.read().clone();
+    let view = state.read();
     let locale = view.locale;
-    let Some(archive) = view.archive.clone() else {
+    let Some(archive) = view.archive.as_ref() else {
         let pending = view.pending_archive.clone();
         let heading = pending
             .as_ref()
@@ -401,28 +417,53 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 || locale.text(Text::NoArchive).to_owned(),
                 |name| name.to_string_lossy().into_owned(),
             );
-        let description = if pending.is_some() {
-            locale.text(Text::EncryptedArchiveDescription)
-        } else {
-            locale.text(Text::NoArchiveDescription)
-        };
+        let description = archive_empty_state_description(
+            locale,
+            view.busy,
+            pending.is_some(),
+            view.pending_archive_requires_password,
+        );
         return rsx! { section { class: "empty-state", "aria-labelledby": "pending-archive-title",
             h2 { id: "pending-archive-title", {heading} }
             p { {description} }
-            label { span { {locale.text(Text::PasswordEncrypted)} }
-                input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() }
-            }
             div { class: "button-row",
-                button { class: "primary", disabled: pending.is_none() || view.busy, onclick: move |_| reload_archive(state), {locale.text(Text::UnlockArchive)} }
+                if view.pending_archive_requires_password {
+                    label { span { {locale.text(Text::PasswordEncrypted)} }
+                        input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() }
+                    }
+                    button { class: "primary", disabled: pending.is_none() || view.busy, onclick: move |_| reload_archive(state), {locale.text(Text::UnlockArchive)} }
+                }
                 button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} }
             }
         } };
     };
-    let count = browser_entry_count(&archive, &view.entry_directory, &view.entry_filter);
+    if view.busy {
+        let archive_name = archive
+            .path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        return rsx! { section { class: "archive-page", "aria-labelledby": "archive-title",
+            div { class: "page-heading", div {
+                h2 { id: "archive-title", {archive_name} }
+                p { "{archive.format} · {archive.entries.len()} · {format_bytes(archive.total_size)}" }
+            }
+            div { class: "button-row",
+                button { onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
+                button { onclick: move |_| reveal_archive(state), {locale.text(Text::RevealInExplorer)} }
+                button { onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} }
+            } }
+            section { class: "empty-state busy-archive", "aria-busy": "true",
+                p { {locale.text(Text::BusyArchiveDescription)} }
+            }
+        } };
+    }
+    let count = browser_entry_count(archive, &view.entry_directory, &view.entry_filter);
     let last_page = count.saturating_sub(1) / ENTRIES_PER_PAGE;
     let current_page = view.entry_page.min(last_page);
     let rows = browser_entry_page(
-        &archive,
+        archive,
         &view.entry_directory,
         &view.entry_filter,
         current_page,
@@ -433,7 +474,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
     .map(BrowserEntry::into_owned)
     .collect::<Vec<_>>();
     let directory_selections = if view.entry_filter.is_empty() {
-        child_directory_selections(&archive, &view.entry_directory, &view.selected)
+        child_directory_selections(archive, &view.entry_directory, &view.selected)
     } else {
         Default::default()
     };
@@ -458,6 +499,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
     rsx! { section { class: "archive-page", "aria-labelledby": "archive-title",
         div { class: "page-heading", div { h2 { id: "archive-title", {archive_name} } p { "{archive.format} · {archive.entries.len()} · {format_bytes(archive.total_size)}" } }
             div { class: "button-row", button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
+                button { onclick: move |_| reveal_archive(state), {locale.text(Text::RevealInExplorer)} }
                 button { onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} } } }
         div { class: "toolbar",
             label { span { {locale.text(Text::PasswordEncrypted)} } input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() } }
@@ -474,7 +516,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                             }
                         }
                     }
-                    button { disabled: view.entry_filter.is_empty(), "aria-describedby": "archive-filter-summary", onclick: move |_| clear_archive_filter(state), {choose(locale, "Clear search", "清除搜索")} }
+                    button { disabled: view.entry_filter.is_empty(), "aria-describedby": "archive-filter-summary", onclick: move |_| clear_archive_filter(state), {locale.text(Text::ClearSearch)} }
                 }
                 output { id: "archive-filter-summary", class: "filter-summary", "aria-live": ARCHIVE_FILTER_LIVE, "aria-atomic": "true", {filter_summary} }
             }
@@ -515,9 +557,10 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                         button { class: "sort-header", onclick: move |_| set_entry_sort(state, EntrySort::Size), {sort_header_label(locale.text(Text::Original), EntrySort::Size, view.entry_sort, view.entry_sort_direction)} } }
                     th { scope: "col", "aria-sort": sort_aria(EntrySort::Packed, view.entry_sort, view.entry_sort_direction),
                         button { class: "sort-header", onclick: move |_| set_entry_sort(state, EntrySort::Packed), {sort_header_label(locale.text(Text::Packed), EntrySort::Packed, view.entry_sort, view.entry_sort_direction)} } }
-                    th { scope: "col", "aria-sort": sort_aria(EntrySort::Modified, view.entry_sort, view.entry_sort_direction),
-                        button { class: "sort-header", onclick: move |_| set_entry_sort(state, EntrySort::Modified), {sort_header_label(locale.text(Text::Modified), EntrySort::Modified, view.entry_sort, view.entry_sort_direction)} } }
-                    th { scope: "col", {locale.text(Text::Flags)} }
+                     th { scope: "col", "aria-sort": sort_aria(EntrySort::Modified, view.entry_sort, view.entry_sort_direction),
+                         button { class: "sort-header", onclick: move |_| set_entry_sort(state, EntrySort::Modified), {sort_header_label(locale.text(Text::Modified), EntrySort::Modified, view.entry_sort, view.entry_sort_direction)} } }
+                     th { scope: "col", {locale.text(Text::Flags)} }
+                     th { scope: "col", {locale.text(Text::Checksum)} }
                 } }
                 tbody { for (index, entry) in rows.into_iter().enumerate() {
                     ArchiveRow { key: "{current_page}-{index}-{entry.path.display()}", state, directory_selection: directory_selections.get(entry.path.as_ref()).copied().unwrap_or_default(), entry, locale, show_full_path: !view.entry_filter.is_empty() }
@@ -627,7 +670,45 @@ fn ArchiveRow(
         } td { {format_bytes(entry.size)} } td { {format_bytes(entry.compressed_size)} }
         td { {format_archive_modified(locale, entry.modified.as_ref())} }
         td { if entry.encrypted { {locale.text(Text::Locked)} } else if entry.is_directory { {folder_selection_summary(locale, directory_selection)} } else { "—" } }
+        td { class: "checksum-cell",
+            if let Some(checksum) = entry.checksum.clone() {
+                span { title: checksum.clone(), {checksum.clone()} }
+                button { class: "copy-checksum", "aria-label": format!("{} {}", locale.text(Text::CopyChecksum), checksum), onclick: move |_| copy_checksum(state, checksum.clone()), {locale.text(Text::CopyChecksum)} }
+            } else {
+                "—"
+            }
+        }
     } }
+}
+
+fn copy_checksum(mut state: Signal<UiState>, checksum: String) {
+    let locale = state.read().locale;
+    let Ok(js_literal) = serde_json::to_string(&checksum) else {
+        state
+            .write()
+            .set_error(choose(locale, "Could not copy checksum", "无法复制校验和").to_owned());
+        return;
+    };
+    let script = format!(
+        "return navigator.clipboard ? navigator.clipboard.writeText({js_literal}).then(() => true).catch(() => false) : false;"
+    );
+    spawn(async move {
+        let copied = dioxus_document::eval(&script)
+            .join::<bool>()
+            .await
+            .unwrap_or(false);
+        let mut value = state.write();
+        let status = if copied {
+            value.locale.text(Text::ChecksumCopied).to_owned()
+        } else {
+            choose(value.locale, "Could not copy checksum", "无法复制校验和").to_owned()
+        };
+        if copied {
+            value.set_status(status);
+        } else {
+            value.set_error(status);
+        }
+    });
 }
 
 #[component]
@@ -653,7 +734,7 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
         }
         div { class: "form-grid",
             label { span { {locale.text(Text::Format)} } select { value: format_value(view.create_format), "aria-describedby": "create-format-help",
-                onchange: move |event| { let mut value = state.write(); let format = parse_format(&event.value()); value.create_format = format; value.compression_level = format.clamp_compression_level(value.compression_level); if !format.capabilities().encryption { value.create_password.clear(); } },
+                onchange: move |event| { let mut value = state.write(); set_create_format(&mut value, parse_format(&event.value())); },
                 for format in CREATE_FORMATS { option { value: format_value(format), "{format}" } } } }
             if let Some((minimum, maximum)) = compression_range {
                 label { span { "{locale.text(Text::CompressionLevel)} · {view.compression_level}" } input { r#type: "range", min: "{minimum}", max: "{maximum}", value: "{view.compression_level}",
@@ -670,14 +751,25 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
 }
 
 fn open_archive_dialog(mut state: Signal<UiState>) {
-    let locale = state.read().locale;
-    if let Some(path) = archive_dialog(locale).pick_file() {
-        let mut value = state.write();
-        value.password.clear();
-        value.automatic_extract_destination = None;
-        drop(value);
-        begin_load(state, path);
+    if state.read().dialog_open {
+        return;
     }
+    let locale = state.read().locale;
+    state.write().dialog_open = true;
+    spawn(async move {
+        let path = archive_dialog(locale)
+            .pick_file()
+            .await
+            .map(|file| file.path().to_path_buf());
+        let mut value = state.write();
+        value.dialog_open = false;
+        if let Some(path) = path {
+            value.password.clear();
+            value.automatic_extract_destination = None;
+            drop(value);
+            begin_load(state, path);
+        }
+    });
 }
 
 fn accessible_shortcut(
@@ -725,20 +817,36 @@ fn apply_accessible_shortcut(mut state: Signal<UiState>, shortcut: AccessibleSho
     }
 }
 
-fn single_openable_archive(paths: &[PathBuf]) -> Option<&Path> {
+fn single_openable_archive(paths: &[PathBuf], openable: bool) -> Option<&Path> {
     let [path] = paths else {
         return None;
     };
-    (path.is_file()
-        && detect_format_from_path(path).is_some_and(|format| format.capabilities().list))
-    .then_some(path.as_path())
+    openable.then_some(path.as_path())
 }
 
-fn handle_dropped_paths(mut state: Signal<UiState>, paths: Vec<PathBuf>) {
+fn handle_dropped_paths(state: Signal<UiState>, paths: Vec<PathBuf>) {
     if paths.is_empty() {
         return;
     }
-    if let Some(path) = single_openable_archive(&paths).map(Path::to_path_buf) {
+    if paths.len() == 1 {
+        let Some(path) = paths.first().cloned() else {
+            return;
+        };
+        spawn(async move {
+            let probe_path = path.clone();
+            let openable =
+                tokio::task::spawn_blocking(move || is_openable_archive_path(&probe_path))
+                    .await
+                    .unwrap_or(false);
+            handle_classified_drop(state, vec![path], openable);
+        });
+        return;
+    }
+    handle_classified_drop(state, paths, false);
+}
+
+fn handle_classified_drop(mut state: Signal<UiState>, paths: Vec<PathBuf>, openable: bool) {
+    if let Some(path) = single_openable_archive(&paths, openable).map(Path::to_path_buf) {
         let mut value = state.write();
         value.password.clear();
         value.automatic_extract_destination = None;
@@ -766,6 +874,21 @@ fn reload_archive(state: Signal<UiState>) {
     };
     if let Some(path) = path {
         begin_load(state, path);
+    }
+}
+
+fn reveal_archive(mut state: Signal<UiState>) {
+    let value = state.read();
+    let Some(path) = value.archive.as_ref().map(|archive| archive.path.clone()) else {
+        return;
+    };
+    let locale = value.locale;
+    drop(value);
+    let result = reveal_in_file_manager(&path);
+    let mut value = state.write();
+    match result {
+        Ok(()) => value.set_status(locale.text(Text::RevealedInExplorer).to_owned()),
+        Err(_) => value.set_error(locale.text(Text::RevealInExplorerFailed).to_owned()),
     }
 }
 
@@ -812,7 +935,7 @@ fn test_archive(state: Signal<UiState>) {
     );
 }
 
-fn extract_selected(state: Signal<UiState>) {
+fn extract_selected(mut state: Signal<UiState>) {
     let value = state.read();
     let Some(archive) = value.archive.clone() else {
         return;
@@ -824,14 +947,23 @@ fn extract_selected(state: Signal<UiState>) {
         .join(archive.path.file_stem().unwrap_or_default());
     let locale = value.locale;
     drop(value);
-    let Some(destination) = FileDialog::new()
-        .set_title(locale.text(Text::ChooseExtractionFolder))
-        .set_directory(default_folder.parent().unwrap_or_else(|| Path::new(".")))
-        .pick_folder()
-    else {
+    if state.read().dialog_open {
         return;
-    };
-    extract_to(state, destination);
+    }
+    state.write().dialog_open = true;
+    let dialog = AsyncFileDialog::new()
+        .set_title(locale.text(Text::ChooseExtractionFolder))
+        .set_directory(default_folder.parent().unwrap_or_else(|| Path::new(".")));
+    spawn(async move {
+        let destination = dialog
+            .pick_folder()
+            .await
+            .map(|folder| folder.path().to_path_buf());
+        state.write().dialog_open = false;
+        if let Some(destination) = destination {
+            extract_to(state, destination);
+        }
+    });
 }
 
 fn extract_to(state: Signal<UiState>, destination: PathBuf) {
@@ -871,29 +1003,65 @@ fn extract_to(state: Signal<UiState>, destination: PathBuf) {
 }
 
 fn add_files(mut state: Signal<UiState>) {
-    let locale = state.read().locale;
-    if let Some(paths) = FileDialog::new()
-        .set_title(locale.text(Text::AddFilesDialog))
-        .pick_files()
-    {
-        let mut value = state.write();
-        let added = append_unique(&mut value.create_sources, paths);
-        let status = create_sources_added_status(locale, added, value.create_sources.len());
-        value.set_status(status);
+    if state.read().dialog_open {
+        return;
     }
+    let locale = state.read().locale;
+    let single_file_format =
+        state.read().create_format.create_input() == Some(CreateInputKind::SingleFile);
+    state.write().dialog_open = true;
+    let dialog = AsyncFileDialog::new().set_title(locale.text(Text::AddFilesDialog));
+    spawn(async move {
+        let paths = if single_file_format {
+            dialog
+                .pick_file()
+                .await
+                .map(|file| vec![file.path().to_path_buf()])
+        } else {
+            dialog.pick_files().await.map(|files| {
+                files
+                    .into_iter()
+                    .map(|file| file.path().to_path_buf())
+                    .collect()
+            })
+        };
+        let mut value = state.write();
+        value.dialog_open = false;
+        if let Some(paths) = paths {
+            let added = append_unique(&mut value.create_sources, paths);
+            let status = create_sources_added_status(locale, added, value.create_sources.len());
+            value.set_status(status);
+        }
+    });
 }
 
 fn add_folder(mut state: Signal<UiState>) {
-    let locale = state.read().locale;
-    if let Some(path) = FileDialog::new()
-        .set_title(locale.text(Text::AddFolderDialog))
-        .pick_folder()
-    {
-        let mut value = state.write();
-        let added = append_unique(&mut value.create_sources, vec![path]);
-        let status = create_sources_added_status(locale, added, value.create_sources.len());
-        value.set_status(status);
+    if state.read().dialog_open {
+        return;
     }
+    if state.read().create_format.create_input() == Some(CreateInputKind::SingleFile) {
+        let locale = state.read().locale;
+        state
+            .write()
+            .set_error(locale.text(Text::SingleFileRequired).to_owned());
+        return;
+    }
+    let locale = state.read().locale;
+    state.write().dialog_open = true;
+    let dialog = AsyncFileDialog::new().set_title(locale.text(Text::AddFolderDialog));
+    spawn(async move {
+        let path = dialog
+            .pick_folder()
+            .await
+            .map(|folder| folder.path().to_path_buf());
+        let mut value = state.write();
+        value.dialog_open = false;
+        if let Some(path) = path {
+            let added = append_unique(&mut value.create_sources, vec![path]);
+            let status = create_sources_added_status(locale, added, value.create_sources.len());
+            value.set_status(status);
+        }
+    });
 }
 
 fn remove_create_source(mut state: Signal<UiState>, path: PathBuf) {
@@ -914,12 +1082,9 @@ fn remove_create_source(mut state: Signal<UiState>, path: PathBuf) {
 fn clear_create_sources(mut state: Signal<UiState>) {
     let mut value = state.write();
     let cleared = value.create_sources.len();
+    let locale = value.locale;
     value.create_sources.clear();
-    let status = match value.locale {
-        Locale::En => format!("Cleared {cleared} archive sources"),
-        Locale::ZhCn => format!("已清除 {cleared} 个压缩来源"),
-    };
-    value.set_status(status);
+    value.set_status(create_sources_cleared_status(locale, cleared));
 }
 
 fn create_archive(mut state: Signal<UiState>) {
@@ -927,7 +1092,7 @@ fn create_archive(mut state: Signal<UiState>) {
     if let Some(issue) = create_source_issue(value.create_format, &value.create_sources) {
         let message = create_source_issue_text(value.locale, issue).to_owned();
         drop(value);
-        state.write().set_status(message);
+        state.write().set_error(message);
         return;
     }
     let locale = value.locale;
@@ -936,32 +1101,43 @@ fn create_archive(mut state: Signal<UiState>) {
     let compression_level = value.compression_level;
     let password = non_empty(&value.create_password);
     drop(value);
+    if state.read().dialog_open {
+        return;
+    }
     let extension = format.canonical_extension();
-    let Some(destination) = FileDialog::new()
+    state.write().dialog_open = true;
+    let dialog = AsyncFileDialog::new()
         .set_title(locale.text(Text::CreateDialog))
         .add_filter(format.to_string(), &[extension])
-        .set_file_name(format!("archive.{extension}"))
-        .save_file()
-    else {
-        return;
-    };
-    let request = WorkerRequest::Create {
-        sources,
-        destination: destination.clone(),
-        format,
-        compression_level,
-        password,
-    };
-    launch_worker(
-        state,
-        request,
-        OperationKind::Create,
-        format!(
-            "{} {}…",
-            choose(locale, "Creating", "正在创建"),
-            destination.display()
-        ),
-    );
+        .set_file_name(format!("archive.{extension}"));
+    spawn(async move {
+        let destination = dialog
+            .save_file()
+            .await
+            .map(|file| file.path().to_path_buf());
+        state.write().dialog_open = false;
+        let Some(destination) = destination else {
+            return;
+        };
+        let destination = ensure_archive_extension(destination, format);
+        let request = WorkerRequest::Create {
+            sources,
+            destination: destination.clone(),
+            format,
+            compression_level,
+            password,
+        };
+        launch_worker(
+            state,
+            request,
+            OperationKind::Create,
+            format!(
+                "{} {}…",
+                choose(locale, "Creating", "正在创建"),
+                destination.display()
+            ),
+        );
+    });
 }
 
 fn create_input_help(locale: Locale, format: ArchiveFormat) -> &'static str {
@@ -972,9 +1148,20 @@ fn create_input_help(locale: Locale, format: ArchiveFormat) -> &'static str {
     }
 }
 
+fn set_create_format(state: &mut UiState, format: ArchiveFormat) {
+    state.create_format = format;
+    state.compression_level = format.clamp_compression_level(state.compression_level);
+    if !format.capabilities().encryption {
+        state.create_password.clear();
+    }
+    state.set_status(create_input_help(state.locale, format).to_owned());
+}
+
 fn create_source_issue_text(locale: Locale, issue: CreateSourceIssue) -> &'static str {
     match issue {
         CreateSourceIssue::MissingSources => locale.text(Text::NoSources),
+        CreateSourceIssue::MissingSource => locale.text(Text::MissingSource),
+        CreateSourceIssue::LinkSource => locale.text(Text::LinkSource),
         CreateSourceIssue::SingleFileRequired => locale.text(Text::SingleFileRequired),
         CreateSourceIssue::UnsupportedFormat => locale.text(Text::FormatCannotCreate),
     }
@@ -1036,6 +1223,7 @@ fn start_worker(mut state: Signal<UiState>, job: Job<QueuedOperation>) {
         if let Some(path) = archive_path {
             value.archive = None;
             value.pending_archive = Some(path);
+            value.pending_archive_requires_password = false;
             value.selected.clear();
             value.page = Page::Archive;
         }
@@ -1060,7 +1248,19 @@ fn finish_worker(
     kind: OperationKind,
     result: Result<WorkerOutput, String>,
 ) {
+    let operations = state.read().operations.clone();
+    if lock_operation_queue(&operations).active_id() != Some(id) {
+        return;
+    }
     let locale = state.read().locale;
+    let requires_password = kind == OperationKind::List
+        && result
+            .as_ref()
+            .err()
+            .is_some_and(|error| worker_error_may_require_password(error));
+    if kind == OperationKind::List {
+        state.write().pending_archive_requires_password = requires_password;
+    }
     let mut automatic_extract = None;
     let (status, status_kind) = match (kind, result) {
         (OperationKind::List, Ok(WorkerOutput::Archive(archive))) => {
@@ -1086,6 +1286,7 @@ fn finish_worker(
             let mut value = state.write();
             value.archive = Some(archive);
             value.pending_archive = None;
+            value.pending_archive_requires_password = false;
             value.selected = selected;
             value.entry_filter.clear();
             value.entry_directory.clear();
@@ -1097,19 +1298,27 @@ fn finish_worker(
             (status, StatusKind::Informational)
         }
         (OperationKind::Test, Ok(WorkerOutput::Archive(info))) => {
+            let checksum_count = info
+                .entries
+                .iter()
+                .filter(|entry| entry.checksum.is_some())
+                .count();
             let status = if locale == Locale::ZhCn {
                 format!(
-                    "压缩文件完好 · {} 个项目 · {}",
+                    "压缩文件完好 · {} 个项目 · {} 个校验和 · {}",
                     info.entries.len(),
+                    checksum_count,
                     format_bytes(info.total_size)
                 )
             } else {
                 format!(
-                    "Archive is healthy · {} entries · {}",
+                    "Archive is healthy · {} entries · {} SHA-256 checksums · {}",
                     info.entries.len(),
+                    checksum_count,
                     format_bytes(info.total_size)
                 )
             };
+            state.write().archive = Some(info);
             (status, StatusKind::Informational)
         }
         (OperationKind::Extract, Ok(WorkerOutput::Summary(summary))) => (
@@ -1145,25 +1354,27 @@ fn finish_worker(
             StatusKind::Error,
         ),
     };
-    let operations = state.read().operations.clone();
-    {
-        let mut value = state.write();
-        value.busy = false;
-        value.cancellation = None;
-        value.progress = None;
-        value.status = status;
-        value.status_kind = status_kind;
-    }
     if let Some(destination) = automatic_extract {
         extract_to(state, destination);
     }
     let next = lock_operation_queue(&operations).complete(id);
     match next {
         Ok(Some(job)) => start_worker(state, job),
-        Ok(None) => {}
-        Err(error) => state
-            .write()
-            .set_error(format!("Internal operation queue error: {error}")),
+        Ok(None) => {
+            let mut value = state.write();
+            value.busy = false;
+            value.cancellation = None;
+            value.progress = None;
+            value.status = status;
+            value.status_kind = status_kind;
+        }
+        Err(error) => {
+            let mut value = state.write();
+            value.busy = false;
+            value.cancellation = None;
+            value.progress = None;
+            value.set_error(format!("Internal operation queue error: {error}"));
+        }
     }
 }
 
@@ -1345,30 +1556,6 @@ fn archive_selection_summary(locale: Locale, selected: usize, total: usize) -> S
     }
 }
 
-fn archive_filter_summary(locale: Locale, filter: &str, matches: usize, total: usize) -> String {
-    match locale {
-        Locale::En if filter.is_empty() => format!(
-            "Showing {matches} {} in this folder",
-            if matches == 1 { "entry" } else { "entries" }
-        ),
-        Locale::En => format!(
-            "Showing {matches} of {total} {} for “{filter}”",
-            if total == 1 { "entry" } else { "entries" }
-        ),
-        Locale::ZhCn if filter.is_empty() => format!("此文件夹显示 {matches} 个项目"),
-        Locale::ZhCn => format!("{total} 个项目中显示 {matches} 个匹配“{filter}”的结果"),
-    }
-}
-
-fn archive_no_matches(locale: Locale, filter: &str) -> String {
-    match locale {
-        Locale::En if filter.is_empty() => "This folder has no entries".to_owned(),
-        Locale::En => format!("No archive entries match “{filter}”"),
-        Locale::ZhCn if filter.is_empty() => "此文件夹没有项目".to_owned(),
-        Locale::ZhCn => format!("没有压缩文件项目匹配“{filter}”"),
-    }
-}
-
 const fn archive_select_all_label(locale: Locale, all_selected: bool) -> &'static str {
     match (locale, all_selected) {
         (Locale::En, false) => "Select all archive files",
@@ -1397,16 +1584,6 @@ fn archive_selection_change_status(
     }
 }
 
-fn create_source_summary(locale: Locale, count: usize) -> String {
-    match locale {
-        Locale::En => format!(
-            "{count} archive {} added",
-            if count == 1 { "source" } else { "sources" }
-        ),
-        Locale::ZhCn => format!("已添加 {count} 个压缩来源"),
-    }
-}
-
 fn create_source_remove_label(locale: Locale, path: &str) -> String {
     match locale {
         Locale::En => format!("Remove archive source {path}"),
@@ -1414,25 +1591,8 @@ fn create_source_remove_label(locale: Locale, path: &str) -> String {
     }
 }
 
-fn create_sources_added_status(locale: Locale, added: usize, total: usize) -> String {
-    match locale {
-        Locale::En => format!(
-            "Added {added} archive {}; {total} total",
-            if added == 1 { "source" } else { "sources" }
-        ),
-        Locale::ZhCn => format!("已添加 {added} 个压缩来源；共 {total} 个"),
-    }
-}
-
-fn create_source_removed_status(locale: Locale, path: &str, remaining: usize) -> String {
-    match locale {
-        Locale::En => format!("Removed archive source {path}; {remaining} remaining"),
-        Locale::ZhCn => format!("已移除压缩来源 {path}；剩余 {remaining} 个"),
-    }
-}
-
-fn archive_dialog(locale: Locale) -> FileDialog {
-    FileDialog::new()
+fn archive_dialog(locale: Locale) -> AsyncFileDialog {
+    AsyncFileDialog::new()
         .set_title(locale.text(Text::OpenDialog))
         .add_filter(
             locale.text(Text::SupportedArchives),
@@ -1441,12 +1601,18 @@ fn archive_dialog(locale: Locale) -> FileDialog {
         .add_filter(locale.text(Text::AllFiles), &["*"])
 }
 
-fn save_settings(state: &UiState) {
-    AppSettings {
+fn save_settings(state: &mut UiState) {
+    if let Err(error) = (AppSettings {
         locale: state.locale,
         dark: state.dark,
     }
-    .save();
+    .save())
+    {
+        state.set_error(format!(
+            "{}: {error}",
+            state.locale.text(Text::PreferencesSaveFailed)
+        ));
+    }
 }
 
 fn summary_status(locale: Locale, summary: OperationSummary, extract: bool) -> String {
@@ -1600,15 +1766,6 @@ const fn choose<'a>(locale: Locale, english: &'a str, chinese: &'a str) -> &'a s
         Locale::ZhCn => chinese,
     }
 }
-fn append_unique(destination: &mut Vec<PathBuf>, paths: Vec<PathBuf>) -> usize {
-    let before = destination.len();
-    for path in paths {
-        if !destination.contains(&path) {
-            destination.push(path);
-        }
-    }
-    destination.len() - before
-}
 fn format_bytes(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut value = bytes as f64;
@@ -1654,16 +1811,19 @@ mod tests {
         std::fs::create_dir(&archive_named_directory).expect("directory fixture");
 
         assert_eq!(
-            single_openable_archive(std::slice::from_ref(&archive)),
+            single_openable_archive(std::slice::from_ref(&archive), true),
             Some(archive.as_path())
         );
-        assert_eq!(single_openable_archive(&[]), None);
+        assert_eq!(single_openable_archive(&[], true), None);
         assert_eq!(
-            single_openable_archive(&[archive.clone(), plain_file.clone()]),
+            single_openable_archive(&[archive.clone(), plain_file.clone()], true),
             None
         );
-        assert_eq!(single_openable_archive(&[plain_file]), None);
-        assert_eq!(single_openable_archive(&[archive_named_directory]), None);
+        assert_eq!(single_openable_archive(&[plain_file], false), None);
+        assert_eq!(
+            single_openable_archive(&[archive_named_directory], false),
+            None
+        );
     }
 
     #[test]
@@ -1684,6 +1844,41 @@ mod tests {
             create_source_issue_text(Locale::En, CreateSourceIssue::UnsupportedFormat),
             "This format cannot be created."
         );
+        assert!(
+            create_source_issue_text(Locale::ZhCn, CreateSourceIssue::MissingSource)
+                .contains("来源已不存在")
+        );
+    }
+
+    #[test]
+    fn changing_create_format_updates_status_and_format_state() {
+        let mut state = UiState {
+            locale: Locale::En,
+            compression_level: 22,
+            create_password: "secret".to_owned(),
+            ..UiState::default()
+        };
+
+        set_create_format(&mut state, ArchiveFormat::Bzip2);
+
+        assert_eq!(state.create_format, ArchiveFormat::Bzip2);
+        assert_eq!(state.compression_level, 9);
+        assert!(state.create_password.is_empty());
+        assert_eq!(
+            state.status,
+            "This stream format requires exactly one file. Use a TAR composition for folders or multiple items."
+        );
+        assert_eq!(state.status_kind, StatusKind::Informational);
+    }
+
+    #[test]
+    fn accessible_create_form_uses_single_file_picker_and_error_semantics() {
+        let source = include_str!("accessible_main.rs");
+        assert!(source.contains("let single_file_format ="));
+        assert!(source.contains(&["dialog", "\n                .pick_file()"].concat()));
+        assert!(source.contains(&["dialog.", "pick_files().await"].concat()));
+        assert!(source.contains("CreateInputKind::SingleFile"));
+        assert!(source.contains(&["state.write().", "set_error(message)"].concat()));
     }
 
     #[test]
@@ -1796,6 +1991,38 @@ mod tests {
             "No archive entries match “missing”"
         );
         assert_eq!(archive_no_matches(Locale::ZhCn, ""), "此文件夹没有项目");
+    }
+
+    #[test]
+    fn checksum_copy_action_has_clipboard_fallback_and_accessible_name() {
+        let source = include_str!("accessible_main.rs");
+        assert!(source.contains("class: \"copy-checksum\""));
+        assert!(source.contains("navigator.clipboard ?"));
+        assert!(source.contains("Text::CopyChecksum"));
+    }
+
+    #[test]
+    fn queue_handoff_keeps_busy_until_the_next_worker_starts() {
+        let source = include_str!("accessible_main.rs");
+        let finish_source = source
+            .split("fn finish_worker")
+            .nth(1)
+            .expect("finish_worker implementation should exist");
+        let next_start = finish_source
+            .find("Ok(Some(job)) => start_worker(state, job)")
+            .expect("queued work should start directly");
+        let idle_transition = finish_source
+            .find("value.busy = false;")
+            .expect("idle transition should still clear busy state");
+        assert!(next_start < idle_transition);
+    }
+
+    #[test]
+    fn archive_header_exposes_file_explorer_reveal_action() {
+        let source = include_str!("accessible_main.rs");
+        assert!(source.contains("onclick: move |_| reveal_archive(state)"));
+        assert!(source.contains("reveal_in_file_manager(&path)"));
+        assert!(source.contains("Text::RevealInExplorer"));
     }
 
     #[test]

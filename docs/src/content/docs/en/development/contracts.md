@@ -7,7 +7,7 @@ This page defines the 1.0 candidate contract. It may still change with release n
 
 ## CLI contract
 
-The 1.0 candidate keeps these commands: `formats`, `detect`, `list`, `test`, `extract`, and `create`. Creation format values are `zip`, `seven-zip`, `tar`, `tar-gzip`, `tar-zstd`, `tar-xz`, `tar-bzip2`, `gzip`, `zstandard`, `xz`, `bzip2`, `lz4`, and `brotli`. Conflict values are `overwrite`, `skip`, `rename`, and `error`.
+The 1.0 candidate keeps these commands: `formats`, `detect`, `list`, `test`, `extract`, and `create`. Creation format values are `zip`, `seven-zip`, `tar`, `tar-gzip`, `tar-zstd`, `tar-xz`, `tar-lzma`, `tar-bzip2`, `gzip`, `zstandard`, `xz`, `lzma`, `bzip2`, `lz4`, and `brotli`. Conflict values are `overwrite`, `skip`, `rename`, and `error`.
 
 Password input is available only through explicit `--password-stdin`. The CLI does not accept a plaintext password argument or promise an interactive prompt.
 

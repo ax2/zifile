@@ -1,5 +1,6 @@
 use std::fs;
-use std::path::PathBuf;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 
 use crate::i18n::Locale;
 
@@ -46,13 +47,40 @@ impl AppSettings {
         }
     }
 
-    pub fn save(self) {
-        let Some(path) = settings_path() else { return };
-        let Some(parent) = path.parent() else { return };
-        if fs::create_dir_all(parent).is_err() {
-            return;
+    pub fn save(self) -> io::Result<()> {
+        let Some(path) = settings_path() else {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "LOCALAPPDATA is not available",
+            ));
+        };
+        let Some(parent) = path.parent() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "settings path has no parent directory",
+            ));
+        };
+        fs::create_dir_all(parent)?;
+        self.save_to_path(&path)
+    }
+
+    fn save_to_path(self, path: &Path) -> io::Result<()> {
+        let temporary = path.with_extension("conf.tmp");
+        let result = (|| {
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(&temporary)?;
+            file.write_all(self.contents().as_bytes())?;
+            file.flush()?;
+            file.sync_all()?;
+            replace_file(&temporary, path)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
         }
-        let _ = fs::write(path, self.contents());
+        result
     }
 
     fn contents(self) -> String {
@@ -65,6 +93,45 @@ fn settings_path() -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .map(|root| root.join("ZiFile").join("settings.conf"))
+}
+
+#[cfg(windows)]
+fn replace_file(temporary: &Path, destination: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let temporary: Vec<u16> = temporary
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let destination: Vec<u16> = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    // SAFETY: both vectors are NUL-terminated UTF-16 paths that remain alive
+    // for the duration of the synchronous Win32 call.
+    let moved = unsafe {
+        MoveFileExW(
+            temporary.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if moved == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+fn replace_file(temporary: &Path, destination: &Path) -> io::Result<()> {
+    fs::rename(temporary, destination)
 }
 
 #[cfg(test)]
@@ -89,5 +156,25 @@ mod tests {
             dark: false,
         };
         assert_eq!(settings.contents(), "language=zh-CN\ntheme=light\n");
+    }
+
+    #[test]
+    fn save_to_path_replaces_existing_settings_and_cleans_the_temporary_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.conf");
+        fs::write(&path, "language=en-US\ntheme=dark\n").unwrap();
+
+        AppSettings {
+            locale: Locale::ZhCn,
+            dark: false,
+        }
+        .save_to_path(&path)
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "language=zh-CN\ntheme=light\n"
+        );
+        assert!(!path.with_extension("conf.tmp").exists());
     }
 }

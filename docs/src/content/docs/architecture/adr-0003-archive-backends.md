@@ -8,7 +8,7 @@ description: 记录 ZiFile 当前格式实现、许可证边界与替换策略�
 
 ## 决定
 
-核心采用纯 Rust 或 Rust 原生绑定的可替换后端组合：ZIP 使用 `zip`，7z 使用 `sevenz-rust2`，RAR 只读使用 `rars`，CAB 只读使用 `cab`，TAR 使用 `tar`，gzip 使用 `flate2`，Zstandard 使用 `zstd`，XZ 使用静态链接的 `xz2`，Bzip2 使用 `bzip2`，LZ4 使用 `lz4_flex`，Brotli 使用 `brotli`。
+核心采用纯 Rust 或 Rust 原生绑定的可替换后端组合：ZIP 使用 `zip`，7z 使用 `sevenz-rust2`，RAR 只读使用 `rars`，CAB 只读使用 `cab`，TAR 使用 `tar`，gzip 使用 `flate2`，Zstandard 使用 `zstd`，XZ 使用静态链接的 `xz2`，standalone LZMA 使用 `lzma-rust2`，Bzip2 使用 `bzip2`，LZ4 使用 `lz4_flex`，Brotli 使用 `brotli`。
 
 所有后端只能通过 `zifile-core` 的统一入口暴露能力。路径规范化、链接拒绝、冲突处理、资源上限、取消和临时文件写入由核心统一实施，不能交给 UI 或调用者自行拼装。
 

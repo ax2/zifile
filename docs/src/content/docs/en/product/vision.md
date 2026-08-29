@@ -26,4 +26,4 @@ The product is named **ZiFile**, the repository is `ax2/zifile`, the publisher i
 
 ## Later extensions
 
-The architecture leaves extension points for checksums, duplicate analysis, batch rename, and file preview. These must not delay the first archive-focused release.
+Integrity testing now provides decoded-content SHA-256; the architecture still leaves extension points for duplicate analysis, batch rename, and file preview. These must not delay the first archive-focused release.

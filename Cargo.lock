@@ -8459,7 +8459,7 @@ dependencies = [
 
 [[package]]
 name = "zifile-cli"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "clap",
  "zifile-core",
@@ -8467,7 +8467,7 @@ dependencies = [
 
 [[package]]
 name = "zifile-core"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "brotli",
  "bzip2",
@@ -8476,9 +8476,11 @@ dependencies = [
  "filetime",
  "flate2",
  "lz4_flex",
+ "lzma-rust2 0.20.0",
  "rars",
  "serde",
  "sevenz-rust2",
+ "sha2 0.10.9",
  "tar",
  "tempfile",
  "thiserror 2.0.20",
@@ -8491,7 +8493,7 @@ dependencies = [
 
 [[package]]
 name = "zifile-desktop"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "criterion",
  "dioxus",
@@ -8512,15 +8514,17 @@ dependencies = [
 
 [[package]]
 name = "zifile-shell"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
+ "tempfile",
  "windows 0.62.2",
  "windows-core 0.62.2",
+ "zifile-core",
 ]
 
 [[package]]
 name = "zifile-worker"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "serde_json",
  "zifile-core",
@@ -8529,7 +8533,7 @@ dependencies = [
 
 [[package]]
 name = "zifile-worker-protocol"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",

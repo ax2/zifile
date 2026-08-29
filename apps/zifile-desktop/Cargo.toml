@@ -10,7 +10,7 @@ repository.workspace = true
 build = "build.rs"
 
 [features]
-accessible-ui = ["dep:dioxus", "dep:dioxus-document", "dep:dioxus-html", "dep:tokio"]
+accessible-ui = ["dep:dioxus", "dep:dioxus-document", "dep:dioxus-html"]
 
 [[bin]]
 name = "zifile-desktop-accessible"
@@ -25,7 +25,7 @@ harness = false
 dioxus = { workspace = true, optional = true }
 dioxus-document = { workspace = true, optional = true }
 dioxus-html = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true }
+tokio.workspace = true
 iced.workspace = true
 rfd.workspace = true
 serde_json.workspace = true
@@ -44,6 +44,7 @@ windows = { workspace = true, features = [
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Security",
+  "Win32_Storage_FileSystem",
   "Win32_System_JobObjects",
   "Win32_System_Threading",
 ] }

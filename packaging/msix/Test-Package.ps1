@@ -172,7 +172,7 @@ try {
             $namespace
         ) | ForEach-Object { $_.Type }
     )
-    foreach ($itemType in @('*', 'Directory')) {
+    foreach ($itemType in @('*', 'Directory', 'Directory\Background')) {
         if ($shellItemTypes -cnotcontains $itemType) {
             throw "MSIX manifest is missing ZiFile shell command item type: $itemType"
         }

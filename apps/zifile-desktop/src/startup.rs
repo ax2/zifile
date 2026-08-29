@@ -1,6 +1,8 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use zifile_core::COMPOUND_ARCHIVE_EXTENSIONS;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StartupRequest {
     Home,
@@ -43,27 +45,12 @@ pub fn extraction_destination(archive: &Path) -> PathBuf {
 }
 
 fn extraction_folder_name(archive: &Path) -> OsString {
-    const TAR_SUFFIXES: &[&str] = &[
-        ".tar.gz",
-        ".tar.zst",
-        ".tar.xz",
-        ".tar.lzma",
-        ".tar.bz",
-        ".tar.bz2",
-        ".tar.lz4",
-        ".tar.br",
-        ".tgz",
-        ".tzst",
-        ".txz",
-        ".tbz",
-        ".tbz2",
-    ];
-
     if let Some(file_name) = archive.file_name().and_then(|value| value.to_str()) {
         let lowercase = file_name.to_ascii_lowercase();
-        if let Some(suffix) = TAR_SUFFIXES
+        if let Some((suffix, _)) = COMPOUND_ARCHIVE_EXTENSIONS
             .iter()
-            .find(|suffix| lowercase.ends_with(**suffix))
+            .filter(|(_, format)| format.is_tar_composition())
+            .find(|(suffix, _)| lowercase.ends_with(*suffix))
         {
             let stem_length = file_name.len() - suffix.len();
             if stem_length > 0 {
@@ -141,10 +128,7 @@ mod tests {
             "backup.TAR.ZST",
             "backup.tar.xz",
             "backup.tar.lzma",
-            "backup.tar.bz",
             "backup.tar.bz2",
-            "backup.tar.lz4",
-            "backup.tar.br",
             "backup.tgz",
             "backup.tzst",
             "backup.txz",
@@ -157,6 +141,18 @@ mod tests {
                 "unexpected destination for {archive_name}"
             );
         }
+        assert_eq!(
+            extraction_destination(Path::new("backup.tar.lz4")),
+            PathBuf::from("backup.tar")
+        );
+        assert_eq!(
+            extraction_destination(Path::new("backup.tar.br")),
+            PathBuf::from("backup.tar")
+        );
+        assert_eq!(
+            extraction_destination(Path::new("backup.tar.bz")),
+            PathBuf::from("backup.tar")
+        );
         assert_eq!(
             extraction_destination(Path::new("backup.tar.zip")),
             PathBuf::from("backup.tar")

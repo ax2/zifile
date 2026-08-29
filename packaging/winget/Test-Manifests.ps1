@@ -16,10 +16,10 @@ $expectedFileExtensions = @(
     'rar', 'cbr',
     'cab',
     'tar', 'cbt',
-    'gz', 'tgz',
-    'zst', 'tzst',
-    'xz', 'txz', 'lzma',
-    'bz', 'bz2', 'tbz', 'tbz2',
+    'gz', 'tar.gz', 'tgz',
+    'zst', 'tar.zst', 'tzst',
+    'xz', 'tar.xz', 'txz', 'tar.lzma', 'lzma',
+    'bz', 'bz2', 'tar.bz2', 'tbz', 'tbz2',
     'lz4', 'br'
 )
 $directory = [IO.Path]::GetFullPath($ManifestDirectory)
@@ -85,13 +85,13 @@ foreach ($requiredLine in @(
 
 $extensionBlock = [Regex]::Match(
     $installerSource,
-    '(?ms)^FileExtensions:\r?\n(?<items>(?:- [a-z0-9]+\r?\n)+)Installers:'
+    '(?ms)^FileExtensions:\r?\n(?<items>(?:- [a-z0-9.]+\r?\n)+)Installers:'
 )
 if (-not $extensionBlock.Success) {
     throw 'Installer manifest does not contain a bounded FileExtensions list before Installers.'
 }
 $actualFileExtensions = @(
-    [Regex]::Matches($extensionBlock.Groups['items'].Value, '(?m)^- (?<extension>[a-z0-9]+)\r?$') |
+    [Regex]::Matches($extensionBlock.Groups['items'].Value, '(?m)^- (?<extension>[a-z0-9.]+)\r?$') |
         ForEach-Object { $_.Groups['extension'].Value }
 )
 if ($actualFileExtensions.Count -ne $expectedFileExtensions.Count -or
@@ -109,7 +109,7 @@ if (-not $coreExtensionBlock.Success) {
     throw 'Could not locate the core OPEN_ARCHIVE_EXTENSIONS contract.'
 }
 $coreFileExtensions = @(
-    [Regex]::Matches($coreExtensionBlock.Groups['items'].Value, '"(?<extension>[a-z0-9]+)"') |
+    [Regex]::Matches($coreExtensionBlock.Groups['items'].Value, '"(?<extension>[a-z0-9.]+)"') |
         ForEach-Object { $_.Groups['extension'].Value }
 )
 if ($coreFileExtensions.Count -ne $expectedFileExtensions.Count -or

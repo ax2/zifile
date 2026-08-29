@@ -22,8 +22,10 @@ try {
         $formats -notmatch '(?m)^FORMAT\tLIST\tEXTRACT\tCREATE\tCREATE_INPUT\tCOMPRESSION_LEVEL\tENCRYPTION\tSTAGE$' -or
         $formats -notmatch '(?m)^ZIP\tyes\tyes\tyes\tfiles-or-directories\t0-9\tyes\tAlpha$' -or
         $formats -notmatch '(?m)^Zstandard\tyes\tyes\tyes\tsingle-file\t0-22\tno\tAlpha$' -or
+        $formats -notmatch '(?m)^LZMA\tyes\tyes\tyes\tsingle-file\t0-9\tno\tAlpha$' -or
         $formats -notmatch '(?m)^Bzip2\tyes\tyes\tyes\tsingle-file\t1-9\tno\tAlpha$' -or
         $formats -notmatch '(?m)^TAR\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha$' -or
+        $formats -notmatch '(?m)^TAR \+ LZMA\tyes\tyes\tyes\tfiles-or-directories\t0-9\tno\tAlpha$' -or
         $formats -notmatch '(?m)^LZ4\tyes\tyes\tyes\tsingle-file\tfixed\tno\tAlpha$' -or
         $formats -notmatch '(?m)^RAR\tyes\tyes\tno\tnone\tnone\tyes\tBeta$' -or
         $formats -notmatch '(?m)^CAB\tyes\tyes\tno\tnone\tnone\tno\tBeta$'
@@ -77,10 +79,88 @@ try {
         throw 'CLI fixed-format creation without --level failed.'
     }
 
+    function Invoke-CliRoundTrip {
+        param(
+            [Parameter(Mandatory)][string]$Format,
+            [Parameter(Mandatory)][string]$ArchiveName,
+            [Parameter(Mandatory)][string]$SourcePath,
+            [Parameter(Mandatory)][string]$OutputDirectory,
+            [Parameter(Mandatory)][string]$ExpectedRelativePath,
+            [Parameter(Mandatory)][string]$ExpectedContent
+        )
+
+        $archive = Join-Path $smokeRoot $ArchiveName
+        & $cliPath create $archive $SourcePath --format $Format
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+            throw "CLI $Format creation smoke test failed."
+        }
+        & $cliPath test $archive
+        if ($LASTEXITCODE -ne 0) {
+            throw "CLI $Format integrity smoke test failed."
+        }
+        $output = Join-Path $smokeRoot $OutputDirectory
+        & $cliPath extract $archive $output
+        $expectedPath = Join-Path $output $ExpectedRelativePath
+        if ($LASTEXITCODE -ne 0 -or
+            -not (Test-Path -LiteralPath $expectedPath -PathType Leaf) -or
+            (Get-Content -Raw -LiteralPath $expectedPath) -ne $ExpectedContent) {
+            throw "CLI $Format extraction smoke test failed."
+        }
+    }
+
+    $nestedInput = Join-Path $smokeRoot 'input'
+    foreach ($case in @(
+        @{ Format = 'tar-zstd'; ArchiveName = 'smoke.tar.zst'; Output = 'tar-zstd-output' },
+        @{ Format = 'tar-xz'; ArchiveName = 'smoke.tar.xz'; Output = 'tar-xz-output' },
+        @{ Format = 'tar-bzip2'; ArchiveName = 'smoke.tar.bz2'; Output = 'tar-bzip2-output' }
+    )) {
+        Invoke-CliRoundTrip `
+            -Format $case.Format `
+            -ArchiveName $case.ArchiveName `
+            -SourcePath $nestedInput `
+            -OutputDirectory $case.Output `
+            -ExpectedRelativePath 'input\nested\unicode-测试.txt' `
+            -ExpectedContent 'archive smoke'
+    }
+
+    foreach ($case in @(
+        @{ Format = 'gzip'; ArchiveName = 'hello.txt.gz'; Output = 'gzip-output' },
+        @{ Format = 'zstandard'; ArchiveName = 'hello.txt.zst'; Output = 'zstandard-output' },
+        @{ Format = 'xz'; ArchiveName = 'hello.txt.xz'; Output = 'xz-output' },
+        @{ Format = 'lzma'; ArchiveName = 'hello.txt.lzma'; Output = 'lzma-output' },
+        @{ Format = 'bzip2'; ArchiveName = 'hello.txt.bz2'; Output = 'bzip2-output' },
+        @{ Format = 'lz4'; ArchiveName = 'hello.txt.lz4'; Output = 'lz4-output' },
+        @{ Format = 'brotli'; ArchiveName = 'hello.txt.br'; Output = 'brotli-output' }
+    )) {
+        Invoke-CliRoundTrip `
+            -Format $case.Format `
+            -ArchiveName $case.ArchiveName `
+            -SourcePath (Join-Path $nestedInput 'hello.txt') `
+            -OutputDirectory $case.Output `
+            -ExpectedRelativePath 'hello.txt' `
+            -ExpectedContent 'hello ZiFile'
+    }
+
     $archivePath = Join-Path $smokeRoot 'smoke.tar.gz'
     cargo run --quiet -p zifile-cli -- create $archivePath (Join-Path $smokeRoot 'input') --format tar-gzip
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $archivePath)) {
         throw 'CLI archive creation smoke test failed.'
+    }
+
+    $lzmaArchivePath = Join-Path $smokeRoot 'smoke.tar.lzma'
+    & $cliPath create $lzmaArchivePath (Join-Path $smokeRoot 'input') --format tar-lzma
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $lzmaArchivePath)) {
+        throw 'CLI TAR + LZMA creation smoke test failed.'
+    }
+    & $cliPath test $lzmaArchivePath
+    if ($LASTEXITCODE -ne 0) {
+        throw 'CLI TAR + LZMA integrity smoke test failed.'
+    }
+    $lzmaOutput = Join-Path $smokeRoot 'tar-lzma-output'
+    & $cliPath extract $lzmaArchivePath $lzmaOutput
+    if ($LASTEXITCODE -ne 0 -or
+        (Get-Content -Raw -LiteralPath (Join-Path $lzmaOutput 'input\nested\unicode-测试.txt')) -ne 'archive smoke') {
+        throw 'CLI TAR + LZMA extraction smoke test failed.'
     }
 
     $encryptedArchive = Join-Path $smokeRoot 'smoke-encrypted.7z'
@@ -108,6 +188,10 @@ try {
     $detection = (cargo run --quiet -p zifile-cli -- detect $archivePath) -join "`n"
     if ($LASTEXITCODE -ne 0 -or $detection -notmatch 'TAR \+ gzip') {
         throw 'CLI signature detection smoke test failed.'
+    }
+    $lzmaDetection = (cargo run --quiet -p zifile-cli -- detect $lzmaArchivePath) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or $lzmaDetection -notmatch 'TAR \+ LZMA') {
+        throw 'CLI TAR + LZMA format detection smoke test failed.'
     }
 
     $listing = (cargo run --quiet -p zifile-cli -- list $archivePath) -join "`n"
