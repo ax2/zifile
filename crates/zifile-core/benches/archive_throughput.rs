@@ -1,4 +1,5 @@
 use std::fs;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use zifile_core::{ArchiveFormat, CreateOptions, create_archive, test_archive};
@@ -14,16 +15,19 @@ fn archive_throughput(criterion: &mut Criterion) {
     let mut create_group = criterion.benchmark_group("create archive");
     create_group.throughput(Throughput::Bytes(payload.len() as u64));
     create_group.sample_size(10);
+    let zip_iteration = AtomicUsize::new(0);
     create_group.bench_function("zip deflate 8 MiB", |bencher| {
         bencher.iter(|| {
-            let archive = temp.path().join("benchmark.zip");
+            let iteration = zip_iteration.fetch_add(1, Ordering::Relaxed);
+            let archive = temp.path().join(format!("benchmark-{iteration}.zip"));
             create_archive(
                 std::slice::from_ref(&source),
-                archive,
+                &archive,
                 ArchiveFormat::Zip,
                 &CreateOptions::default(),
             )
             .unwrap();
+            fs::remove_file(archive).unwrap();
         });
     });
     create_group.finish();
@@ -41,16 +45,19 @@ fn archive_throughput(criterion: &mut Criterion) {
     let mut tar_create_group = criterion.benchmark_group("create tar archive");
     tar_create_group.throughput(Throughput::Bytes(tar_payload.len() as u64));
     tar_create_group.sample_size(10);
+    let tar_iteration = AtomicUsize::new(0);
     tar_create_group.bench_function("tar lzma 1 MiB", |bencher| {
         bencher.iter(|| {
-            let archive = temp.path().join("benchmark.tar.lzma");
+            let iteration = tar_iteration.fetch_add(1, Ordering::Relaxed);
+            let archive = temp.path().join(format!("benchmark-{iteration}.tar.lzma"));
             create_archive(
                 std::slice::from_ref(&tar_source),
-                archive,
+                &archive,
                 ArchiveFormat::TarLzma,
                 &CreateOptions::default(),
             )
             .unwrap();
+            fs::remove_file(archive).unwrap();
         });
     });
     tar_create_group.finish();
