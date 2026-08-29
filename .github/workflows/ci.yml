@@ -83,6 +83,9 @@ jobs:
       - name: Foundation smoke test
         shell: pwsh
         run: ./tests/smoke/foundation.ps1 -SkipDesktopLaunch
+      - name: CLI contract smoke test
+        shell: pwsh
+        run: ./tests/smoke/contract-policy.ps1 -SkipBuild
       - name: Reproducibility diagnostics smoke test
         shell: pwsh
         run: ./tests/smoke/reproducibility-diagnostics.ps1
@@ -95,12 +98,20 @@ jobs:
       - name: Reference-tool interoperability
         shell: pwsh
         run: |
-          ./tests/interoperability/windows-tools.ps1 -SkipBuild
+          ./tests/interoperability/windows-tools.ps1 -SkipBuild -EvidencePath target/windows-tools-interoperability.json
           ./tests/interoperability/cab-windows.ps1 -SkipBuild
           ./tests/interoperability/sevenzip-corpus.ps1 -SkipBuild
           ./tests/interoperability/zip-method-corpus.ps1 -SkipBuild
           ./tests/interoperability/zip-legacy-corpus.ps1 -SkipBuild
           ./tests/interoperability/zip-zstd-corpus.ps1 -SkipBuild
+      - name: Upload Windows reference-tool interoperability evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-tools-interoperability
+          path: target/windows-tools-interoperability.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload CAB interoperability evidence
         uses: actions/upload-artifact@v6
         with:
@@ -153,6 +164,40 @@ jobs:
         with:
           name: rar-corpus
           path: target/rar-corpus.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  performance:
+    name: Rust performance benchmarks
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.93.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Run format-detection benchmark
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path target/benchmarks -Force | Out-Null
+          cargo bench -p zifile-core --bench format_detection --locked -- `
+            --noplot --sample-size 10 --save-baseline ci `
+            2>&1 | Tee-Object -FilePath target/benchmarks/format-detection.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run archive-throughput benchmark
+        shell: pwsh
+        run: |
+          cargo bench -p zifile-core --bench archive_throughput --locked -- `
+            --noplot --sample-size 10 --save-baseline ci `
+            2>&1 | Tee-Object -FilePath target/benchmarks/archive-throughput.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload performance evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: rust-performance
+          path: |
+            target/benchmarks/*
+            target/criterion
           if-no-files-found: warn
           retention-days: 30
 

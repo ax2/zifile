@@ -5,6 +5,8 @@ use zifile_core::{ArchiveFormat, CreateInputKind};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreateSourceIssue {
     MissingSources,
+    MissingSource,
+    LinkSource,
     SingleFileRequired,
     UnsupportedFormat,
 }
@@ -17,11 +19,37 @@ pub fn create_source_issue(
     match format.create_input() {
         None => Some(CreateSourceIssue::UnsupportedFormat),
         Some(_) if sources.is_empty() => Some(CreateSourceIssue::MissingSources),
+        Some(_) if sources.iter().any(|source| !source.exists()) => {
+            Some(CreateSourceIssue::MissingSource)
+        }
+        Some(_) if sources.iter().any(|source| is_link_like(source)) => {
+            Some(CreateSourceIssue::LinkSource)
+        }
         Some(CreateInputKind::SingleFile) if !matches!(sources, [source] if source.is_file()) => {
             Some(CreateSourceIssue::SingleFileRequired)
         }
         Some(_) => None,
     }
+}
+
+#[cfg(windows)]
+const WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT: u64 = 0x400;
+
+fn is_link_like(path: &std::path::Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|metadata| {
+        if metadata.file_type().is_symlink() {
+            return true;
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            u64::from(metadata.file_attributes()) & WINDOWS_FILE_ATTRIBUTE_REPARSE_POINT != 0
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
+    })
 }
 
 #[cfg(test)]
@@ -46,6 +74,7 @@ mod tests {
             ArchiveFormat::Gzip,
             ArchiveFormat::Zstandard,
             ArchiveFormat::Xz,
+            ArchiveFormat::Lzma,
             ArchiveFormat::Bzip2,
             ArchiveFormat::Lz4,
             ArchiveFormat::Brotli,
@@ -74,6 +103,45 @@ mod tests {
         assert_eq!(
             create_source_issue(ArchiveFormat::Rar, &[PathBuf::from("source")]),
             Some(CreateSourceIssue::UnsupportedFormat)
+        );
+        assert_eq!(
+            create_source_issue(ArchiveFormat::Zip, &[PathBuf::from("missing-source")]),
+            Some(CreateSourceIssue::MissingSource)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_sources_are_rejected_before_the_save_dialog() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source.txt");
+        let link = temp.path().join("source-link.txt");
+        std::fs::write(&source, b"source").unwrap();
+        std::os::unix::fs::symlink(&source, &link).unwrap();
+
+        assert_eq!(
+            create_source_issue(ArchiveFormat::Zip, &[link]),
+            Some(CreateSourceIssue::LinkSource)
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reparse_point_sources_are_rejected_before_the_save_dialog() {
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("target");
+        let link = temp.path().join("source-link");
+        std::fs::create_dir(&target).unwrap();
+        if let Err(error) = std::os::windows::fs::symlink_dir(&target, &link) {
+            if error.kind() == std::io::ErrorKind::PermissionDenied {
+                return;
+            }
+            panic!("could not create test symlink: {error}");
+        }
+
+        assert_eq!(
+            create_source_issue(ArchiveFormat::Zip, &[link]),
+            Some(CreateSourceIssue::LinkSource)
         );
     }
 }

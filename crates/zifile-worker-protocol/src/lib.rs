@@ -106,7 +106,7 @@ mod tests {
     }
 
     #[test]
-    fn archive_entry_modified_time_is_backward_compatible() {
+    fn archive_entry_optional_metadata_is_backward_compatible() {
         let legacy = r#"{
             "version": 1,
             "payload": {
@@ -129,8 +129,26 @@ mod tests {
             panic!("legacy event decoded as the wrong variant");
         };
         assert_eq!(entry.modified, None);
+        assert_eq!(entry.checksum, None);
         let encoded =
             serde_json::to_string(&Envelope::new(WorkerEvent::ArchiveEntry { entry })).unwrap();
         assert!(!encoded.contains("modified"));
+        assert!(!encoded.contains("checksum"));
+
+        let current = ArchiveEntryInfo {
+            path: PathBuf::from("current.txt"),
+            size: 3,
+            compressed_size: 3,
+            is_directory: false,
+            encrypted: false,
+            checksum: Some(
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            ),
+            modified: None,
+        };
+        let encoded =
+            serde_json::to_string(&Envelope::new(WorkerEvent::ArchiveEntry { entry: current }))
+                .unwrap();
+        assert!(encoded.contains("checksum"));
     }
 }

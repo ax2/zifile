@@ -26,6 +26,8 @@ use zifile_worker_protocol::{
 
 type SharedWriter = Arc<Mutex<BufWriter<io::Stdout>>>;
 const MAX_REQUEST_BYTES: u64 = 16 * 1024 * 1024;
+const TEST_DELAY_ENV: &str = "ZIFILE_TEST_WORKER_DELAY_MS";
+const MAX_TEST_DELAY_MS: u64 = 10_000;
 
 fn main() {
     if let Err(error) = run() {
@@ -48,6 +50,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let progress = OperationProgress::default();
             let cancellation = zifile_core::CancellationToken::default();
             listen_for_cancel(cancellation.clone());
+            wait_for_test_delay(&cancellation);
             let options = ListOptions {
                 password,
                 cancellation,
@@ -63,6 +66,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let progress = OperationProgress::default();
             let cancellation = zifile_core::CancellationToken::default();
             listen_for_cancel(cancellation.clone());
+            wait_for_test_delay(&cancellation);
             let options = TestOptions {
                 password,
                 cancellation,
@@ -85,6 +89,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let progress = OperationProgress::default();
             let cancellation = zifile_core::CancellationToken::default();
             listen_for_cancel(cancellation.clone());
+            wait_for_test_delay(&cancellation);
             let options = ExtractOptions {
                 conflict,
                 limits,
@@ -109,6 +114,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let progress = OperationProgress::default();
             let cancellation = zifile_core::CancellationToken::default();
             listen_for_cancel(cancellation.clone());
+            wait_for_test_delay(&cancellation);
             let options = CreateOptions {
                 compression_level,
                 password,
@@ -160,6 +166,25 @@ fn listen_for_cancel(cancellation: zifile_core::CancellationToken) {
             cancellation.cancel();
         }
     });
+}
+
+fn wait_for_test_delay(cancellation: &zifile_core::CancellationToken) {
+    let Some(delay) = std::env::var(TEST_DELAY_ENV)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|milliseconds| *milliseconds > 0)
+        .map(|milliseconds| Duration::from_millis(milliseconds.min(MAX_TEST_DELAY_MS)))
+    else {
+        return;
+    };
+    let deadline = std::time::Instant::now() + delay;
+    while !cancellation.is_cancelled() {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        thread::sleep(remaining.min(Duration::from_millis(25)));
+    }
 }
 
 fn shared_stdout() -> SharedWriter {
@@ -244,5 +269,11 @@ mod tests {
     fn rejects_requests_over_the_ipc_limit() {
         let mut input = io::BufReader::new(io::repeat(b' ').take(MAX_REQUEST_BYTES + 1));
         assert!(read_request(&mut input).is_err());
+    }
+
+    #[test]
+    fn test_delay_limit_is_explicit_and_bounded() {
+        assert_eq!(TEST_DELAY_ENV, "ZIFILE_TEST_WORKER_DELAY_MS");
+        assert_eq!(MAX_TEST_DELAY_MS, 10_000);
     }
 }

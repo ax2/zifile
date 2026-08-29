@@ -8,7 +8,7 @@ description: ZiFile's archive implementations, license boundary, and replacement
 
 ## Decision
 
-ZiFile uses replaceable pure-Rust or Rust-native backends: `zip` for ZIP, `sevenz-rust2` for 7z, `rars` for read-only RAR, `cab` for read-only CAB, `tar`, `flate2` for gzip, `zstd`, statically linked `xz2`, `bzip2`, `lz4_flex`, and `brotli`.
+ZiFile uses replaceable pure-Rust or Rust-native backends: `zip` for ZIP, `sevenz-rust2` for 7z, `rars` for read-only RAR, `cab` for read-only CAB, `tar`, `flate2` for gzip, `zstd`, statically linked `xz2` for XZ, `lzma-rust2` for standalone LZMA, `bzip2`, `lz4_flex`, and `brotli`.
 
 Only `zifile-core` exposes these backends. The core centrally enforces path normalization, link rejection, conflict handling, resource limits, cancellation, and temporary-file writes.
 

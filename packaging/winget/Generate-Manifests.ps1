@@ -22,10 +22,10 @@ $fileExtensions = @(
     'rar', 'cbr',
     'cab',
     'tar', 'cbt',
-    'gz', 'tgz',
-    'zst', 'tzst',
-    'xz', 'txz', 'lzma',
-    'bz', 'bz2', 'tbz', 'tbz2',
+    'gz', 'tar.gz', 'tgz',
+    'zst', 'tar.zst', 'tzst',
+    'xz', 'tar.xz', 'txz', 'tar.lzma', 'lzma',
+    'bz', 'bz2', 'tar.bz2', 'tbz', 'tbz2',
     'lz4', 'br'
 )
 $fileExtensionYaml = ($fileExtensions | ForEach-Object { "- $_" }) -join "`n"

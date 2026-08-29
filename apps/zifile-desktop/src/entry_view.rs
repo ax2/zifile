@@ -30,6 +30,7 @@ pub struct BrowserEntry<'a> {
     pub compressed_size: u64,
     pub is_directory: bool,
     pub encrypted: bool,
+    pub checksum: Option<String>,
     pub modified: Option<ArchiveTimestamp>,
 }
 
@@ -57,6 +58,7 @@ impl BrowserEntry<'_> {
             compressed_size: self.compressed_size,
             is_directory: self.is_directory,
             encrypted: self.encrypted,
+            checksum: self.checksum,
             modified: self.modified,
         }
     }
@@ -248,6 +250,7 @@ fn browser_entries<'a>(
                 compressed_size: 0,
                 is_directory: true,
                 encrypted: false,
+                checksum: None,
                 modified: None,
             },
             real_browser_entry,
@@ -263,6 +266,7 @@ fn real_browser_entry(entry: &ArchiveEntryInfo) -> BrowserEntry<'_> {
         compressed_size: entry.compressed_size,
         is_directory: entry.is_directory,
         encrypted: entry.encrypted,
+        checksum: entry.checksum.clone(),
         modified: entry.modified,
     }
 }
@@ -351,6 +355,7 @@ mod tests {
                     compressed_size: 1,
                     is_directory: false,
                     encrypted: false,
+                    checksum: None,
                     modified: None,
                 })
                 .collect(),
@@ -426,6 +431,7 @@ mod tests {
                     compressed_size: 3,
                     is_directory: false,
                     encrypted: false,
+                    checksum: None,
                     modified: None,
                 },
                 ArchiveEntryInfo {
@@ -434,6 +440,7 @@ mod tests {
                     compressed_size: 6,
                     is_directory: false,
                     encrypted: false,
+                    checksum: None,
                     modified: None,
                 },
                 ArchiveEntryInfo {
@@ -442,6 +449,7 @@ mod tests {
                     compressed_size: 9,
                     is_directory: false,
                     encrypted: false,
+                    checksum: None,
                     modified: None,
                 },
             ],
@@ -524,6 +532,7 @@ mod tests {
                     compressed_size: 1,
                     is_directory: false,
                     encrypted: false,
+                    checksum: None,
                     modified: None,
                 },
                 ArchiveEntryInfo {
@@ -532,6 +541,7 @@ mod tests {
                     compressed_size: 2,
                     is_directory: false,
                     encrypted: false,
+                    checksum: None,
                     modified: None,
                 },
             ],

@@ -4,15 +4,16 @@ ZiFile is a modern, open-source archive and file utility for Windows. It is
 being written from scratch with Rust, including the desktop UI, and is licensed
 under MIT.
 
-The project is currently in **Stage 3 — Release candidate preparation**. ZIP, encrypted
-ZIP, 7z, TAR compositions and common compression streams have working create,
+The project is currently in **Stage 4 — public 0.1 release and 1.0 readiness**. ZIP, encrypted
+ZIP, 7z, TAR compositions (including TAR + LZMA), standalone LZMA, and common compression streams have working create,
 list, integrity-test and safe-extraction paths shared by the CLI and Iced
 desktop application. RAR 1.3–7 and Windows CAB are available as pure-Rust,
 read-only beta providers.
 
-The candidate is feature-complete for the currently supported archive contract:
+The current build is feature-complete for the currently supported archive contract:
 the source, x64/ARM64 builds, package audits, reproducibility checks and release
-rehearsals are automated. A stable 1.0 release is intentionally still gated on
+rehearsals are automated. The public `v0.1.0` GitHub release uses unsigned
+artifacts; a stable 1.0 release is still gated on
 trusted signing, real foreground Windows validation, physical ARM64, WACK,
 Partner Center/Microsoft Store certification and WinGet acceptance.
 
@@ -20,6 +21,16 @@ The desktop UI is available in Simplified Chinese and English, follows the
 system language on first launch, and persists only the selected language and
 theme. Archive rows are searchable and paged in bounded groups of 500 so very
 large listings do not create an unbounded widget tree.
+
+The packaged Windows 11 Explorer integration adds a create command for selected
+files, selected folders, and a folder's background, plus an extract command for
+supported archive files. The extension only forwards local paths to the desktop;
+archive work remains in the isolated Worker.
+
+Desktop drag-and-drop probes file signatures before falling back to a known
+extension hint, so a valid archive can still be opened after being renamed while
+ordinary files remain creation sources. The small probe runs outside the UI event
+thread, and the isolated Worker still performs the definitive archive listing.
 
 An opt-in Dioxus/WebView2 accessibility candidate now exercises the same isolated
 Worker through semantic navigation, archive, integrity-test, extraction and creation
@@ -74,6 +85,9 @@ pnpm --dir docs build
 - [1.0 release readiness manifest](release/readiness.json)
 - [Stage 0 work log](docs/src/content/docs/releases/stage-0.md)
 - [Stage 1 work log](docs/src/content/docs/releases/stage-1.md)
+- [Stage 2 work log](docs/src/content/docs/releases/stage-2.md)
+- [Stage 3 work log](docs/src/content/docs/releases/stage-3.md)
+- [Stage 4 work log](docs/src/content/docs/releases/stage-4.md)
 
 ## Status
 
@@ -82,7 +96,7 @@ pnpm --dir docs build
 | Core model | Real create/list/test/extract operations with shared safety policy |
 | Desktop | Bilingual modern browser/creator, isolated archive worker and Windows taskbar progress |
 | CLI | `formats`, `detect`, `list`, `test`, `extract`, and `create` |
-| Archive providers | ZIP/ZIP64/AES, 7z/AES, read-only RAR 1.3 through RAR 7 with encryption, read-only Windows CAB, TAR compositions, and common streams |
+| Archive providers | ZIP/ZIP64/AES, 7z/AES, read-only RAR 1.3 through RAR 7 with encryption, read-only Windows CAB, TAR compositions including TAR + LZMA, standalone LZMA, and common streams |
 | Packaging | Real x64/ARM64 runnable directory, EXE, MSIX, CLI alias and audited Rust shell DLL |
 | Distribution | Tag workflow produces checksums, SBOM, provenance and WinGet manifest candidates |
 
@@ -98,8 +112,8 @@ $password | zifile extract archive.7z output --password-stdin
 RAR creation remains disabled; browsing, testing and selective extraction use the
 pure-Rust permissively licensed `rars` provider behind ZiFile's safety and Worker-isolation
 boundaries. Trusted-package shell activation, signing, accessibility
-certification and Store submission are still in
-progress, so no production release has been tagged yet.
+certification and Store submission are still in progress, so no trusted
+production package release has been tagged yet.
 
 ## Code signing policy
 

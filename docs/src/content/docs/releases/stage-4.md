@@ -1,0 +1,44 @@
+---
+title: Stage 4 工作日志
+description: ZiFile 1.0 稳定发布的准备、合同冻结与跨渠道门禁记录。
+---
+
+## 目标
+
+冻结公开 CLI/Provider 合同，完成用户与发布文档，获得签名和认证证据，并从同一版本源发布 GitHub、WinGet 与 Microsoft Store 1.0。
+
+## 当前状态
+
+Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 workflow、SBOM、来源证明、校验和和阶段档案已存在，但这只能证明发布链路已准备，不能证明稳定版本已满足所有门禁。
+
+## 已准备
+
+- `docs/src/content/docs/development/contracts.md` 定义 CLI 命令、格式值、冲突策略、密码输入、退出码、核心 Provider 和 Worker 协议边界。
+- `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、15 个创建格式、17 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
+- `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
+- Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；当前工作区已切换到 `v0.1.0`，公开 GitHub Release 将通过匹配 tag 自动生成。
+
+## 必须完成
+
+- 关闭真实前台队列、可信签名安装生命周期、物理 ARM64、完整辅助功能和 WACK 门禁。
+- 完成 Partner Center 身份、SignPath/生产签名以及正式双语 Store 截图、WinGet 接受和 Store 认证。
+- 在 1.0 发布提交上冻结 CLI、Provider 和 IPC 合同，并更新最终版本说明、Stage 4 证据和发布结果。
+
+## 发布结果
+
+稳定 1.0 尚未发布；`v0.1.0` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+
+## 2026-08-29 质量收口记录
+
+- 两套桌面归档表格新增双语“复制校验和”操作：Iced 使用系统剪贴板，可访问 Dioxus UI 使用 Clipboard API，并在能力缺失或 Promise 失败时进入错误状态；对应文案、接线和失败回退已有测试覆盖。
+- 两套桌面归档页标题栏新增“在资源管理器中显示”操作，调用 Windows Explorer 选中当前归档；启动失败进入错误状态，路径不会写入设置或日志。
+- 可访问归档浏览器在大归档的高频进度刷新期间改用轻量摘要，保留取消、排队、打开其他文件和资源管理器定位按钮，任务完成后恢复表格，避免反复扫描 100,000 条目阻塞前台队列操作。
+- standalone `.lzma` 已从原先复用 XZ 枚举的只读别名拆为独立 `ArchiveFormat::Lzma`：核心使用 `lzma-rust2` 读写 LZMA-alone，CLI、Iced、Dioxus、能力矩阵和 Windows Foundation smoke 均提供独立的 `lzma` 选项；`.xz` 的显示和检测不再与 LZMA 混淆。
+- Explorer 创建命令现在在 Shell 菜单层拒绝已消失的路径、非文件系统虚拟项目和符号链接，并保留命令行长度与路径去重保护；Shell 回归测试增至 19 项，覆盖真实文件/文件夹正向路径和失效来源拒绝。
+- 解压路径现在在核心层拒绝目标本身及已有输出父路径中的符号链接、junction 和 reparse point，并用回归测试确认不会向链接目标写入；归档内链接拒绝与宿主目标路径检查保持一致。
+
+- 文档 locale 检查现在同时要求 31 对中英文页面存在且正文非空；剥离 front matter 后的空 Markdown 页面会使检查失败，防止文件存在但生成页面为空白。
+- 完整 `cargo test --workspace --all-targets --all-features --locked` 通过，覆盖 CLI、core、42 项归档回归、Iced、可访问候选、Shell、Worker、协议和 Criterion 基准目标。
+- Astro 静态构建生成 63 个页面，0 errors/warnings/hints；用户文档、Node/PowerShell 语法、打包策略和工作树卫生检查通过。
+- 这些是本地代码与文档证据，不改变 11 项外部发布门禁的 `pending` 状态，也不替代可信签名、Store/WinGet、ARM64 实机、WACK 或真实辅助技术验证。

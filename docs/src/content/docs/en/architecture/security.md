@@ -9,6 +9,7 @@ Archive contents, names, metadata, links, compression parameters, and password p
 
 - Reject `..`, absolute paths, UNC paths, and destination escape.
 - Reject escaping symbolic links, hard links, junctions, and reparse points.
+- Reject symbolic links, junctions, and reparse points in the extraction root and existing output parents, so writes cannot follow a host link outside the selected destination.
 - Reject Windows device names, NTFS alternate data streams, and illegal paths.
 - Detect case, Unicode-normalization, and duplicate-entry collisions.
 - Enforce entry-count, expanded-size, depth, and compression-ratio limits.
@@ -18,6 +19,8 @@ Archive contents, names, metadata, links, compression parameters, and password p
 ## Boundaries
 
 `SafetyLimits` provides conservative defaults. Limit-aware list/test APIs allow stricter callers, and extraction applies caller limits before creating its destination. Writes use temporary files and atomic replacement.
+
+TAR parsing accumulates declared entry sizes immediately after each header and checks expanded-size and ratio limits before skipping compressed payloads. This applies to TAR, TAR+gzip, TAR+Zstandard, TAR+XZ, TAR+LZMA, and TAR+Bzip2, so listing does not decode over-budget data merely to reach the next header.
 
 The UI does not parse archives. IPC limits requests to 16 MiB and events to 4 MiB; entries stream one at a time. The Windows Worker Job allows one process, caps memory at 4 GiB, and kills on close. Passwords travel only over standard input. This is process isolation, not AppContainer permission isolation.
 

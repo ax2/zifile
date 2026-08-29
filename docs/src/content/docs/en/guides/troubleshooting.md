@@ -16,11 +16,13 @@ For a compatibility report, provide the creating tool and version, format option
 
 Archives containing `..`, absolute paths, device names, case collisions, links, or abnormal expansion are rejected. This often signals corruption, incompatibility, or hostile content. ZiFile has no switch to disable these safety boundaries. A trusted tool may be used to inspect structure in a controlled environment, but never overwrite an important destination.
 
+ZiFile also rejects an extraction root or existing parent directory that is a symbolic link, junction, or reparse point. Choose a normal directory so output cannot be redirected outside the selected destination.
+
 ## The Create button is unavailable
 
-- A gzip, zstd, xz, bzip2, lz4, or Brotli stream requires exactly one existing file and cannot accept a directory.
+- A gzip, zstd, xz, lzma, bzip2, lz4, or Brotli stream requires exactly one existing file and cannot accept a directory.
 - ZIP, 7z, and TAR compositions accept multiple files and folders.
-- Creation is blocked before the save dialog when sources are empty, no longer exist, or the output is invalid.
+- Creation is blocked before the save dialog when sources are empty, no longer exist, are symbolic links, or the output is invalid.
 - RAR is read-only and cannot be selected as a creation format.
 
 ## An operation is slow or cancelled

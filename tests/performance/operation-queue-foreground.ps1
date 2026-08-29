@@ -2,6 +2,8 @@ param(
     [Parameter(Mandatory)][string]$ExecutablePath,
     [string]$FixturePath,
     [ValidateRange(1000, 1000000)][int]$EntryCount = 100000,
+    [ValidateRange(1, 65536)][int]$EntrySizeBytes = 1024,
+    [ValidateRange(0, 10000)][int]$WorkerDelayMilliseconds = 10000,
     [ValidateRange(5, 120)][int]$TimeoutSeconds = 45,
     [ValidateRange(1, 10)][int]$ForegroundTimeoutSeconds = 3
 )
@@ -83,7 +85,15 @@ function Resolve-RepoPath {
 }
 
 function New-ArchiveFixture {
-    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][int]$Entries)
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][int]$Entries,
+        [Parameter(Mandatory)][int]$EntrySizeBytes
+    )
+    $payload = New-Object byte[] $EntrySizeBytes
+    for ($offset = 0; $offset -lt $payload.Length; $offset++) {
+        $payload[$offset] = [byte](($offset * 31 + 17) % 251)
+    }
     $stream = [System.IO.File]::Open(
         $Path,
         [System.IO.FileMode]::CreateNew,
@@ -103,6 +113,9 @@ function New-ArchiveFixture {
                     [System.IO.Compression.CompressionLevel]::NoCompression
                 )
                 $entry.LastWriteTime = [DateTimeOffset]::new(2000, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
+                $entryStream = $entry.Open()
+                try { $entryStream.Write($payload, 0, $payload.Length) }
+                finally { $entryStream.Dispose() }
             }
         }
         finally { $archive.Dispose() }
@@ -169,6 +182,33 @@ function Find-Button {
     return $null
 }
 
+function Get-ButtonDiagnostics {
+    param([Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Root)
+    $condition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Button
+    )
+    try {
+        $buttons = $Root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+        if ($buttons.Count -eq 0) { return '<no buttons>' }
+        $lines = [System.Collections.Generic.List[string]]::new()
+        $limit = [Math]::Min($buttons.Count, 32)
+        for ($index = 0; $index -lt $limit; $index++) {
+            $button = $buttons.Item($index)
+            $name = if ([string]::IsNullOrWhiteSpace($button.Current.Name)) { '<unnamed>' } else { $button.Current.Name }
+            $lines.Add("$name [enabled=$($button.Current.IsEnabled)]")
+        }
+        if ($buttons.Count -gt $limit) { $lines.Add("… $($buttons.Count - $limit) more") }
+        return ($lines -join '; ')
+    }
+    catch [System.Windows.Automation.ElementNotAvailableException] {
+        return '<buttons became unavailable>'
+    }
+    catch [System.InvalidOperationException] {
+        return '<button diagnostics unavailable>'
+    }
+}
+
 function Wait-Button {
     param([Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Root, [Parameter(Mandatory)][string[]]$Names, [Parameter(Mandatory)][DateTime]$Deadline)
     do {
@@ -179,7 +219,8 @@ function Wait-Button {
         catch [System.Windows.Automation.ElementNotAvailableException] { }
         Start-Sleep -Milliseconds 20
     } while ([DateTime]::UtcNow -lt $Deadline)
-    throw "Timed out waiting for enabled button: $($Names -join ' | ')"
+    $diagnostics = Get-ButtonDiagnostics -Root $Root
+    throw "Timed out waiting for enabled button: $($Names -join ' | '). Buttons: $diagnostics"
 }
 
 function Get-DocumentText {
@@ -257,8 +298,20 @@ if (-not $generatedFixture -and -not (Test-Path -LiteralPath $archive -PathType 
 
 $process = $null
 try {
-    if ($generatedFixture) { New-ArchiveFixture -Path $archive -Entries $EntryCount }
-    $process = Start-Process -FilePath $executable -ArgumentList @("`"$archive`"") -PassThru
+    if ($generatedFixture) {
+        New-ArchiveFixture -Path $archive -Entries $EntryCount -EntrySizeBytes $EntrySizeBytes
+    }
+    $processStartParameters = @{
+        FilePath = $executable
+        ArgumentList = @("`"$archive`"")
+        PassThru = $true
+    }
+    if ($WorkerDelayMilliseconds -gt 0) {
+        $processStartParameters.Environment = @{
+            ZIFILE_TEST_WORKER_DELAY_MS = $WorkerDelayMilliseconds.ToString([Globalization.CultureInfo]::InvariantCulture)
+        }
+    }
+    $process = Start-Process @processStartParameters
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     $window = Wait-WindowElement -ProcessId $process.Id -Deadline $deadline
     $foregroundDeadline = [DateTime]::UtcNow.AddSeconds($ForegroundTimeoutSeconds)
@@ -274,15 +327,18 @@ try {
     )).Invoke()
     $testInvocationCount++
     Wait-DocumentAnyText -Root $window -AnyOf @('Testing every entry and checksum', '正在校验所有项目与校验和') -Deadline $deadline | Out-Null
-    $cancelButton = Wait-Button -Root $window -Names @('Cancel', '取消') -Deadline $deadline
-    for ($index = 1; $index -lt 3; $index++) {
-        ([System.Windows.Automation.InvokePattern]$testButton.GetCurrentPattern(
-            [System.Windows.Automation.InvokePattern]::Pattern
-        )).Invoke()
-        $testInvocationCount++
-        Start-Sleep -Milliseconds 50
-    }
+    $testButton = Wait-Button -Root $window -Names @('Test archive', '校验压缩文件') -Deadline $deadline
+    ([System.Windows.Automation.InvokePattern]$testButton.GetCurrentPattern(
+        [System.Windows.Automation.InvokePattern]::Pattern
+    )).Invoke()
+    $testInvocationCount++
+    $testButton = Wait-Button -Root $window -Names @('Test archive', '校验压缩文件') -Deadline $deadline
+    ([System.Windows.Automation.InvokePattern]$testButton.GetCurrentPattern(
+        [System.Windows.Automation.InvokePattern]::Pattern
+    )).Invoke()
+    $testInvocationCount++
     Wait-DocumentAnyText -Root $window -AnyOf @('2 operations queued', '2 个操作排队') -Deadline $deadline | Out-Null
+    $cancelButton = Wait-Button -Root $window -Names @('Cancel', '取消') -Deadline $deadline
 
     ([System.Windows.Automation.InvokePattern]$cancelButton.GetCurrentPattern(
         [System.Windows.Automation.InvokePattern]::Pattern
@@ -300,6 +356,8 @@ try {
         measured_at_utc = [DateTime]::UtcNow.ToString('o')
         executable = [System.IO.Path]::GetFileName($executable)
         fixture_entries = $EntryCount
+        fixture_entry_size_bytes = $EntrySizeBytes
+        worker_delay_milliseconds = $WorkerDelayMilliseconds
         fixture_generated = $generatedFixture
         foreground_window_verified = $true
         test_operations_submitted = $testInvocationCount

@@ -11,6 +11,7 @@ description: ZiFile 处理不可信压缩包时的威胁、限制和验证要求
 
 - `..`、绝对路径、UNC 和目标目录逃逸。
 - 符号链接、硬链接、junction 和 reparse point 越界。
+- 解压目标本身或其已有父路径中的符号链接、junction 或 reparse point，避免输出沿链接写到目标目录之外。
 - Windows 设备名、NTFS Alternate Data Streams 和非法路径。
 - 大小写、Unicode 规范化及重复条目冲突。
 - 超过文件数、展开体积、目录深度或压缩比上限的任务。
@@ -20,6 +21,8 @@ description: ZiFile 处理不可信压缩包时的威胁、限制和验证要求
 ## 默认限制
 
 Stage 0 已在 `zifile-core::SafetyLimits` 中建立保守上限。公开的 `list_archive_with_limits` 和 `test_archive_with_limits` 允许调用方在解析列表时收紧限制；`extract_archive` 会把调用方限制传入列出阶段，因此条目数、路径深度、展开量和压缩比会在创建目标目录之前检查。默认便利 API 继续使用统一保守值，写入则使用临时文件和原子替换。
+
+TAR 解析在每个头部之后立即累计声明的条目大小，并在跳过压缩载荷前检查展开体积和压缩比；这同样适用于 TAR、TAR+gzip、TAR+Zstandard、TAR+XZ、TAR+LZMA 和 TAR+Bzip2，避免列出阶段先解码超出预算的数据。
 
 桌面端不在 UI 进程解析归档。版本化 IPC 请求限制为 16 MiB，单个 Worker 事件限制为 4 MiB，归档条目逐条传输。Worker 的 Windows Job Object 限制为一个活动进程和 4 GiB 进程内存，并启用 kill-on-close；创建和解压优先协作取消，2 秒超时后才强制回收。密码只经标准输入发送，不进入命令行。该机制不削减当前用户的文件系统权限，AppContainer 仍属于后续纵深防御。
 

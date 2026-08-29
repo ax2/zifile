@@ -102,6 +102,11 @@
                 Id="CreateArchiveWithZiFile"
                 Clsid="2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531" />
             </desktop5:ItemType>
+            <desktop5:ItemType Type="Directory\Background">
+              <desktop5:Verb
+                Id="CreateArchiveWithZiFile"
+                Clsid="2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531" />
+            </desktop5:ItemType>
           </desktop4:FileExplorerContextMenus>
         </desktop4:Extension>
       </Extensions>
