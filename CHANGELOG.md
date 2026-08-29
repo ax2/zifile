@@ -44,6 +44,8 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Add explicit bilingual `Extract all` actions to both desktop archive views,
+  while keeping `Extract selected` available for precise partial extraction.
 - Give the default desktop window a centered startup position and a 920×620
   minimum size so archive tables and creation controls remain usable when the
   window is resized.

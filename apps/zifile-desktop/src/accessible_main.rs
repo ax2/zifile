@@ -528,7 +528,8 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
             div { class: "button-row",
                 select { value: conflict_value(view.conflict), "aria-label": choose(locale, "Conflict policy", "文件冲突策略"), onchange: move |event| state.write().conflict = parse_conflict(&event.value()),
                     for policy in [ConflictPolicy::Rename, ConflictPolicy::Overwrite, ConflictPolicy::Skip, ConflictPolicy::Error] { option { value: conflict_value(policy), {conflict_label(locale, policy)} } } }
-                button { class: "primary", disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
+                button { disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
+                button { class: "primary", "aria-describedby": "archive-selection-summary", onclick: move |_| extract_all(state), {locale.text(Text::ExtractAll)} }
             }
         }
         nav { class: "breadcrumbs", "aria-label": choose(locale, "Archive folder", "归档文件夹"),
@@ -935,7 +936,15 @@ fn test_archive(state: Signal<UiState>) {
     );
 }
 
-fn extract_selected(mut state: Signal<UiState>) {
+fn extract_selected(state: Signal<UiState>) {
+    extract_with_scope(state, false);
+}
+
+fn extract_all(state: Signal<UiState>) {
+    extract_with_scope(state, true);
+}
+
+fn extract_with_scope(mut state: Signal<UiState>, extract_all: bool) {
     let value = state.read();
     let Some(archive) = value.archive.clone() else {
         return;
@@ -961,12 +970,12 @@ fn extract_selected(mut state: Signal<UiState>) {
             .map(|folder| folder.path().to_path_buf());
         state.write().dialog_open = false;
         if let Some(destination) = destination {
-            extract_to(state, destination);
+            extract_to(state, destination, extract_all);
         }
     });
 }
 
-fn extract_to(state: Signal<UiState>, destination: PathBuf) {
+fn extract_to(state: Signal<UiState>, destination: PathBuf, extract_all: bool) {
     let value = state.read();
     let Some(archive) = value.archive.clone() else {
         return;
@@ -981,7 +990,8 @@ fn extract_to(state: Signal<UiState>, destination: PathBuf) {
         .iter()
         .filter(|entry| !entry.is_directory)
         .count();
-    let selected_paths = (selected.len() != file_count).then(|| selected.into_iter().collect());
+    let selected_paths =
+        (!extract_all && selected.len() != file_count).then(|| selected.into_iter().collect());
     let request = WorkerRequest::Extract {
         archive: archive.path,
         destination: destination.clone(),
@@ -1355,7 +1365,7 @@ fn finish_worker(
         ),
     };
     if let Some(destination) = automatic_extract {
-        extract_to(state, destination);
+        extract_to(state, destination, true);
     }
     let next = lock_operation_queue(&operations).complete(id);
     match next {
@@ -2023,6 +2033,16 @@ mod tests {
         assert!(source.contains("onclick: move |_| reveal_archive(state)"));
         assert!(source.contains("reveal_in_file_manager(&path)"));
         assert!(source.contains("Text::RevealInExplorer"));
+    }
+
+    #[test]
+    fn archive_actions_expose_selected_and_all_extraction_scopes() {
+        let source = include_str!("accessible_main.rs");
+        assert!(source.contains("onclick: move |_| extract_selected(state)"));
+        assert!(source.contains("onclick: move |_| extract_all(state)"));
+        assert!(source.contains("fn extract_with_scope"));
+        assert!(source.contains("Text::ExtractSelected"));
+        assert!(source.contains("Text::ExtractAll"));
     }
 
     #[test]
