@@ -16,9 +16,9 @@ $password | zifile extract archive.7z output --password-stdin
 
 ## Settings and shortcuts
 
-The first launch selects Simplified Chinese or English from the system locale. Language and light/dark theme can be changed at any time. Only those two preferences are stored in `%LOCALAPPDATA%\ZiFile\settings.conf`; passwords, paths, and recent files are not persisted.
+The first launch selects Simplified Chinese or English from the system locale. Language and light/dark theme can be changed at any time. `%LOCALAPPDATA%\ZiFile\settings.conf` stores those preferences and up to eight local archive paths that were listed successfully; passwords, archive contents, and failed-open paths are never stored. Recent entries use Windows path identity for deduplication and can be reopened or cleared from the home page. Clearing removes only local history, not files or the active archive session.
 
-Preferences are written to a temporary file, flushed and synced, then atomically replaced on Windows; save failures are surfaced in both UIs instead of silently leaving a partial settings file.
+Settings are written to a temporary file, flushed and synced, then atomically replaced on Windows. Paths use a bounded hexadecimal field encoding so line breaks or equals signs cannot alter the configuration structure; save failures are surfaced in both UIs instead of silently leaving a partial settings file.
 
 | Shortcut | Action |
 | --- | --- |

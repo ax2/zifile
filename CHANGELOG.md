@@ -6,6 +6,13 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add a bilingual recent-archives section to both desktop home pages. The eight
+  most recently opened archives are persisted only after successful listing,
+  deduplicated with Windows path identity, reusable with one click, and
+  clearable without affecting files or active archive state.
+
 ## [0.1.6] - 2026-08-31
 
 ### Added

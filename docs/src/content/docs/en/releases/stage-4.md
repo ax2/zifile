@@ -166,3 +166,9 @@ Stable 1.0 has not been published; `v0.1.6` is the current usable public GitHub 
 - [Release workflow #33334902669](https://github.com/ax2/zifile/actions/runs/33334902669) completed SBOM generation, x64/ARM64 builds, a real startup smoke test for the standalone x64 EXE, ARM64 architecture audit, artifact attestations, the all-in-one MSIX bundle, and public publication. Signing was skipped under this regular unsigned-release policy.
 - The non-draft, non-prerelease [v0.1.6 Release](https://github.com/ax2/zifile/releases/tag/v0.1.6) exposes exactly `ZiFile-0.1.6.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, or internal component is public.
 - Independent post-download SHA-256 values are `76ac635432d58325c1f1d48c721cf198e68a33734ac8e35ce173e4ddc7edd842` for the MSIX bundle, `2beae4ced17689689973485f3ac9b015c38befc1faebdadb1145025f8a8b738b` for the x64 EXE, and `71f6854d15b85f0124bd2442f8f82239abddba3b9ab4930753dc9c982e6d3fb4` for the ARM64 EXE. All three match `SHA256SUMS.txt` and GitHub's asset digests.
+
+## 2026-08-31 — Recent archives
+
+- Both desktop home pages now show recent archives. A path is recorded only after the Worker lists it successfully, so failed paths and passwords never enter settings. The list keeps eight entries, moves the newest to the front, and deduplicates Windows case and separator variants.
+- Users can reopen an entry with one click or clear the history. Controls are disabled while busy; clearing neither deletes files nor closes the active archive or mutates the operation queue.
+- Settings retain their temporary-file flush/sync and atomic-replacement path. Archive paths use a bounded hexadecimal field encoding so line breaks and equals signs cannot inject configuration fields. Tests cover Unicode and delimiter round trips, malformed input, capacity, ordering, and Windows path identity; both UI targets compile and pass their unit suites.
