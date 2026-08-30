@@ -3,7 +3,7 @@ title: Getting started
 description: Browse, test, extract, and create archives with ZiFile.
 ---
 
-ZiFile is currently a Stage 3 Release Candidate and has not shipped through Microsoft Store or WinGet. Use only candidate artifacts from this repository's GitHub Releases or the project maintainer. Exact installation channels will be added when the stable release exists. Never import an unknown root certificate or disable Windows security checks to install a development package.
+ZiFile is currently a Stage 3 Release Candidate and has not shipped through Microsoft Store or WinGet. GitHub users can obtain the unsigned Windows build from the current [v0.1.2 Release](https://github.com/ax2/zifile/releases/tag/v0.1.2); verify every download with the included `SHA256SUMS.txt` first. Never import an unknown root certificate or disable Windows security checks to install a development package.
 
 ## Open and inspect an archive
 
