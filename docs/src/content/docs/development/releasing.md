@@ -15,7 +15,7 @@ description: GitHub、WinGet 与 Microsoft Store 的统一版本发布流程。
 
 ## 渠道
 
-GitHub Release 面向用户只保留一个 all-in-one MSIX、x64/ARM64 桌面端与 Worker 独立运行文件对，以及一个 SHA-256 校验文件。审计 JSON、SBOM、来源证明和 WinGet YAML 作为 workflow artifact 保留，不混入 Release assets。GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID `ZiCode.ZiFile` 并引用发行方控制的版本化下载地址。Microsoft Store 以 MSIX 为主。
+GitHub Release 面向用户只保留一个 all-in-one MSIX、一个 x64 独立便携 EXE、一个 ARM64 独立便携 EXE，以及一个 SHA-256 校验文件。审计 JSON、SBOM、来源证明和 WinGet YAML 作为 workflow artifact 保留，不混入 Release assets。GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID `ZiCode.ZiFile` 并引用发行方控制的版本化下载地址。Microsoft Store 以 MSIX 为主。
 
 文档当前发布到 `ax2.github.io/zifile`；完成 DNS 配置后迁移到计划域名 `zifile.zicode.com`。
 
@@ -23,7 +23,7 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 
 公开的[代码签名政策](/zifile/development/code-signing-policy/)记录 SignPath Foundation 申请状态、发布角色、来源证明边界、隐私说明以及独立的 Partner Center MSIX 身份。申请获批且 MSIX 身份决策完成评审前，不将 SignPath Foundation 接入正式发布工作流。
 
-推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE，并直接发布公开的 GitHub Release。稳定标签（例如 `v1.0.0`）默认发布未签名的可用 Windows 包、独立 EXE、审计、校验和、SBOM、WinGet 清单候选与构建证明；Release Notes 会明确提示未签名状态，用户应先核对 SHA-256。带连字符的阶段标签（例如 `v0.1.0-alpha.1`、`v0.1.0-beta.1`、`v1.0.0-rc.1`）发布相同的未签名产物到 GitHub Pre-release；它们不能提交 WinGet 或 Store。正式签名仍保留为 Release workflow 的 `digicert-stm` 手动选项，只有显式勾选 `require_release_ready` 时才要求 Partner Center、Store 截图和全部 1.0 readiness 门禁。未签名 `.Dev` 包使用微软固定 OID Publisher 并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
+推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE，并直接发布公开的 GitHub Release。独立 EXE 将自身以内部 Worker 模式重新启动，因此不需要旁边的 Worker 文件；稳定标签（例如 `v1.0.0`）默认发布未签名的可用 Windows 包、独立 EXE、审计、校验和、SBOM、WinGet 清单候选与构建证明；Release Notes 会明确提示未签名状态，用户应先核对 SHA-256。带连字符的阶段标签（例如 `v0.1.0-alpha.1`、`v0.1.0-beta.1`、`v1.0.0-rc.1`）发布相同的未签名产物到 GitHub Pre-release；它们不能提交 WinGet 或 Store。正式签名仍保留为 Release workflow 的 `digicert-stm` 手动选项，只有显式勾选 `require_release_ready` 时才要求 Partner Center、Store 截图和全部 1.0 readiness 门禁。未签名 `.Dev` 包使用微软固定 OID Publisher 并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
 
 阶段预发布的 workflow 会自动在 Release Notes 中加入 `Free code signing provided by SignPath.io, certificate by SignPath Foundation.`，同时保留 GitHub 自动生成的变更说明。这是基金会署名/申请说明，不代表当前未签名开发包已经获得受信任签名。
 

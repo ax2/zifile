@@ -30,6 +30,7 @@ pub fn run_worker(
     let worker_path = worker_path()?;
     let mut command = Command::new(&worker_path);
     command
+        .arg(zifile_worker::WORKER_MODE_ARGUMENT)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -184,25 +185,7 @@ fn worker_path() -> Result<PathBuf, String> {
     }
     let executable = std::env::current_exe()
         .map_err(|error| format!("could not locate the desktop executable: {error}"))?;
-    let default = executable.with_file_name(if cfg!(windows) {
-        "zifile-worker.exe"
-    } else {
-        "zifile-worker"
-    });
-    if default.is_file() {
-        return Ok(default);
-    }
-    let file_name = executable
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default();
-    let release_name = file_name.replacen("zifile-desktop", "zifile-worker", 1);
-    let release = executable.with_file_name(release_name);
-    if release.is_file() {
-        Ok(release)
-    } else {
-        Ok(default)
-    }
+    Ok(executable)
 }
 
 #[cfg(windows)]

@@ -32,6 +32,7 @@ serde_json.workspace = true
 sys-locale.workspace = true
 zifile-core.workspace = true
 zifile-worker-protocol.workspace = true
+zifile-worker.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
