@@ -173,3 +173,9 @@ Stable 1.0 has not been published; `v0.1.6` is the current usable public GitHub 
 - Users can reopen an entry with one click, remove it individually, or clear the history. Controls are disabled while busy; removing history neither deletes files nor closes the active archive or mutates the operation queue.
 - Settings retain their temporary-file flush/sync and atomic-replacement path. Archive paths use a bounded hexadecimal field encoding so line breaks and equals signs cannot inject configuration fields. Tests cover Unicode and delimiter round trips, malformed input, capacity, ordering, and Windows path identity; both UI targets compile and pass their unit suites.
 - A privacy consistency audit updates the README, bilingual privacy policy, and desktop documentation to disclose the eight-path local limit, retention, per-item/all-history controls, and the fact that hexadecimal field encoding is not encryption.
+
+## 2026-08-31 — Archive bulk selection actions
+
+- Both archive pages now expose explicit `Select all`, `Select none`, and `Invert selection` actions instead of requiring users to infer clearing from a changing checkbox state. Bulk scope is every regular file in the archive, independent of folder, search, or pagination.
+- Exact `Ctrl+I` inversion joins the existing `Ctrl+A` select-all path. Dioxus controls expose `aria-keyshortcuts="Control+I"`; bulk changes report the new count through the existing status region and retain IME composition protection.
+- A shared linear helper ignores directories and updates the set in place. Unit coverage uses a mixed file/directory archive, Criterion adds a half-selected 100,000-file inversion benchmark, and both UIs lock shortcut wiring and visible help.
