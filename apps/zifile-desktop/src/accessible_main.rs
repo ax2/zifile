@@ -570,6 +570,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 select { value: conflict_value(view.conflict), "aria-label": choose(locale, "Conflict policy", "文件冲突策略"), onchange: move |event| state.write().conflict = parse_conflict(&event.value()),
                     for policy in [ConflictPolicy::Rename, ConflictPolicy::Overwrite, ConflictPolicy::Skip, ConflictPolicy::Error] { option { value: conflict_value(policy), {conflict_label(locale, policy)} } } }
                 button { disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
+                button { "aria-describedby": "archive-selection-summary", onclick: move |_| extract_to_named_folder(state), {locale.text(Text::ExtractToNamedFolder)} }
                 button { class: "primary", "aria-describedby": "archive-selection-summary", onclick: move |_| extract_all(state), {locale.text(Text::ExtractAll)} }
             }
         }
@@ -1041,6 +1042,17 @@ fn extract_selected(state: Signal<UiState>) {
 
 fn extract_all(state: Signal<UiState>) {
     extract_with_scope(state, true);
+}
+
+fn extract_to_named_folder(state: Signal<UiState>) {
+    let destination = {
+        let value = state.read();
+        let Some(archive) = value.archive.as_ref() else {
+            return;
+        };
+        startup::extraction_destination(&archive.path)
+    };
+    extract_to(state, destination, true);
 }
 
 fn extract_with_scope(mut state: Signal<UiState>, extract_all: bool) {
@@ -2261,9 +2273,12 @@ mod tests {
     fn archive_actions_expose_selected_and_all_extraction_scopes() {
         let source = include_str!("accessible_main.rs");
         assert!(source.contains("onclick: move |_| extract_selected(state)"));
+        assert!(source.contains("onclick: move |_| extract_to_named_folder(state)"));
         assert!(source.contains("onclick: move |_| extract_all(state)"));
+        assert!(source.contains("startup::extraction_destination(&archive.path)"));
         assert!(source.contains("fn extract_with_scope"));
         assert!(source.contains("Text::ExtractSelected"));
+        assert!(source.contains("Text::ExtractToNamedFolder"));
         assert!(source.contains("Text::ExtractAll"));
     }
 

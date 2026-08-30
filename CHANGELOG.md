@@ -17,6 +17,9 @@ All notable changes to ZiFile are documented here. The format follows
 - Add an explicit Close archive action and `Ctrl+W` to both desktop UIs. Closing
   returns home and releases the archive password, metadata, selection, search,
   and folder-navigation session state; active work prevents closure.
+- Add one-click extraction to a matching sibling folder in both desktop UIs,
+  reusing the shell command's compound-extension naming, conflict policy,
+  operation queue, isolated Worker, and completed-output discovery.
 
 ## [0.1.5] - 2026-08-31
 
