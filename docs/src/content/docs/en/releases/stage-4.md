@@ -73,3 +73,10 @@ Stable 1.0 has not been published; `v0.1.3` is the current usable public GitHub 
 - PR [#45](https://github.com/ax2/zifile/pull/45) added repository checkout as the first step of `publish-stage` and added a scoped policy check that keeps the checkout before the public asset audit.
 - Merge commit [`4d65881`](https://github.com/ax2/zifile/commit/4d65881c5c20d3a6cb8221d6d98aa94c90d7775a) passed the post-merge main CI [33305272788](https://github.com/ax2/zifile/actions/runs/33305272788).
 - The public asset set is unchanged: one all-in-one MSIX, one standalone x64 EXE, one standalone ARM64 EXE, and `SHA256SUMS.txt`; audits, SBOMs, provenance, and WinGet YAML remain workflow artifacts.
+
+## 2026-08-30 — UI validation and WinGet gate resilience
+
+- PR [#48](https://github.com/ax2/zifile/pull/48) surfaces non-empty create-source validation failures directly in the Iced create page with a bilingual danger notice; the Create action remains disabled and a source-level regression guard covers the rendered notice.
+- The PR passed `cargo fmt --all -- --check` and `cargo test -p zifile-desktop --all-targets --locked` before merge commit [`1487bf6`](https://github.com/ax2/zifile/commit/1487bf6758d8a69b4844a0a4709e146a13ee0c0a).
+- PR [#49](https://github.com/ax2/zifile/pull/49) makes the pinned WinGet validation-client repair retry up to three times with bounded backoff after transient CDN connection failures, and records the attempt limit in the validation evidence.
+- All PR #49 checks passed, including official WinGet manifest validation, Rust quality, foundation smoke, performance, fuzz-target compilation, and reference-tool interoperability; merge commit [`cbb6505`](https://github.com/ax2/zifile/commit/cbb6505be639f27b064b98de52c766ebea0ec14d) is now on `main`.
