@@ -413,7 +413,10 @@ fn Home(mut state: Signal<UiState>) -> Element {
             } else {
                 ul { class: "recent-list",
                     for path in view.recent_archives.iter() {
-                        li { key: "{path.display()}", button { disabled: view.busy, title: "{path.display()}", onclick: { let path = path.clone(); move |_| open_recent_archive(state, path.clone()) }, {recent_archive_label(path)} } }
+                        li { key: "{path.display()}",
+                            button { class: "recent-open", disabled: view.busy, title: "{path.display()}", onclick: { let path = path.clone(); move |_| open_recent_archive(state, path.clone()) }, {recent_archive_label(path)} }
+                            button { disabled: view.busy, "aria-label": "{recent_archive_remove_label(locale, path)}", onclick: { let path = path.clone(); move |_| remove_recent_archive(state, path.clone()) }, {choose(locale, "Remove", "移除")} }
+                        }
                     }
                 }
             }
@@ -1823,6 +1826,30 @@ fn clear_recent_archives(mut state: Signal<UiState>) {
     value.set_status(status);
 }
 
+fn remove_recent_archive(mut state: Signal<UiState>, path: PathBuf) {
+    if state.read().busy {
+        return;
+    }
+    let mut value = state.write();
+    let mut settings = AppSettings {
+        locale: value.locale,
+        dark: value.dark,
+        recent_archives: std::mem::take(&mut value.recent_archives),
+    };
+    settings.remove_recent_archive(&path);
+    value.recent_archives = settings.recent_archives;
+    save_settings(&mut value);
+    let status = choose(value.locale, "Recent archive removed", "已移除最近打开记录").to_owned();
+    value.set_status(status);
+}
+
+fn recent_archive_remove_label(locale: Locale, path: &Path) -> String {
+    match locale {
+        Locale::En => format!("Remove recent archive {}", path.display()),
+        Locale::ZhCn => format!("移除最近打开记录 {}", path.display()),
+    }
+}
+
 fn recent_archive_label(path: &Path) -> String {
     let name = path.file_name().map_or_else(
         || path.as_os_str().to_string_lossy(),
@@ -2017,6 +2044,7 @@ mod tests {
         assert!(source.contains("disabled: view.busy || view.recent_archives.is_empty()"));
         assert!(source.contains("disabled: view.busy, title: \"{path.display()}\""));
         assert!(source.contains("record_recent_archive(&mut value, recent_path)"));
+        assert!(source.contains("remove_recent_archive(state, path.clone())"));
     }
 
     #[test]

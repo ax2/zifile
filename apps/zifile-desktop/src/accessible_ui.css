@@ -99,7 +99,8 @@ label > span { display: block; margin-bottom: 6px; color: var(--muted); font-siz
 .recent-archives .page-heading { align-items: center; margin-bottom: 12px; }
 .recent-archives h3 { margin: 0; font-size: 1.25rem; }
 .recent-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.recent-list button { width: 100%; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.recent-list li { display: flex; gap: 8px; min-width: 0; }
+.recent-list .recent-open { flex: 1; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .primary { border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-text); padding: 10px 16px; font-weight: 700; cursor: pointer; box-shadow: 0 7px 18px color-mix(in srgb, var(--accent) 20%, transparent); }
 .primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 85%, white); color: var(--accent-text); }
 .privacy { margin-top: 20px; }

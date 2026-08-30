@@ -68,6 +68,13 @@ impl AppSettings {
         self.recent_archives.truncate(MAX_RECENT_ARCHIVES);
     }
 
+    pub fn remove_recent_archive(&mut self, path: &Path) -> bool {
+        let before = self.recent_archives.len();
+        self.recent_archives
+            .retain(|existing| !same_path(existing, path));
+        self.recent_archives.len() != before
+    }
+
     pub fn save(&self) -> io::Result<()> {
         let Some(path) = settings_path() else {
             return Err(io::Error::new(
@@ -290,6 +297,16 @@ mod tests {
             settings.recent_archives,
             vec![PathBuf::from("c:/data/sample.ZIP")]
         );
+    }
+
+    #[test]
+    fn one_recent_archive_can_be_removed_without_reordering_the_rest() {
+        let mut settings = AppSettings::default();
+        settings.record_recent_archive(PathBuf::from("first.zip"));
+        settings.record_recent_archive(PathBuf::from("second.zip"));
+        assert!(settings.remove_recent_archive(Path::new("first.zip")));
+        assert_eq!(settings.recent_archives, vec![PathBuf::from("second.zip")]);
+        assert!(!settings.remove_recent_archive(Path::new("missing.zip")));
     }
 
     #[test]

@@ -181,6 +181,7 @@ enum Message {
     OpenArchiveDialog,
     OpenArchiveDialogFinished(Option<PathBuf>),
     OpenRecentArchive(PathBuf),
+    RemoveRecentArchive(PathBuf),
     ClearRecentArchives,
     ArchiveLoaded(u64, Result<ArchiveInfo, String>),
     PasswordChanged(String),
@@ -383,6 +384,22 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 state.password.clear();
                 state.automatic_extract_destination = None;
                 return begin_load(state, path);
+            }
+        }
+        Message::RemoveRecentArchive(path) => {
+            if !state.busy {
+                let mut settings = AppSettings {
+                    locale: state.locale,
+                    dark: state.dark,
+                    recent_archives: std::mem::take(&mut state.recent_archives),
+                };
+                settings.remove_recent_archive(&path);
+                state.recent_archives = settings.recent_archives;
+                save_settings(state);
+                set_status(
+                    state,
+                    choose(state.locale, "Recent archive removed", "已移除最近打开记录"),
+                );
             }
         }
         Message::ClearRecentArchives => {
@@ -1412,12 +1429,20 @@ fn home_view(state: &ZiFile) -> Element<'_, Message> {
             .iter()
             .fold(column![].spacing(8), |entries, path| {
                 entries.push(
-                    button(text(recent_archive_label(path)).width(Fill))
-                        .style(button::secondary)
-                        .width(Fill)
-                        .on_press_maybe(
-                            (!state.busy).then_some(Message::OpenRecentArchive(path.clone())),
-                        ),
+                    row![
+                        button(text(recent_archive_label(path)).width(Fill))
+                            .style(button::secondary)
+                            .width(Fill)
+                            .on_press_maybe(
+                                (!state.busy).then_some(Message::OpenRecentArchive(path.clone())),
+                            ),
+                        button(choose(state.locale, "Remove", "移除"))
+                            .style(button::secondary)
+                            .on_press_maybe(
+                                (!state.busy).then_some(Message::RemoveRecentArchive(path.clone())),
+                            ),
+                    ]
+                    .spacing(8),
                 )
             });
         container(
@@ -2571,6 +2596,7 @@ mod tests {
         let source = include_str!("main.rs");
         assert!(source.contains("Message::OpenRecentArchive(path.clone())"));
         assert!(source.contains("Message::ClearRecentArchives"));
+        assert!(source.contains("Message::RemoveRecentArchive(path.clone())"));
         assert!(source.contains("record_recent_archive(state, recent_path)"));
         assert!(source.contains("(!state.busy).then_some(Message::OpenRecentArchive"));
     }
