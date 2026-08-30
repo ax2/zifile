@@ -4,19 +4,6 @@ All notable changes to ZiFile are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
-
-### Added
-
-- Show non-empty create-source validation failures inline in the Iced create
-  page while keeping the Create action disabled until the sources are valid.
-
-### Changed
-
-- Retry the pinned WinGet validation-client repair up to three times with
-  bounded backoff for transient CDN connection failures, and record the retry
-  limit in validation evidence.
-
 ## [0.1.3] - 2026-08-30
 
 ### Added
@@ -431,4 +418,13 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
-Future changes will be recorded here.
+### Added
+
+- Show non-empty create-source validation failures inline in the Iced create
+  page while keeping the Create action disabled until the sources are valid.
+
+### Changed
+
+- Retry the pinned WinGet validation-client repair up to three times with
+  bounded backoff for transient CDN connection failures, and record the retry
+  limit in validation evidence.
