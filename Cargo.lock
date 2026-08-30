@@ -8459,7 +8459,7 @@ dependencies = [
 
 [[package]]
 name = "zifile-cli"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "clap",
  "zifile-core",
@@ -8467,7 +8467,7 @@ dependencies = [
 
 [[package]]
 name = "zifile-core"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "brotli",
  "bzip2",
@@ -8493,7 +8493,7 @@ dependencies = [
 
 [[package]]
 name = "zifile-desktop"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "criterion",
  "dioxus",
@@ -8515,7 +8515,7 @@ dependencies = [
 
 [[package]]
 name = "zifile-shell"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "tempfile",
  "windows 0.62.2",
@@ -8525,7 +8525,7 @@ dependencies = [
 
 [[package]]
 name = "zifile-worker"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "serde_json",
  "zifile-core",
@@ -8534,7 +8534,7 @@ dependencies = [
 
 [[package]]
 name = "zifile-worker-protocol"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "serde",
  "serde_json",
