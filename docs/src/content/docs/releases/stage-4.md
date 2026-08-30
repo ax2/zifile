@@ -61,3 +61,9 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - [`v0.1.2 Release`](https://github.com/ax2/zifile/releases/tag/v0.1.2) 已由 tag 自动发布；Release 为非 Draft、非 prerelease，发布工作流 [33291234378](https://github.com/ax2/zifile/actions/runs/33291234378) 成功完成。
 - 公开资产严格收敛为一个 all-in-one `msixbundle`、一个 x64 独立便携 EXE、一个 ARM64 独立便携 EXE，以及 `SHA256SUMS.txt`；DLL、构建配置、SBOM 和 WinGet 清单候选只保留在工作流证据中。
 - 独立 EXE 将自身以内部 Worker 模式重新启动，不再要求用户额外下载或摆放 Worker；Release 仍明确标记为未签名 GitHub 构建。
+
+## 2026-08-30 — 0.1.3 独立便携版本发布
+
+- [`v0.1.3 Release`](https://github.com/ax2/zifile/releases/tag/v0.1.3) 已由工作流 [33296532873](https://github.com/ax2/zifile/actions/runs/33296532873) 自动发布；PR #39 的 9 项 CI 均通过，其中包括 x64 和 ARM64 可复现双构建。
+- 最终公开资产严格为 `ZiFile-0.1.3.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`。桌面 EXE 内置 Worker runtime，并使用 `--zifile-worker` 参数启动自身，因此便携版不需要额外的 Worker 文件。
+- x64 便携 EXE 已从 Release 下载并与 `SHA256SUMS.txt` 匹配；ARM64 哈希保留在工作流生成的校验清单中。该 Release 仍明确标记为未签名，也不是 Microsoft Store 认证包。
