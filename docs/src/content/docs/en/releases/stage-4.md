@@ -141,3 +141,9 @@ Stable 1.0 has not been published; `v0.1.5` is the current usable public GitHub 
 - Both desktop UIs now handle exact `Ctrl+F`: with an archive loaded they return to the Archive page and focus its search field while preserving the current query; with no archive they do not intercept the shortcut.
 - The accessible candidate exposes `aria-keyshortcuts="Control+F"` and a stable control identifier on the search input. Bilingual About help and desktop documentation describe the action.
 - Unit tests cover exact modifiers, the no-archive boundary, visible help, and semantic metadata. Real foreground focus movement and screen-reader revalidation remain external gates.
+
+## 2026-08-31 — Close archive session
+
+- Both desktop headers now expose `Close archive`, with exact `Ctrl+W` support. Closing returns home without exiting the application.
+- Closing releases the current archive password, metadata, selection, search, pagination, and folder-navigation state. The action is disabled during active work or queue handoff so a completion cannot write back into a session the user already closed.
+- Bilingual About help and desktop documentation describe the action. Tests cover exact modifiers, the busy boundary, session cleanup, visible help, and `aria-keyshortcuts="Control+W"`. Real foreground keyboard and assistive-technology revalidation remain external gates.

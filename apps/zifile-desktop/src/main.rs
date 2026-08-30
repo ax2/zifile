@@ -181,6 +181,7 @@ enum Message {
     ArchiveLoaded(u64, Result<ArchiveInfo, String>),
     PasswordChanged(String),
     ReloadArchive,
+    CloseArchive,
     RevealArchive,
     RevealCompletedOutput,
     ToggleEntry(PathBuf, bool),
@@ -226,6 +227,7 @@ enum Shortcut {
     Create,
     Reload,
     Search,
+    Close,
     About,
     SelectAll,
     Cancel,
@@ -439,6 +441,11 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 .or_else(|| state.pending_archive.clone())
             {
                 return begin_load(state, path);
+            }
+        }
+        Message::CloseArchive => {
+            if !state.busy && state.archive.is_some() {
+                close_archive(state);
             }
         }
         Message::RevealArchive => {
@@ -868,6 +875,9 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 state.page = Page::Archive;
                 return iced::widget::operation::focus(ARCHIVE_SEARCH_ID);
             }
+            Shortcut::Close if state.archive.is_some() && !state.busy => {
+                return update(state, Message::CloseArchive);
+            }
             Shortcut::About => state.page = Page::About,
             Shortcut::SelectAll if state.page == Page::Archive => {
                 return update(state, Message::SelectAll(true));
@@ -945,9 +955,26 @@ fn default_shortcut(
         Some('n') => Some(Shortcut::Create),
         Some('r') => Some(Shortcut::Reload),
         Some('f') => Some(Shortcut::Search),
+        Some('w') => Some(Shortcut::Close),
         Some('a') => Some(Shortcut::SelectAll),
         _ => None,
     }
+}
+
+fn close_archive(state: &mut ZiFile) {
+    state.archive = None;
+    state.pending_archive = None;
+    state.pending_archive_requires_password = false;
+    state.automatic_extract_destination = None;
+    state.selected.clear();
+    state.entry_directory.clear();
+    state.entry_filter.clear();
+    state.entry_page = 0;
+    state.entry_sort = EntrySort::default();
+    state.entry_sort_direction = SortDirection::default();
+    state.password.clear();
+    state.page = Page::Home;
+    set_status(state, state.locale.text(Text::ArchiveClosed));
 }
 
 fn save_settings(state: &mut ZiFile) {
@@ -1388,6 +1415,7 @@ fn about_view(state: &ZiFile) -> Element<'_, Message> {
                 shortcut("Ctrl+N", locale.text(Text::ShortcutCreate)),
                 shortcut("Ctrl+R", locale.text(Text::ShortcutReload)),
                 shortcut("Ctrl+F", locale.text(Text::ShortcutSearch)),
+                shortcut("Ctrl+W", locale.text(Text::ShortcutClose)),
                 shortcut("Ctrl+A", locale.text(Text::ShortcutSelectAll)),
                 shortcut("F1", locale.text(Text::ShortcutAbout)),
                 shortcut("Esc", locale.text(Text::ShortcutCancel)),
@@ -1507,6 +1535,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                     button(state.locale.text(Text::TestArchive))
                         .style(button::secondary)
                         .on_press(Message::TestArchive),
+                    button(state.locale.text(Text::CloseArchive)).style(button::secondary),
                 ]
                 .spacing(10),
                 container(text(state.locale.text(Text::BusyArchiveDescription))).padding(24),
@@ -1562,6 +1591,9 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             button(state.locale.text(Text::TestArchive))
                 .style(button::secondary)
                 .on_press(Message::TestArchive),
+            button(state.locale.text(Text::CloseArchive))
+                .style(button::secondary)
+                .on_press(Message::CloseArchive),
         ]
         .spacing(10),
     ]
@@ -2072,6 +2104,63 @@ mod tests {
     }
 
     #[test]
+    fn closing_archive_releases_session_state_and_returns_home() {
+        let mut state = ZiFile {
+            page: Page::Archive,
+            archive: Some(ArchiveInfo {
+                path: PathBuf::from("private.7z"),
+                format: ArchiveFormat::SevenZip,
+                entries: Vec::new(),
+                total_size: 0,
+                compressed_size: 0,
+            }),
+            pending_archive: Some(PathBuf::from("pending.zip")),
+            pending_archive_requires_password: true,
+            automatic_extract_destination: Some(PathBuf::from("output")),
+            selected: HashSet::from([PathBuf::from("secret.txt")]),
+            entry_directory: PathBuf::from("folder"),
+            entry_filter: "secret".to_owned(),
+            entry_page: 3,
+            password: "not-retained".to_owned(),
+            locale: Locale::En,
+            ..ZiFile::default()
+        };
+
+        drop(update(&mut state, Message::CloseArchive));
+
+        assert_eq!(state.page, Page::Home);
+        assert!(state.archive.is_none());
+        assert!(state.pending_archive.is_none());
+        assert!(!state.pending_archive_requires_password);
+        assert!(state.automatic_extract_destination.is_none());
+        assert!(state.selected.is_empty());
+        assert!(state.entry_directory.as_os_str().is_empty());
+        assert!(state.entry_filter.is_empty());
+        assert_eq!(state.entry_page, 0);
+        assert!(state.password.is_empty());
+        assert_eq!(state.status, "Archive closed");
+    }
+
+    #[test]
+    fn closing_archive_is_rejected_while_work_is_running() {
+        let mut state = ZiFile {
+            archive: Some(ArchiveInfo {
+                path: PathBuf::from("busy.zip"),
+                format: ArchiveFormat::Zip,
+                entries: Vec::new(),
+                total_size: 0,
+                compressed_size: 0,
+            }),
+            busy: true,
+            ..ZiFile::default()
+        };
+
+        drop(update(&mut state, Message::CloseArchive));
+
+        assert!(state.archive.is_some());
+    }
+
+    #[test]
     fn archive_layout_keeps_dense_columns_scrollable_at_the_minimum_width() {
         const {
             assert!(ARCHIVE_TABLE_MIN_WIDTH >= 1_000.0);
@@ -2193,6 +2282,22 @@ mod tests {
         );
         assert_eq!(
             default_shortcut(
+                &Key::Character("W".into()),
+                Physical::Code(Code::KeyW),
+                Modifiers::CTRL
+            ),
+            Some(Shortcut::Close)
+        );
+        assert_eq!(
+            default_shortcut(
+                &Key::Character("w".into()),
+                Physical::Code(Code::KeyW),
+                Modifiers::CTRL | Modifiers::SHIFT
+            ),
+            None
+        );
+        assert_eq!(
+            default_shortcut(
                 &Key::Named(Named::F1),
                 Physical::Unidentified(NativeCode::Unidentified),
                 Modifiers::ALT
@@ -2217,6 +2322,7 @@ mod tests {
             ("Ctrl+N", "Text::ShortcutCreate"),
             ("Ctrl+R", "Text::ShortcutReload"),
             ("Ctrl+F", "Text::ShortcutSearch"),
+            ("Ctrl+W", "Text::ShortcutClose"),
             ("Ctrl+A", "Text::ShortcutSelectAll"),
             ("F1", "Text::ShortcutAbout"),
             ("Esc", "Text::ShortcutCancel"),

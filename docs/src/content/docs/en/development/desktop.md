@@ -26,9 +26,12 @@ Preferences are written to a temporary file, flushed and synced, then atomically
 | `Ctrl+N` | Open the create page |
 | `Ctrl+R` | Reload the current archive |
 | `Ctrl+F` | Focus search for the current archive |
+| `Ctrl+W` | Close the current archive and return home |
 | `Ctrl+A` | Select every entry while the archive region is focused |
 | `F1` | Open About and keyboard-shortcut help |
 | `Escape` | Cancel the current cancellable operation |
+
+The archive header also exposes a `Close archive` button. Closing immediately releases the current archive password, metadata, selection, search, and folder-navigation state, then returns home. The current archive cannot be closed while an operation or queue handoff is active.
 
 Search is immediate and results are paged at 500 rows, keeping 100,000-entry archives bounded. Safety limits still apply during listing. Worker byte progress, or entry progress when bytes are unavailable, is mirrored to the Windows taskbar.
 

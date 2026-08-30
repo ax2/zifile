@@ -57,6 +57,7 @@ const ARIA_SHORTCUT_OPEN: &str = "Control+O";
 const ARIA_SHORTCUT_CREATE: &str = "Control+N";
 const ARIA_SHORTCUT_RELOAD: &str = "Control+R";
 const ARIA_SHORTCUT_SEARCH: &str = "Control+F";
+const ARIA_SHORTCUT_CLOSE: &str = "Control+W";
 const ARIA_SHORTCUT_ABOUT: &str = "F1";
 const ARIA_SHORTCUT_CANCEL: &str = "Escape";
 const ARIA_SHORTCUT_SELECT_ALL: &str = "Control+A";
@@ -128,6 +129,7 @@ enum AccessibleShortcut {
     Create,
     Reload,
     Search,
+    Close,
     About,
     Cancel,
 }
@@ -321,6 +323,7 @@ fn App() -> Element {
                         event.modifiers(),
                         can_cancel,
                         archive_loaded,
+                        !busy,
                     )
                 {
                     event.prevent_default();
@@ -424,6 +427,7 @@ fn AboutPage(state: Signal<UiState>) -> Element {
                 div { dt { kbd { "Ctrl+N" } } dd { {locale.text(Text::ShortcutCreate)} } }
                 div { dt { kbd { "Ctrl+R" } } dd { {locale.text(Text::ShortcutReload)} } }
                 div { dt { kbd { "Ctrl+F" } } dd { {locale.text(Text::ShortcutSearch)} } }
+                div { dt { kbd { "Ctrl+W" } } dd { {locale.text(Text::ShortcutClose)} } }
                 div { dt { kbd { "Ctrl+A" } } dd { {locale.text(Text::ShortcutSelectAll)} } }
                 div { dt { kbd { "F1" } } dd { {locale.text(Text::ShortcutAbout)} } }
                 div { dt { kbd { "Esc" } } dd { {locale.text(Text::ShortcutCancel)} } }
@@ -485,6 +489,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 button { onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
                 button { onclick: move |_| reveal_archive(state), {locale.text(Text::RevealInExplorer)} }
                 button { onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} }
+                button { disabled: true, "aria-keyshortcuts": ARIA_SHORTCUT_CLOSE, {locale.text(Text::CloseArchive)} }
             } }
             section { class: "empty-state busy-archive", "aria-busy": "true",
                 p { {locale.text(Text::BusyArchiveDescription)} }
@@ -530,9 +535,13 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
 
     rsx! { section { class: "archive-page", "aria-labelledby": "archive-title",
         div { class: "page-heading", div { h2 { id: "archive-title", {archive_name} } p { "{archive.format} · {archive.entries.len()} · {format_bytes(archive.total_size)}" } }
-            div { class: "button-row", button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
+            div { class: "button-row",
+                button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
                 button { onclick: move |_| reveal_archive(state), {locale.text(Text::RevealInExplorer)} }
-                button { onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} } } }
+                button { onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} }
+                button { "aria-keyshortcuts": ARIA_SHORTCUT_CLOSE, onclick: move |_| close_archive(state), {locale.text(Text::CloseArchive)} }
+            }
+        }
         div { class: "toolbar",
             label { span { {locale.text(Text::PasswordEncrypted)} } input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() } }
             button { "aria-keyshortcuts": ARIA_SHORTCUT_RELOAD, onclick: move |_| reload_archive(state), {locale.text(Text::Reload)} }
@@ -810,6 +819,7 @@ fn accessible_shortcut(
     modifiers: Modifiers,
     cancellation_available: bool,
     archive_search_available: bool,
+    archive_close_available: bool,
 ) -> Option<AccessibleShortcut> {
     let modifiers = shortcut_modifiers(modifiers);
     if key.eq_ignore_ascii_case("escape") {
@@ -827,6 +837,9 @@ fn accessible_shortcut(
         "n" => Some(AccessibleShortcut::Create),
         "r" => Some(AccessibleShortcut::Reload),
         "f" if archive_search_available => Some(AccessibleShortcut::Search),
+        "w" if archive_search_available && archive_close_available => {
+            Some(AccessibleShortcut::Close)
+        }
         _ => None,
     }
 }
@@ -850,9 +863,35 @@ fn apply_accessible_shortcut(mut state: Signal<UiState>, shortcut: AccessibleSho
         AccessibleShortcut::Create => state.write().page = Page::Create,
         AccessibleShortcut::Reload => reload_archive(state),
         AccessibleShortcut::Search => focus_archive_search(state),
+        AccessibleShortcut::Close => close_archive(state),
         AccessibleShortcut::About => state.write().page = Page::About,
         AccessibleShortcut::Cancel => cancel_operation(state),
     }
+}
+
+fn close_archive(mut state: Signal<UiState>) {
+    if state.read().busy || state.read().archive.is_none() {
+        return;
+    }
+    let locale = state.read().locale;
+    let mut value = state.write();
+    clear_archive_session(&mut value);
+    value.set_status(locale.text(Text::ArchiveClosed).to_owned());
+}
+
+fn clear_archive_session(value: &mut UiState) {
+    value.archive = None;
+    value.pending_archive = None;
+    value.pending_archive_requires_password = false;
+    value.automatic_extract_destination = None;
+    value.selected.clear();
+    value.entry_directory.clear();
+    value.entry_filter.clear();
+    value.entry_page = 0;
+    value.entry_sort = EntrySort::default();
+    value.entry_sort_direction = SortDirection::default();
+    value.password.clear();
+    value.page = Page::Home;
 }
 
 fn focus_archive_search(mut state: Signal<UiState>) {
@@ -1888,6 +1927,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn clearing_archive_session_releases_sensitive_and_navigation_state() {
+        let mut state = UiState {
+            page: Page::Archive,
+            archive: Some(ArchiveInfo {
+                path: PathBuf::from("private.7z"),
+                format: ArchiveFormat::SevenZip,
+                entries: Vec::new(),
+                total_size: 0,
+                compressed_size: 0,
+            }),
+            pending_archive: Some(PathBuf::from("pending.zip")),
+            pending_archive_requires_password: true,
+            automatic_extract_destination: Some(PathBuf::from("output")),
+            selected: HashSet::from([PathBuf::from("secret.txt")]),
+            entry_directory: PathBuf::from("folder"),
+            entry_filter: "secret".to_owned(),
+            entry_page: 3,
+            password: "not-retained".to_owned(),
+            locale: Locale::En,
+            ..UiState::default()
+        };
+
+        clear_archive_session(&mut state);
+
+        assert_eq!(state.page, Page::Home);
+        assert!(state.archive.is_none());
+        assert!(state.pending_archive.is_none());
+        assert!(!state.pending_archive_requires_password);
+        assert!(state.automatic_extract_destination.is_none());
+        assert!(state.selected.is_empty());
+        assert!(state.entry_directory.as_os_str().is_empty());
+        assert!(state.entry_filter.is_empty());
+        assert_eq!(state.entry_page, 0);
+        assert!(state.password.is_empty());
+    }
+
+    #[test]
     fn operation_queue_recovers_after_a_poisoned_lock() {
         let queue: SharedOperationQueue = Arc::new(Mutex::new(OperationQueue::default()));
         let poisoned = queue.clone();
@@ -1997,6 +2073,8 @@ mod tests {
             ("Ctrl+O", "Text::ShortcutOpen"),
             ("Ctrl+N", "Text::ShortcutCreate"),
             ("Ctrl+R", "Text::ShortcutReload"),
+            ("Ctrl+F", "Text::ShortcutSearch"),
+            ("Ctrl+W", "Text::ShortcutClose"),
             ("Ctrl+A", "Text::ShortcutSelectAll"),
             ("F1", "Text::ShortcutAbout"),
             ("Esc", "Text::ShortcutCancel"),
@@ -2319,59 +2397,89 @@ mod tests {
     #[test]
     fn accessible_shortcuts_are_deliberate_and_ime_safe() {
         assert_eq!(
-            accessible_shortcut("o", Modifiers::CONTROL, false, false),
+            accessible_shortcut("o", Modifiers::CONTROL, false, false, false),
             Some(AccessibleShortcut::Open)
         );
         assert_eq!(
-            accessible_shortcut("N", Modifiers::CONTROL, false, false),
+            accessible_shortcut("N", Modifiers::CONTROL, false, false, false),
             Some(AccessibleShortcut::Create)
         );
         assert_eq!(
-            accessible_shortcut("r", Modifiers::CONTROL, false, false),
+            accessible_shortcut("r", Modifiers::CONTROL, false, false, false),
             Some(AccessibleShortcut::Reload)
         );
         assert_eq!(
-            accessible_shortcut("r", Modifiers::CONTROL | Modifiers::SHIFT, false, false),
+            accessible_shortcut(
+                "r",
+                Modifiers::CONTROL | Modifiers::SHIFT,
+                false,
+                false,
+                false,
+            ),
             None
         );
         assert_eq!(
-            accessible_shortcut("f", Modifiers::CONTROL, false, true),
+            accessible_shortcut("f", Modifiers::CONTROL, false, true, true),
             Some(AccessibleShortcut::Search)
         );
         assert_eq!(
-            accessible_shortcut("f", Modifiers::CONTROL, false, false),
+            accessible_shortcut("f", Modifiers::CONTROL, false, false, false),
             None
         );
         assert_eq!(
-            accessible_shortcut("f", Modifiers::CONTROL | Modifiers::SHIFT, false, true),
+            accessible_shortcut(
+                "f",
+                Modifiers::CONTROL | Modifiers::SHIFT,
+                false,
+                true,
+                true,
+            ),
             None
         );
         assert_eq!(
-            accessible_shortcut("Escape", Modifiers::empty(), true, false),
+            accessible_shortcut("w", Modifiers::CONTROL, false, true, true),
+            Some(AccessibleShortcut::Close)
+        );
+        assert_eq!(
+            accessible_shortcut("w", Modifiers::CONTROL, false, true, false),
+            None
+        );
+        assert_eq!(
+            accessible_shortcut("w", Modifiers::CONTROL, false, false, true),
+            None
+        );
+        assert_eq!(
+            accessible_shortcut("Escape", Modifiers::empty(), true, false, false),
             Some(AccessibleShortcut::Cancel)
         );
         assert_eq!(
-            accessible_shortcut("F1", Modifiers::empty(), false, false),
+            accessible_shortcut("F1", Modifiers::empty(), false, false, false),
             Some(AccessibleShortcut::About)
         );
         assert_eq!(
-            accessible_shortcut("Escape", Modifiers::empty(), false, false),
+            accessible_shortcut("Escape", Modifiers::empty(), false, false, false),
             None
         );
         assert_eq!(
-            accessible_shortcut("N", Modifiers::CONTROL | Modifiers::SHIFT, false, false),
+            accessible_shortcut(
+                "N",
+                Modifiers::CONTROL | Modifiers::SHIFT,
+                false,
+                false,
+                false,
+            ),
             None
         );
         assert_eq!(
-            accessible_shortcut("F1", Modifiers::ALT, false, false),
+            accessible_shortcut("F1", Modifiers::ALT, false, false, false),
             None
         );
         assert_eq!(
-            accessible_shortcut("a", Modifiers::CONTROL, true, false),
+            accessible_shortcut("a", Modifiers::CONTROL, true, false, false),
             None
         );
         assert_eq!(
-            accessible_shortcut("o", Modifiers::empty(), true, false),
+            accessible_shortcut("o", Modifiers::empty(), true, false, false),
             None
         );
         assert!(is_select_all_shortcut("a", Modifiers::CONTROL));
@@ -2393,6 +2501,7 @@ mod tests {
         assert_eq!(ARIA_SHORTCUT_CREATE, "Control+N");
         assert_eq!(ARIA_SHORTCUT_RELOAD, "Control+R");
         assert_eq!(ARIA_SHORTCUT_SEARCH, "Control+F");
+        assert_eq!(ARIA_SHORTCUT_CLOSE, "Control+W");
         assert_eq!(ARIA_SHORTCUT_ABOUT, "F1");
         assert_eq!(ARIA_SHORTCUT_CANCEL, "Escape");
         assert_eq!(ARIA_SHORTCUT_SELECT_ALL, "Control+A");
@@ -2403,6 +2512,7 @@ mod tests {
             "ARIA_SHORTCUT_CREATE",
             "ARIA_SHORTCUT_RELOAD",
             "ARIA_SHORTCUT_SEARCH",
+            "ARIA_SHORTCUT_CLOSE",
             "ARIA_SHORTCUT_ABOUT",
             "ARIA_SHORTCUT_CANCEL",
             "ARIA_SHORTCUT_SELECT_ALL",
