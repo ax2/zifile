@@ -93,3 +93,9 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - WinGet 生成器、验证器和 Release workflow 已删除对未公开 x64/ARM64 单架构 MSIX URL、哈希和本地路径的依赖，只接收公开 all-in-one `.msixbundle`。
 - 安装器清单继续提供 x64 与 ARM64 两个选择节点，但验证器要求它们引用同一个 bundle URL 和同一 SHA-256，并核对本地 bundle；公开下载面与 WinGet 下载面由此使用同一安装包。
 - 本地 WinGet 1.29.290 的官方 `validate` 接受 schema 1.12 四文件候选；29 个扩展名同步、哈希篡改拒绝和完整 packaging policy 均通过。社区仓库接受与签名门禁仍未完成。
+
+## 2026-08-31 — 默认桌面快捷键可发现性
+
+- 默认 Iced 桌面端原有 `Ctrl+O` 打开、`Ctrl+N` 创建、归档页 `Ctrl+A` 全选、`F1` 帮助和 `Esc` 取消，但此前没有面向用户的可见说明。
+- 默认 Iced 与可访问候选的“关于”页现均以双语键帽列表展示五项快捷键及其作用；默认 UI 的源代码回归测试将显示组合与实际键盘映射绑定，避免后续只修改其中一侧。
+- `cargo fmt --all -- --check`、`cargo test -p zifile-desktop --all-targets --all-features --locked` 与全 workspace Clippy 通过，覆盖桌面共享库 32 项、默认应用 37 项、可访问候选 38 项测试和 6 项 10 万条目浏览基准。该代码级证据不替代真实前台键盘遍历、Narrator、高对比度和焦点可见性验收。

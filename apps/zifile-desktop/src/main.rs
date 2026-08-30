@@ -1299,6 +1299,16 @@ fn about_view(state: &ZiFile) -> Element<'_, Message> {
         .width(Fill)
         .style(container::rounded_box)
     };
+    let shortcut = |keys: &'static str, description: &'static str| {
+        row![
+            container(text(keys).size(14))
+                .padding([6, 10])
+                .style(container::bordered_box),
+            text(description).size(15).width(Fill),
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center)
+    };
     column![
         text(locale.text(Text::AboutHeading)).size(32),
         text(locale.text(Text::AboutDescription)).size(17),
@@ -1318,6 +1328,20 @@ fn about_view(state: &ZiFile) -> Element<'_, Message> {
             locale.text(Text::ProjectWebsite),
             "https://github.com/ax2/zifile".to_owned()
         ),
+        container(
+            column![
+                text(locale.text(Text::KeyboardShortcuts)).size(20),
+                shortcut("Ctrl+O", locale.text(Text::ShortcutOpen)),
+                shortcut("Ctrl+N", locale.text(Text::ShortcutCreate)),
+                shortcut("Ctrl+A", locale.text(Text::ShortcutSelectAll)),
+                shortcut("F1", locale.text(Text::ShortcutAbout)),
+                shortcut("Esc", locale.text(Text::ShortcutCancel)),
+            ]
+            .spacing(10)
+        )
+        .padding(18)
+        .width(Fill)
+        .style(container::rounded_box),
         container(text(locale.text(Text::PrivacyDescription)))
             .padding(18)
             .width(Fill)
@@ -2095,6 +2119,20 @@ mod tests {
             ),
             Some(Shortcut::Cancel)
         );
+    }
+
+    #[test]
+    fn shortcut_help_matches_the_default_keyboard_map() {
+        let source = include_str!("main.rs");
+        for (keys, text_key) in [
+            ("Ctrl+O", "Text::ShortcutOpen"),
+            ("Ctrl+N", "Text::ShortcutCreate"),
+            ("Ctrl+A", "Text::ShortcutSelectAll"),
+            ("F1", "Text::ShortcutAbout"),
+            ("Esc", "Text::ShortcutCancel"),
+        ] {
+            assert!(source.contains(&format!("shortcut(\"{keys}\", locale.text({text_key}))")));
+        }
     }
 
     #[test]

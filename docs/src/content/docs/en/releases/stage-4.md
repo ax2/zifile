@@ -92,3 +92,9 @@ Stable 1.0 has not been published; `v0.1.4` is the current usable public GitHub 
 - The WinGet generator, verifier, and Release workflow no longer depend on unpublished x64/ARM64 per-architecture MSIX URLs, hashes, or local paths; they accept only the public all-in-one `.msixbundle`.
 - The installer manifest retains x64 and ARM64 selection nodes, but the verifier requires both to reference the same bundle URL and SHA-256 and verifies that hash against the local bundle. GitHub and WinGet therefore use the same public installer payload.
 - Official `winget validate` with WinGet 1.29.290 accepted the schema 1.12 four-file candidate; all 29 extensions, hash-tamper rejection, and the complete packaging policy passed. Community-repository acceptance and signing remain open gates.
+
+## 2026-08-31 — Default desktop shortcut discoverability
+
+- The default Iced desktop already handled `Ctrl+O` for open, `Ctrl+N` for create, archive-page `Ctrl+A` for select all, `F1` for help, and `Esc` for cancellation, but previously exposed no visible user reference.
+- The About pages in both the default Iced UI and accessible candidate now present all five shortcuts and their actions as a bilingual keycap list. A default-UI source regression binds the displayed combinations to the implemented keyboard map so one side cannot silently drift.
+- `cargo fmt --all -- --check`, `cargo test -p zifile-desktop --all-targets --all-features --locked`, and full-workspace Clippy pass, covering 32 shared desktop library tests, 37 default application tests, 38 accessible-candidate tests, and six 100,000-entry browser benchmarks. This code-level evidence does not replace real foreground keyboard traversal, Narrator, high-contrast, or visible-focus acceptance.

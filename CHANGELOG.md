@@ -10,7 +10,6 @@ All notable changes to ZiFile are documented here. The format follows
 
 - Show non-empty create-source validation failures inline in the Iced create
   page while keeping the Create action disabled until the sources are valid.
-
 ### Changed
 
 - Retry the pinned WinGet validation-client repair up to three times with
@@ -437,6 +436,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 - Show non-empty create-source validation failures inline in the Iced create
   page while keeping the Create action disabled until the sources are valid.
+- Add a bilingual keyboard-shortcut reference to both desktop About pages for
+  open, create, archive selection, help, and operation cancellation. Regression
+  tests keep the visible key combinations aligned with the implemented maps.
 
 ### Changed
 
