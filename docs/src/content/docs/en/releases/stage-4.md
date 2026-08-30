@@ -135,3 +135,9 @@ Stable 1.0 has not been published; `v0.1.5` is the current usable public GitHub 
 - Both desktop UIs already exposed a Reload button, but keyboard users had to traverse to it to refresh an open archive. The conventional file-manager `Ctrl+R` shortcut was neither handled nor discoverable.
 - The default Iced UI and accessible candidate now map exact `Ctrl+R` to the existing queued reload path. With no current or pending archive it remains a no-op and never guesses a path. The accessible Reload and Unlock controls expose `aria-keyshortcuts="Control+R"`.
 - Bilingual About help and user documentation include the shortcut. Unit regressions in both UIs lock the keyboard map, exact modifiers, visible help, and assistive-technology metadata. Real foreground keyboard and Narrator revalidation remains an external gate.
+
+## 2026-08-31 — Archive search shortcut
+
+- Both desktop UIs now handle exact `Ctrl+F`: with an archive loaded they return to the Archive page and focus its search field while preserving the current query; with no archive they do not intercept the shortcut.
+- The accessible candidate exposes `aria-keyshortcuts="Control+F"` and a stable control identifier on the search input. Bilingual About help and desktop documentation describe the action.
+- Unit tests cover exact modifiers, the no-archive boundary, visible help, and semantic metadata. Real foreground focus movement and screen-reader revalidation remain external gates.

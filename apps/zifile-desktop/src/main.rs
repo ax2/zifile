@@ -54,6 +54,7 @@ use zifile_desktop::{
 
 const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
 const ARCHIVE_TABLE_MIN_WIDTH: f32 = 1_040.0;
+const ARCHIVE_SEARCH_ID: &str = "archive-search";
 
 pub fn main() -> iced::Result {
     if std::env::args_os().any(|argument| argument == zifile_worker::WORKER_MODE_ARGUMENT) {
@@ -224,6 +225,7 @@ enum Shortcut {
     Open,
     Create,
     Reload,
+    Search,
     About,
     SelectAll,
     Cancel,
@@ -862,6 +864,10 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             Shortcut::Open => return update(state, Message::OpenArchiveDialog),
             Shortcut::Create => state.page = Page::Create,
             Shortcut::Reload => return update(state, Message::ReloadArchive),
+            Shortcut::Search if state.archive.is_some() => {
+                state.page = Page::Archive;
+                return iced::widget::operation::focus(ARCHIVE_SEARCH_ID);
+            }
             Shortcut::About => state.page = Page::About,
             Shortcut::SelectAll if state.page == Page::Archive => {
                 return update(state, Message::SelectAll(true));
@@ -938,6 +944,7 @@ fn default_shortcut(
         Some('o') => Some(Shortcut::Open),
         Some('n') => Some(Shortcut::Create),
         Some('r') => Some(Shortcut::Reload),
+        Some('f') => Some(Shortcut::Search),
         Some('a') => Some(Shortcut::SelectAll),
         _ => None,
     }
@@ -1380,6 +1387,7 @@ fn about_view(state: &ZiFile) -> Element<'_, Message> {
                 shortcut("Ctrl+O", locale.text(Text::ShortcutOpen)),
                 shortcut("Ctrl+N", locale.text(Text::ShortcutCreate)),
                 shortcut("Ctrl+R", locale.text(Text::ShortcutReload)),
+                shortcut("Ctrl+F", locale.text(Text::ShortcutSearch)),
                 shortcut("Ctrl+A", locale.text(Text::ShortcutSelectAll)),
                 shortcut("F1", locale.text(Text::ShortcutAbout)),
                 shortcut("Esc", locale.text(Text::ShortcutCancel)),
@@ -1611,6 +1619,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     );
     let search_controls = row![
         text_input(state.locale.text(Text::Search), &state.entry_filter)
+            .id(ARCHIVE_SEARCH_ID)
             .on_input(Message::EntryFilterChanged)
             .width(Fill),
         button(state.locale.text(Text::ClearSearch))
@@ -2168,6 +2177,22 @@ mod tests {
         );
         assert_eq!(
             default_shortcut(
+                &Key::Character("F".into()),
+                Physical::Code(Code::KeyF),
+                Modifiers::CTRL
+            ),
+            Some(Shortcut::Search)
+        );
+        assert_eq!(
+            default_shortcut(
+                &Key::Character("f".into()),
+                Physical::Code(Code::KeyF),
+                Modifiers::CTRL | Modifiers::ALT
+            ),
+            None
+        );
+        assert_eq!(
+            default_shortcut(
                 &Key::Named(Named::F1),
                 Physical::Unidentified(NativeCode::Unidentified),
                 Modifiers::ALT
@@ -2191,6 +2216,7 @@ mod tests {
             ("Ctrl+O", "Text::ShortcutOpen"),
             ("Ctrl+N", "Text::ShortcutCreate"),
             ("Ctrl+R", "Text::ShortcutReload"),
+            ("Ctrl+F", "Text::ShortcutSearch"),
             ("Ctrl+A", "Text::ShortcutSelectAll"),
             ("F1", "Text::ShortcutAbout"),
             ("Esc", "Text::ShortcutCancel"),
