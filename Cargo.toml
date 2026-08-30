@@ -10,7 +10,7 @@ members = [
 resolver = "3"
 
 [workspace.package]
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 rust-version = "1.93"
 authors = ["ZiCode <ax2@zicode.com>"]
@@ -51,9 +51,9 @@ time = "0.3.55"
 winresource = "0.1.31"
 windows = "0.62.2"
 windows-core = "0.62.2"
-zifile-core = { path = "crates/zifile-core", version = "0.1.5" }
-zifile-worker-protocol = { path = "crates/zifile-worker-protocol", version = "0.1.5" }
-zifile-worker = { path = "apps/zifile-worker", version = "0.1.5" }
+zifile-core = { path = "crates/zifile-core", version = "0.1.6" }
+zifile-worker-protocol = { path = "crates/zifile-worker-protocol", version = "0.1.6" }
+zifile-worker = { path = "apps/zifile-worker", version = "0.1.6" }
 
 [profile.release]
 codegen-units = 1

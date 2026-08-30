@@ -153,3 +153,9 @@ Stable 1.0 has not been published; `v0.1.5` is the current usable public GitHub 
 - Both desktop archive action bars now expose `Extract to named folder`, extracting every entry beside the archive without opening a folder picker.
 - The action reuses the File Explorer `--extract-here` compound-extension rules: `sample.zip` maps to `sample/`, while `backup.tar.gz` maps to `backup/`. Submission still uses the current conflict policy, bounded FIFO queue, isolated Worker, and completed-output discovery.
 - A default-UI unit test locks the actual Worker request's archive path, destination, all-entry scope, and session-password forwarding; an accessible-candidate wiring regression locks its UI path. Real foreground button operation remains pending until the Computer Use host pipe is restored.
+
+## 2026-08-31 — 0.1.6 release preparation
+
+- Archive reload and search shortcuts, explicit session closure, and one-click extraction to a matching folder have accumulated after `v0.1.5`, forming a useful patch-release boundary.
+- The workspace, three internal dependency constraints, six workspace lock entries, and Astro documentation package are aligned at `0.1.6`; its MSIX version maps to `0.1.6.0`.
+- `CHANGELOG.md` keeps an empty top `[Unreleased]` section and moves four user-visible improvements into the `0.1.6` release section. Download guidance continues to identify the verified v0.1.5 Release until publication actually succeeds.
