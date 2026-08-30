@@ -46,7 +46,7 @@ settings or logs.
 
 ## Operation queue
 
-Open, reload, test, extract, and create requests may be submitted while work is running. A 32-item in-memory FIFO executes snapshots in order. Clearing removes only waiting work; cancel affects only the current Worker and then advances the queue. Paths and passwords are released after clearing, completion, or exit and are never written to settings or logs.
+Open, reload, test, extract, and create requests may be submitted while work is running. A 32-item in-memory FIFO executes snapshots in order. Clearing removes only waiting work; cancel affects only the current Worker and then advances the queue. Both desktop UIs clear the create-form password as soon as a create request is accepted for execution or queuing, while retaining the input when a full queue rejects the request for retry. Request snapshots release paths and passwords after clearing, completion, or exit and never write them to settings or logs.
 
 While integrity testing, extraction, or creation is running, large archives use
 a lightweight summary instead of rebuilding the entry table on every progress
