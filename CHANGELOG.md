@@ -15,6 +15,9 @@ All notable changes to ZiFile are documented here. The format follows
 - Align the README, bilingual privacy policy, and desktop documentation with
   recent-path persistence, including local retention, user controls, and the
   explicit statement that hexadecimal field encoding is not encryption.
+- Add explicit Select all, Select none, and Invert selection actions to both
+  archive views, with `Ctrl+I`, bilingual status feedback, semantic shortcut
+  metadata, and a 100,000-entry inversion benchmark.
 
 ## [0.1.6] - 2026-08-31
 
