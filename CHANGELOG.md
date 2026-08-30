@@ -14,6 +14,9 @@ All notable changes to ZiFile are documented here. The format follows
 - Add `Ctrl+F` to move directly to the loaded archive's search field in both
   desktop UIs while preserving the current query, with semantic metadata and
   bilingual help.
+- Add an explicit Close archive action and `Ctrl+W` to both desktop UIs. Closing
+  returns home and releases the archive password, metadata, selection, search,
+  and folder-navigation session state; active work prevents closure.
 
 ## [0.1.5] - 2026-08-31
 
