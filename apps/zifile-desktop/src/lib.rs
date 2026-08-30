@@ -9,10 +9,11 @@
     )
 )]
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use zifile_core::{ArchiveFormat, detect_format, detect_format_from_path};
+use zifile_core::{ArchiveFormat, ArchiveInfo, detect_format, detect_format_from_path};
 
 pub mod create_validation;
 pub mod entry_view;
@@ -53,6 +54,23 @@ pub fn append_unique_paths(destination: &mut Vec<PathBuf>, paths: Vec<PathBuf>) 
         }
     }
     destination.len() - before
+}
+
+/// Inverts selection across every regular file in an archive.
+///
+/// Directories remain navigation nodes rather than extraction selections. The
+/// operation is linear in archive size and reuses the existing selection set,
+/// matching the established all-files selection scope in both desktop UIs.
+pub fn invert_archive_file_selection(
+    archive: &ArchiveInfo,
+    selected: &mut HashSet<PathBuf>,
+) -> usize {
+    for entry in archive.entries.iter().filter(|entry| !entry.is_directory) {
+        if !selected.remove(&entry.path) {
+            selected.insert(entry.path.clone());
+        }
+    }
+    selected.len()
 }
 
 /// Adds the selected format's canonical extension when a save-dialog path has
@@ -195,6 +213,50 @@ mod tests {
             1
         );
         assert_eq!(sources.len(), 2);
+    }
+
+    #[test]
+    fn archive_file_selection_inverts_files_and_ignores_directories() {
+        use zifile_core::ArchiveEntryInfo;
+
+        let archive = ArchiveInfo {
+            path: PathBuf::from("sample.zip"),
+            format: ArchiveFormat::Zip,
+            entries: vec![
+                ArchiveEntryInfo {
+                    path: PathBuf::from("folder"),
+                    size: 0,
+                    compressed_size: 0,
+                    is_directory: true,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+                ArchiveEntryInfo {
+                    path: PathBuf::from("folder/one.txt"),
+                    size: 1,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+                ArchiveEntryInfo {
+                    path: PathBuf::from("two.txt"),
+                    size: 1,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+            ],
+            total_size: 0,
+            compressed_size: 0,
+        };
+        let mut selected = HashSet::from([PathBuf::from("folder/one.txt")]);
+        assert_eq!(invert_archive_file_selection(&archive, &mut selected), 1);
+        assert_eq!(selected, HashSet::from([PathBuf::from("two.txt")]));
     }
 
     #[test]
