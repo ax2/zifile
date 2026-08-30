@@ -19,6 +19,10 @@ GitHub Release 面向用户只保留一个 all-in-one MSIX、一个 x64 独立�
 
 WinGet 候选只接收公开 all-in-one `.msixbundle` 的 URL、SHA-256 和本地验证路径，不再要求或引用未公开的单架构 MSIX。清单按微软 MSIXBundle 示例保留 x64 与 ARM64 两个安装器节点，两者必须指向同一个 bundle URL 和同一哈希；`Test-Manifests.ps1` 会同时锁定该关系、29 个文件扩展名和本地 bundle 哈希，再交给官方 `winget validate`。
 
+## 主分支保护
+
+GitHub `main` 要求通过 PR 和以下七项状态检查：Dependency policy、Documentation build、Fuzz targets compile、MSIX Repair helper、RAR reference interoperability、Rust performance benchmarks、Rust quality gates。检查必须基于最新主分支；管理员同样不能绕过。仓库不要求人工批准，适合单维护者工作流，但要求解决所有评审对话、保持线性历史，并禁止强推和删除主分支。该规则属于 GitHub 仓库设置；迁移或重建仓库时必须单独复核，不能仅从源代码推断它仍然生效。
+
 Release Job 会运行 `tests/smoke/portable-exe.ps1`：x64 桌面 EXE 被复制到不含独立 Worker 的目录中，启动内置的 `--zifile-worker` 模式，读取真实 ZIP 并校验返回项目。ARM64 EXE 在 x64 runner 上执行相同的 PE 头与“无旁置 Worker”审计，但跳过运行；真正的 ARM64 执行仍属于实机门禁。
 
 文档当前发布到 `ax2.github.io/zifile`；完成 DNS 配置后迁移到计划域名 `zifile.zicode.com`。

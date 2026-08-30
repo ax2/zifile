@@ -104,3 +104,15 @@ Stable 1.0 has not been published; `v0.1.4` is the current usable public GitHub 
 - The default Iced UI and accessible candidate previously retained a create password in form state after the request had already entered execution or the in-memory queue, which was broader than the temporary-retention boundary described by the public privacy statement.
 - Both UIs now clear the create-form password immediately only when submission is accepted. A full queue leaves the rejected input available for retry. Worker and queue snapshots continue to release their data on completion, clearing, or exit and never write it to settings or logs.
 - New tests cover accepted clearing, rejected retention, and non-create isolation in both implementations. Archive decryption passwords remain scoped to the current archive session so later test and extract operations continue to work.
+
+## 2026-08-31 — Post-completion output discovery
+
+- Both desktop status bars now expose a bilingual `Show output` action: successful creation selects the generated archive in File Explorer, while successful extraction locates its destination directory.
+- The path comes only from a `Create` or `Extract` request snapshot and is exposed only for a correctly typed successful result. Starting the next job clears the old path; failures, cancellation, and Worker protocol mismatches cannot display a stale action.
+- Request-path and UI-wiring regressions were added to both implementations. The 32 shared desktop library tests, 39 default application tests, 40 accessible-candidate tests, and six 100,000-entry benchmarks pass.
+
+## 2026-08-31 — Main-branch merge gate
+
+- PR #55 exposed an unprotected `main`: requesting auto-merge caused GitHub to merge immediately without waiting for the running CI. The code already had complete local validation and remote checks continued afterward, but the process itself was not release-grade governance.
+- `main` now requires a pull request, all seven CI checks against the latest branch, resolved conversations, and linear history. Administrators are also bound; force-pushes and branch deletion are disabled. Required approvals remain zero so a single-maintainer project cannot deadlock on a second account.
+- GitHub API readback confirms `strict=true`, `enforce_admins=true`, all seven contexts, `required_approving_review_count=0`, enabled linear history and conversation resolution, and disabled force-pushes/deletion. PR #56 is the first live merge validation under the policy.

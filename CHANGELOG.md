@@ -439,6 +439,9 @@ All notable changes to ZiFile are documented here. The format follows
 - Add a bilingual keyboard-shortcut reference to both desktop About pages for
   open, create, archive selection, help, and operation cancellation. Regression
   tests keep the visible key combinations aligned with the implemented maps.
+- Add a bilingual status-bar action in both desktop UIs that reveals the most
+  recent successfully created archive or extraction destination in File
+  Explorer. New work, failures, and protocol mismatches clear the action.
 
 ### Changed
 

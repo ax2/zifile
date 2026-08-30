@@ -104,6 +104,11 @@ impl Locale {
             Text::RevealInExplorer => ("Show in File Explorer", "在资源管理器中显示"),
             Text::RevealedInExplorer => ("Opened the containing folder", "已打开所在文件夹"),
             Text::RevealInExplorerFailed => ("Could not open File Explorer", "无法打开资源管理器"),
+            Text::RevealOutput => ("Show output", "查看输出"),
+            Text::OutputRevealed => (
+                "Opened the output in File Explorer",
+                "已在资源管理器中打开输出",
+            ),
             Text::TestArchive => ("Test archive", "校验压缩文件"),
             Text::Selected => ("selected", "项已选择"),
             Text::PasswordEncrypted => ("Password (if encrypted)", "密码（如已加密）"),
@@ -383,6 +388,8 @@ pub enum Text {
     RevealInExplorer,
     RevealedInExplorer,
     RevealInExplorerFailed,
+    RevealOutput,
+    OutputRevealed,
     TestArchive,
     Selected,
     PasswordEncrypted,
@@ -523,6 +530,11 @@ mod tests {
         assert_eq!(
             Locale::ZhCn.text(Text::RevealedInExplorer),
             "已打开所在文件夹"
+        );
+        assert_eq!(Locale::En.text(Text::RevealOutput), "Show output");
+        assert_eq!(
+            Locale::ZhCn.text(Text::OutputRevealed),
+            "已在资源管理器中打开输出"
         );
         assert!(Locale::ZhCn.text(Text::PrivacyDescription).contains("本机"));
         assert_eq!(Locale::ZhCn.toggle(), Locale::En);

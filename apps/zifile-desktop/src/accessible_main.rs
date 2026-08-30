@@ -139,6 +139,7 @@ struct UiState {
     pending_archive: Option<PathBuf>,
     pending_archive_requires_password: bool,
     automatic_extract_destination: Option<PathBuf>,
+    completed_output: Option<PathBuf>,
     selected: HashSet<PathBuf>,
     entry_directory: PathBuf,
     entry_filter: String,
@@ -172,6 +173,7 @@ impl Default for UiState {
             pending_archive: None,
             pending_archive_requires_password: false,
             automatic_extract_destination: None,
+            completed_output: None,
             selected: HashSet::new(),
             entry_directory: PathBuf::new(),
             entry_filter: String::new(),
@@ -264,6 +266,7 @@ fn App() -> Element {
         cancelled,
         queued_count,
         can_cancel,
+        completed_output,
     ) = {
         let view = state.read();
         (
@@ -280,6 +283,7 @@ fn App() -> Element {
                 .is_some_and(CancellationToken::is_cancelled),
             lock_operation_queue(&view.operations).pending_count(),
             view.cancellation.is_some(),
+            view.completed_output.clone(),
         )
     };
     let theme = if dark { "dark" } else { "light" };
@@ -351,6 +355,7 @@ fn App() -> Element {
                     }
                     button { class: "queue-clear", disabled: queued_count == 0, "aria-describedby": "operation-queue-summary", onclick: move |_| clear_queued(state), {choose(locale, "Clear queue", "清空队列")} }
                     button { disabled: !busy, "aria-describedby": "operation-status", "aria-keyshortcuts": ARIA_SHORTCUT_CANCEL, onclick: move |_| cancel_operation(state), {locale.text(Text::Cancel)} }
+                    button { disabled: busy || completed_output.is_none(), "aria-describedby": "operation-status", onclick: move |_| reveal_completed_output(state), {locale.text(Text::RevealOutput)} }
                 }
             }
         }
@@ -907,6 +912,21 @@ fn reveal_archive(mut state: Signal<UiState>) {
     }
 }
 
+fn reveal_completed_output(mut state: Signal<UiState>) {
+    let value = state.read();
+    let Some(path) = value.completed_output.clone() else {
+        return;
+    };
+    let locale = value.locale;
+    drop(value);
+    let result = reveal_in_file_manager(&path);
+    let mut value = state.write();
+    match result {
+        Ok(()) => value.set_status(locale.text(Text::OutputRevealed).to_owned()),
+        Err(_) => value.set_error(locale.text(Text::RevealInExplorerFailed).to_owned()),
+    }
+}
+
 fn begin_load(state: Signal<UiState>, path: PathBuf) {
     let locale = state.read().locale;
     let password = non_empty(&state.read().password);
@@ -1252,6 +1272,7 @@ fn start_worker(mut state: Signal<UiState>, job: Job<QueuedOperation>) {
         status,
         archive_path,
     } = payload;
+    let completed_output = operation_output_path(&request);
     let progress = OperationProgress::default();
     let cancellation = CancellationToken::default();
     {
@@ -1264,6 +1285,7 @@ fn start_worker(mut state: Signal<UiState>, job: Job<QueuedOperation>) {
             value.page = Page::Archive;
         }
         value.busy = true;
+        value.completed_output = None;
         value.set_status(status);
         value.progress = Some(progress.clone());
         value.cancellation = Some(cancellation.clone());
@@ -1274,7 +1296,7 @@ fn start_worker(mut state: Signal<UiState>, job: Job<QueuedOperation>) {
                 .await
                 .map_err(|error| format!("worker task failed: {error}"))
                 .and_then(|result| result);
-        finish_worker(state, id, kind, result);
+        finish_worker(state, id, kind, completed_output, result);
     });
 }
 
@@ -1282,6 +1304,7 @@ fn finish_worker(
     mut state: Signal<UiState>,
     id: u64,
     kind: OperationKind,
+    completed_output: Option<PathBuf>,
     result: Result<WorkerOutput, String>,
 ) {
     let operations = state.read().operations.clone();
@@ -1297,6 +1320,7 @@ fn finish_worker(
     if kind == OperationKind::List {
         state.write().pending_archive_requires_password = requires_password;
     }
+    let succeeded = result.is_ok();
     let mut automatic_extract = None;
     let (status, status_kind) = match (kind, result) {
         (OperationKind::List, Ok(WorkerOutput::Archive(archive))) => {
@@ -1390,6 +1414,12 @@ fn finish_worker(
             StatusKind::Error,
         ),
     };
+    if matches!(kind, OperationKind::Extract | OperationKind::Create)
+        && succeeded
+        && status_kind == StatusKind::Informational
+    {
+        state.write().completed_output = completed_output;
+    }
     if let Some(destination) = automatic_extract {
         extract_to(state, destination, true);
     }
@@ -1411,6 +1441,15 @@ fn finish_worker(
             value.progress = None;
             value.set_error(format!("Internal operation queue error: {error}"));
         }
+    }
+}
+
+fn operation_output_path(request: &WorkerRequest) -> Option<PathBuf> {
+    match request {
+        WorkerRequest::Extract { destination, .. } | WorkerRequest::Create { destination, .. } => {
+            Some(destination.clone())
+        }
+        WorkerRequest::List { .. } | WorkerRequest::Test { .. } => None,
     }
 }
 
@@ -1957,6 +1996,28 @@ mod tests {
 
         clear_submitted_create_password(&mut state, OperationKind::Extract, true);
         assert_eq!(state.create_password, "retry-secret");
+    }
+
+    #[test]
+    fn completed_output_action_is_scoped_to_create_and_extract_requests() {
+        let destination = PathBuf::from(r"C:\output\archive.zip");
+        let create = WorkerRequest::Create {
+            sources: vec![PathBuf::from(r"C:\input\file.txt")],
+            destination: destination.clone(),
+            format: ArchiveFormat::Zip,
+            compression_level: 6,
+            password: None,
+        };
+        let list = WorkerRequest::List {
+            archive: destination.clone(),
+            password: None,
+        };
+
+        assert_eq!(operation_output_path(&create), Some(destination));
+        assert_eq!(operation_output_path(&list), None);
+        let source = include_str!("accessible_main.rs");
+        assert!(source.contains("onclick: move |_| reveal_completed_output(state)"));
+        assert!(source.contains("locale.text(Text::RevealOutput)"));
     }
 
     #[test]

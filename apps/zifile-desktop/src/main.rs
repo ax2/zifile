@@ -111,6 +111,7 @@ struct ZiFile {
     pending_archive: Option<PathBuf>,
     pending_archive_requires_password: bool,
     automatic_extract_destination: Option<PathBuf>,
+    completed_output: Option<PathBuf>,
     selected: HashSet<PathBuf>,
     entry_directory: PathBuf,
     entry_filter: String,
@@ -143,6 +144,7 @@ impl Default for ZiFile {
             pending_archive: None,
             pending_archive_requires_password: false,
             automatic_extract_destination: None,
+            completed_output: None,
             selected: HashSet::new(),
             entry_directory: PathBuf::new(),
             entry_filter: String::new(),
@@ -179,6 +181,7 @@ enum Message {
     PasswordChanged(String),
     ReloadArchive,
     RevealArchive,
+    RevealCompletedOutput,
     ToggleEntry(PathBuf, bool),
     ToggleDirectory(PathBuf, bool),
     SelectAll(bool),
@@ -193,7 +196,7 @@ enum Message {
     Extract,
     ExtractAll,
     ExtractDialogFinished(Option<PathBuf>, bool),
-    ExtractFinished(u64, Result<OperationSummary, String>),
+    ExtractFinished(u64, Option<PathBuf>, Result<OperationSummary, String>),
     TestArchive,
     TestFinished(u64, Result<ArchiveInfo, String>),
     AddFiles,
@@ -207,7 +210,7 @@ enum Message {
     CompressionLevelChanged(u8),
     Create,
     CreateDialogFinished(Option<PathBuf>),
-    CreateFinished(u64, Result<OperationSummary, String>),
+    CreateFinished(u64, Option<PathBuf>, Result<OperationSummary, String>),
     ClearQueued,
     Cancel,
     ProgressTick,
@@ -444,6 +447,15 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 Err(_) => set_error(state, state.locale.text(Text::RevealInExplorerFailed)),
             }
         }
+        Message::RevealCompletedOutput => {
+            let Some(path) = state.completed_output.clone() else {
+                return Task::none();
+            };
+            match reveal_in_file_manager(&path) {
+                Ok(()) => set_status(state, state.locale.text(Text::OutputRevealed)),
+                Err(_) => set_error(state, state.locale.text(Text::RevealInExplorerFailed)),
+            }
+        }
         Message::ToggleEntry(path, selected) => {
             if selected {
                 state.selected.insert(path);
@@ -522,7 +534,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     .map_or_else(Task::none, |operation| submit_operation(state, operation));
             }
         }
-        Message::ExtractFinished(id, result) => {
+        Message::ExtractFinished(id, output, result) => {
             if state.operations.active_id() != Some(id) {
                 return Task::none();
             }
@@ -530,6 +542,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             state.cancellation = None;
             state.progress = None;
             let failed = result.is_err();
+            state.completed_output = (!failed).then_some(output).flatten();
             let status = match result {
                 Ok(summary) if state.locale == Locale::ZhCn => format!(
                     "已解压 {} 个文件 · {} · 跳过 {} 个",
@@ -766,7 +779,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 },
             );
         }
-        Message::CreateFinished(id, result) => {
+        Message::CreateFinished(id, output, result) => {
             if state.operations.active_id() != Some(id) {
                 return Task::none();
             }
@@ -774,6 +787,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             state.cancellation = None;
             state.progress = None;
             let failed = result.is_err();
+            state.completed_output = (!failed).then_some(output).flatten();
             let status = match result {
                 Ok(summary) if state.locale == Locale::ZhCn => format!(
                     "压缩文件已创建 · {} 个文件 · 输入 {}",
@@ -1074,6 +1088,7 @@ fn start_operation(state: &mut ZiFile, job: Job<QueuedOperation>) -> Task<Messag
         status,
         archive_path,
     } = payload;
+    let completed_output = operation_output_path(&request);
     if let Some(path) = archive_path {
         state.archive = None;
         state.pending_archive = Some(path);
@@ -1084,6 +1099,7 @@ fn start_operation(state: &mut ZiFile, job: Job<QueuedOperation>) -> Task<Messag
     let cancellation = CancellationToken::default();
     let progress = OperationProgress::default();
     state.busy = true;
+    state.completed_output = None;
     state.cancellation = Some(cancellation.clone());
     state.progress = Some(progress.clone());
     set_status(state, status);
@@ -1098,12 +1114,21 @@ fn start_operation(state: &mut ZiFile, job: Job<QueuedOperation>) -> Task<Messag
         ),
         OperationKind::Extract => Task::perform(
             async move { run_worker(request, progress, cancellation).and_then(expect_summary) },
-            move |result| Message::ExtractFinished(id, result),
+            move |result| Message::ExtractFinished(id, completed_output, result),
         ),
         OperationKind::Create => Task::perform(
             async move { run_worker(request, progress, cancellation).and_then(expect_summary) },
-            move |result| Message::CreateFinished(id, result),
+            move |result| Message::CreateFinished(id, completed_output, result),
         ),
+    }
+}
+
+fn operation_output_path(request: &WorkerRequest) -> Option<PathBuf> {
+    match request {
+        WorkerRequest::Extract { destination, .. } | WorkerRequest::Create { destination, .. } => {
+            Some(destination.clone())
+        }
+        WorkerRequest::List { .. } | WorkerRequest::Test { .. } => None,
     }
 }
 
@@ -1249,6 +1274,12 @@ fn view(state: &ZiFile) -> Element<'_, Message> {
                 button(state.locale.text(Text::Cancel))
                     .style(button::danger)
                     .on_press_maybe(state.cancellation.as_ref().map(|_| Message::Cancel)),
+                button(state.locale.text(Text::RevealOutput))
+                    .style(button::secondary)
+                    .on_press_maybe(
+                        (!state.busy && state.completed_output.is_some())
+                            .then_some(Message::RevealCompletedOutput)
+                    ),
             ]
             .spacing(12),
             progress,
@@ -2159,6 +2190,28 @@ mod tests {
 
         clear_submitted_create_password(&mut password, OperationKind::Extract, true);
         assert_eq!(password, "retry-secret");
+    }
+
+    #[test]
+    fn completed_output_action_is_scoped_to_create_and_extract_requests() {
+        let destination = PathBuf::from(r"C:\output\archive.zip");
+        let create = WorkerRequest::Create {
+            sources: vec![PathBuf::from(r"C:\input\file.txt")],
+            destination: destination.clone(),
+            format: ArchiveFormat::Zip,
+            compression_level: 6,
+            password: None,
+        };
+        let test = WorkerRequest::Test {
+            archive: destination.clone(),
+            password: None,
+        };
+
+        assert_eq!(operation_output_path(&create), Some(destination));
+        assert_eq!(operation_output_path(&test), None);
+        let source = include_str!("main.rs");
+        assert!(source.contains("Message::RevealCompletedOutput"));
+        assert!(source.contains("Text::RevealOutput"));
     }
 
     #[test]
