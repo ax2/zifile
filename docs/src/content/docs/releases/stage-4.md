@@ -17,7 +17,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、15 个创建格式、17 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2` 和 `v0.1.3` 均通过匹配 tag 自动生成公开 GitHub Release。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3` 和 `v0.1.4` 均通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -27,7 +27,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.3` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.4` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
 
 ## 2026-08-29 正式公开版本结果
 
@@ -67,6 +67,12 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - [`v0.1.3 Release`](https://github.com/ax2/zifile/releases/tag/v0.1.3) 已由工作流 [33296532873](https://github.com/ax2/zifile/actions/runs/33296532873) 自动发布；PR #39 的 9 项 CI 均通过，其中包括 x64 和 ARM64 可复现双构建。
 - 最终公开资产严格为 `ZiFile-0.1.3.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`。桌面 EXE 内置 Worker runtime，并使用 `--zifile-worker` 参数启动自身，因此便携版不需要额外的 Worker 文件。
 - x64 便携 EXE 已从 Release 下载并与 `SHA256SUMS.txt` 匹配；ARM64 哈希保留在工作流生成的校验清单中。该 Release 仍明确标记为未签名，也不是 Microsoft Store 认证包。
+
+## 2026-08-30 — 0.1.4 正式公开版本结果
+
+- [`v0.1.4 Release`](https://github.com/ax2/zifile/releases/tag/v0.1.4) 已由工作流 [33315987748](https://github.com/ax2/zifile/actions/runs/33315987748) 自动发布；PR #51 的版本一致性、Rust 质量、互操作性、性能、Fuzz 和 x64/ARM64 可复现双构建检查全部通过。
+- 最终公开资产严格为 `ZiFile-0.1.4.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`；没有单独发布 DLL、JSON/YAML 配置、SBOM 或 provenance 文件。
+- x64 和 ARM64 Windows 发布 job、all-in-one MSIX bundle job、SBOM job 和 Release 发布 job 均成功；签名 job 因 SignPath 尚未配置而按条件跳过，Release 仍明确为未签名 GitHub 构建。
 
 ## 2026-08-30 — 公开 Release 资产审计修复
 
