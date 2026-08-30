@@ -87,3 +87,9 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - PR 在合并提交 [`1487bf6`](https://github.com/ax2/zifile/commit/1487bf6758d8a69b4844a0a4709e146a13ee0c0a) 前通过 `cargo fmt --all -- --check` 和 `cargo test -p zifile-desktop --all-targets --locked`。
 - PR [#49](https://github.com/ax2/zifile/pull/49) 为固定版本的 WinGet validation client 增加最多 3 次有界退避重试，用于处理 CDN 瞬时连接失败，并将尝试次数写入验证证据。
 - PR #49 的全部检查通过，包括官方 WinGet manifest validation、Rust quality、Foundation smoke、性能、模糊目标编译和参考工具互操作性；合并提交 [`cbb6505`](https://github.com/ax2/zifile/commit/cbb6505be639f27b064b98de52c766ebea0ec14d) 已进入 `main`。
+
+## 2026-08-30 — WinGet all-in-one 清单收口
+
+- WinGet 生成器、验证器和 Release workflow 已删除对未公开 x64/ARM64 单架构 MSIX URL、哈希和本地路径的依赖，只接收公开 all-in-one `.msixbundle`。
+- 安装器清单继续提供 x64 与 ARM64 两个选择节点，但验证器要求它们引用同一个 bundle URL 和同一 SHA-256，并核对本地 bundle；公开下载面与 WinGet 下载面由此使用同一安装包。
+- 本地 WinGet 1.29.290 的官方 `validate` 接受 schema 1.12 四文件候选；29 个扩展名同步、哈希篡改拒绝和完整 packaging policy 均通过。社区仓库接受与签名门禁仍未完成。

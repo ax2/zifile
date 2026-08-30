@@ -386,27 +386,19 @@ jobs:
         shell: pwsh
         run: |
           $version = '${{ github.ref_name }}'.TrimStart('v')
-          $x64 = Get-ChildItem -LiteralPath release -Filter '*windows-x64.msix' | Select-Object -First 1
-          $arm64 = Get-ChildItem -LiteralPath release -Filter '*windows-arm64.msix' | Select-Object -First 1
           $bundle = Get-ChildItem -LiteralPath release -Filter '*.msixbundle' | Select-Object -First 1
-          if (-not $x64 -or -not $arm64 -or -not $bundle) {
-            throw 'Expected x64, arm64, and all-in-one MSIX artifacts were not downloaded.'
+          if (-not $bundle) {
+            throw 'Expected the all-in-one MSIX bundle artifact to be downloaded.'
           }
           $base = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
           ./packaging/winget/Generate-Manifests.ps1 `
             -Version $version `
-            -X64InstallerUrl "$base/$($x64.Name)" `
-            -X64InstallerSha256 (Get-FileHash -LiteralPath $x64.FullName -Algorithm SHA256).Hash `
-            -Arm64InstallerUrl "$base/$($arm64.Name)" `
-            -Arm64InstallerSha256 (Get-FileHash -LiteralPath $arm64.FullName -Algorithm SHA256).Hash `
             -BundleInstallerUrl "$base/$($bundle.Name)" `
             -BundleInstallerSha256 (Get-FileHash -LiteralPath $bundle.FullName -Algorithm SHA256).Hash
           $manifestDirectory = "target/winget/manifests/z/ZiCode/ZiFile/$version"
           ./packaging/winget/Test-Manifests.ps1 `
             -ManifestDirectory $manifestDirectory `
             -Version $version `
-            -X64InstallerPath $x64.FullName `
-            -Arm64InstallerPath $arm64.FullName `
             -BundleInstallerPath $bundle.FullName
           New-Item -ItemType Directory -Path release-support -Force | Out-Null
           Copy-Item -Path "$manifestDirectory/*.yaml" -Destination release-support
