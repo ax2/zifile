@@ -6,6 +6,12 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add `Ctrl+R` to reload the current archive in both desktop UIs, expose the
+  shortcut on semantic reload controls, and include it in bilingual shortcut
+  help and user documentation.
+
 ## [0.1.5] - 2026-08-31
 
 ### Added

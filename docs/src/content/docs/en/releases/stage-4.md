@@ -129,3 +129,9 @@ Stable 1.0 has not been published; `v0.1.5` is the current usable public GitHub 
 - [Release workflow 33327132468](https://github.com/ax2/zifile/actions/runs/33327132468) completed workspace tests, both architecture builds, the standalone x64 EXE smoke, ARM64 PE architecture audit, all-in-one MSIX Bundle, attestations, and public publication successfully.
 - The non-draft, non-prerelease [v0.1.5 Release](https://github.com/ax2/zifile/releases/tag/v0.1.5) exposes exactly `ZiFile-0.1.5.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, SBOM, or provenance internals are public Release assets.
 - All four public files were downloaded again after publication. SHA-256 for the MSIX Bundle and both EXEs matches `SHA256SUMS.txt` and the GitHub asset digests. This proves GitHub publication integrity, not trusted signing, WACK, Store, WinGet, or physical ARM64 execution.
+
+## 2026-08-31 — Archive reload shortcut
+
+- Both desktop UIs already exposed a Reload button, but keyboard users had to traverse to it to refresh an open archive. The conventional file-manager `Ctrl+R` shortcut was neither handled nor discoverable.
+- The default Iced UI and accessible candidate now map exact `Ctrl+R` to the existing queued reload path. With no current or pending archive it remains a no-op and never guesses a path. The accessible Reload and Unlock controls expose `aria-keyshortcuts="Control+R"`.
+- Bilingual About help and user documentation include the shortcut. Unit regressions in both UIs lock the keyboard map, exact modifiers, visible help, and assistive-technology metadata. Real foreground keyboard and Narrator revalidation remains an external gate.

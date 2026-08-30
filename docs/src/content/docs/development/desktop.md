@@ -26,7 +26,9 @@ $password | zifile extract archive.7z output --password-stdin
 | --- | --- |
 | `Ctrl+O` | 打开压缩文件 |
 | `Ctrl+N` | 进入创建页 |
+| `Ctrl+R` | 重新加载当前压缩文件 |
 | `Ctrl+A` | 在归档页选择全部条目 |
+| `F1` | 打开关于与快捷键帮助 |
 | `Escape` | 取消当前可取消任务 |
 
 ## 大型归档

@@ -223,6 +223,7 @@ enum Message {
 enum Shortcut {
     Open,
     Create,
+    Reload,
     About,
     SelectAll,
     Cancel,
@@ -860,6 +861,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::KeyboardShortcut(shortcut) => match shortcut {
             Shortcut::Open => return update(state, Message::OpenArchiveDialog),
             Shortcut::Create => state.page = Page::Create,
+            Shortcut::Reload => return update(state, Message::ReloadArchive),
             Shortcut::About => state.page = Page::About,
             Shortcut::SelectAll if state.page == Page::Archive => {
                 return update(state, Message::SelectAll(true));
@@ -935,6 +937,7 @@ fn default_shortcut(
     {
         Some('o') => Some(Shortcut::Open),
         Some('n') => Some(Shortcut::Create),
+        Some('r') => Some(Shortcut::Reload),
         Some('a') => Some(Shortcut::SelectAll),
         _ => None,
     }
@@ -1376,6 +1379,7 @@ fn about_view(state: &ZiFile) -> Element<'_, Message> {
                 text(locale.text(Text::KeyboardShortcuts)).size(20),
                 shortcut("Ctrl+O", locale.text(Text::ShortcutOpen)),
                 shortcut("Ctrl+N", locale.text(Text::ShortcutCreate)),
+                shortcut("Ctrl+R", locale.text(Text::ShortcutReload)),
                 shortcut("Ctrl+A", locale.text(Text::ShortcutSelectAll)),
                 shortcut("F1", locale.text(Text::ShortcutAbout)),
                 shortcut("Esc", locale.text(Text::ShortcutCancel)),
@@ -2148,6 +2152,22 @@ mod tests {
         );
         assert_eq!(
             default_shortcut(
+                &Key::Character("R".into()),
+                Physical::Code(Code::KeyR),
+                Modifiers::CTRL
+            ),
+            Some(Shortcut::Reload)
+        );
+        assert_eq!(
+            default_shortcut(
+                &Key::Character("r".into()),
+                Physical::Code(Code::KeyR),
+                Modifiers::CTRL | Modifiers::SHIFT
+            ),
+            None
+        );
+        assert_eq!(
+            default_shortcut(
                 &Key::Named(Named::F1),
                 Physical::Unidentified(NativeCode::Unidentified),
                 Modifiers::ALT
@@ -2170,6 +2190,7 @@ mod tests {
         for (keys, text_key) in [
             ("Ctrl+O", "Text::ShortcutOpen"),
             ("Ctrl+N", "Text::ShortcutCreate"),
+            ("Ctrl+R", "Text::ShortcutReload"),
             ("Ctrl+A", "Text::ShortcutSelectAll"),
             ("F1", "Text::ShortcutAbout"),
             ("Esc", "Text::ShortcutCancel"),
