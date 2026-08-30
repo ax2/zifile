@@ -17,7 +17,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、15 个创建格式、17 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3` 和 `v0.1.4` 均通过匹配 tag 自动生成公开 GitHub Release。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4` 和 `v0.1.5` 均通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -27,7 +27,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.4` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.5` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
 
 ## 2026-08-29 正式公开版本结果
 
@@ -123,3 +123,10 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - 自 0.1.4 后累计的创建来源校验、all-in-one WinGet 清单、快捷键帮助、创建密码生命周期和完成后输出定位已形成一个可用补丁发布节点。
 - workspace、三个内部依赖约束、六个 workspace lock 条目和 Astro 文档包统一升级到 `0.1.5`；版本门禁确认 tag `v0.1.5` 与 MSIX `0.1.5.0` 映射一致。
 - `CHANGELOG.md` 已整理为顶部空 `[Unreleased]`、随后 `0.1.5` 和旧版本的标准逆序结构；0.1.5 包含 6 条发布项并通过 tag-ready 校验。下载文档在 Release 真正成功前继续指向 v0.1.4。
+
+## 2026-08-31 — 0.1.5 正式发布结果
+
+- PR [#57](https://github.com/ax2/zifile/pull/57) 在 7 项常规质量门禁和 x64/ARM64 可复现双构建全部通过后合并；注释 tag `v0.1.5` 精确指向 merge commit `8959f3d0042bf9ba29eed299a416bf952821b0c1`。
+- [Release workflow 33327132468](https://github.com/ax2/zifile/actions/runs/33327132468) 成功完成工作区测试、双架构构建、x64 独立 EXE 冒烟、ARM64 PE 架构审计、all-in-one MSIX Bundle、来源证明和公开发布。
+- [v0.1.5 Release](https://github.com/ax2/zifile/releases/tag/v0.1.5) 为非草稿、非预发布版本，公开资产严格为 `ZiFile-0.1.5.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`，没有附带 DLL、JSON、YAML、SBOM 或来源证明内部文件。
+- 发布后重新下载四个公开文件；MSIX Bundle、x64 EXE 和 ARM64 EXE 的 SHA-256 均与 `SHA256SUMS.txt` 及 GitHub asset digest 一致。该证据证明 GitHub 发布完整性，不替代可信签名、WACK、Store、WinGet 或物理 ARM64 运行门禁。
