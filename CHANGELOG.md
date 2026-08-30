@@ -4,6 +4,33 @@ All notable changes to ZiFile are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [0.1.5] - 2026-08-31
+
+### Added
+
+- Show non-empty create-source validation failures inline in the Iced create
+  page while keeping the Create action disabled until the sources are valid.
+- Add a bilingual keyboard-shortcut reference to both desktop About pages for
+  open, create, archive selection, help, and operation cancellation. Regression
+  tests keep the visible key combinations aligned with the implemented maps.
+- Add a bilingual status-bar action in both desktop UIs that reveals the most
+  recent successfully created archive or extraction destination in File
+  Explorer. New work, failures, and protocol mismatches clear the action.
+
+### Changed
+
+- Generate and verify WinGet candidates from the same public all-in-one MSIX
+  bundle used by GitHub Releases, without unpublished per-architecture MSIX
+  inputs.
+- Clear the create-form password in both desktop UIs immediately after a create
+  request is accepted for execution or queuing, while retaining it when a full
+  queue rejects the request so the user can retry.
+- Retry the pinned WinGet validation-client repair up to three times with
+  bounded backoff for transient CDN connection failures, and record the retry
+  limit in validation evidence.
+
 ## [0.1.4] - 2026-08-30
 
 ### Added
@@ -429,28 +456,3 @@ All notable changes to ZiFile are documented here. The format follows
   single-file stream formats before opening a save dialog or starting the Worker.
 - The Cargo workspace version is the single source for packages, documentation, tags,
   Release runs, and deterministic four-part MSIX version mapping.
-
-## [Unreleased]
-
-### Added
-
-- Show non-empty create-source validation failures inline in the Iced create
-  page while keeping the Create action disabled until the sources are valid.
-- Add a bilingual keyboard-shortcut reference to both desktop About pages for
-  open, create, archive selection, help, and operation cancellation. Regression
-  tests keep the visible key combinations aligned with the implemented maps.
-- Add a bilingual status-bar action in both desktop UIs that reveals the most
-  recent successfully created archive or extraction destination in File
-  Explorer. New work, failures, and protocol mismatches clear the action.
-
-### Changed
-
-- Generate and verify WinGet candidates from the same public all-in-one MSIX
-  bundle used by GitHub Releases, without unpublished per-architecture MSIX
-  inputs.
-- Clear the create-form password in both desktop UIs immediately after a create
-  request is accepted for execution or queuing, while retaining it when a full
-  queue rejects the request so the user can retry.
-- Retry the pinned WinGet validation-client repair up to three times with
-  bounded backoff for transient CDN connection failures, and record the retry
-  limit in validation evidence.
