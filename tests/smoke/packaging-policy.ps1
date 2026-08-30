@@ -37,8 +37,9 @@ $msixAssets = Join-Path $repoRoot 'packaging\msix\Test-Assets.ps1'
 $embeddedIconAudit = Join-Path $repoRoot 'packaging\msix\Test-EmbeddedIcon.ps1'
 $storeListingAssets = Join-Path $repoRoot 'packaging\store\Test-ListingAssets.ps1'
 $storeListingAssetSmoke = Join-Path $repoRoot 'tests\smoke\store-listing-assets.ps1'
+$publicReleaseAssetSmoke = Join-Path $repoRoot 'tests\smoke\public-release-assets.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageBundle, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $windowsTools, $contractPolicy, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground, $msixAssets, $embeddedIconAudit, $storeListingAssets, $storeListingAssetSmoke)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageBundle, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $windowsTools, $contractPolicy, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground, $msixAssets, $embeddedIconAudit, $storeListingAssets, $storeListingAssetSmoke, $publicReleaseAssetSmoke)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -200,6 +201,42 @@ $versionFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
 )))
 if (-not $versionFixture.StartsWith($temporaryBase, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw 'Refusing to create the version-policy fixture outside the system temporary directory.'
+}
+$publicReleaseFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
+    'zifile-public-release-policy-{0}' -f [Guid]::NewGuid().ToString('N')
+)))
+if (-not $publicReleaseFixture.StartsWith($temporaryBase, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Refusing to create the public-release fixture outside the system temporary directory.'
+}
+try {
+    New-Item -ItemType Directory -Path $publicReleaseFixture -Force | Out-Null
+    foreach ($asset in @{
+        'ZiFile-0.1.3.0-windows.msixbundle' = 'all-in-one bundle fixture'
+        'zifile-windows-x64.exe' = 'x64 portable fixture'
+        'zifile-windows-arm64.exe' = 'arm64 portable fixture'
+    }.GetEnumerator()) {
+        Set-Content -LiteralPath (Join-Path $publicReleaseFixture $asset.Key) -Value $asset.Value -NoNewline -Encoding utf8NoBOM
+    }
+    $checksumLines = foreach ($asset in Get-ChildItem -LiteralPath $publicReleaseFixture -File | Sort-Object Name) {
+        $hash = (Get-FileHash -LiteralPath $asset.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        "${hash}  ./$($asset.Name)"
+    }
+    Set-Content -LiteralPath (Join-Path $publicReleaseFixture 'SHA256SUMS.txt') -Value ($checksumLines -join "`n") -Encoding utf8NoBOM
+    $publicReleaseResult = & $publicReleaseAssetSmoke -Directory $publicReleaseFixture -Version '0.1.3' | ConvertFrom-Json
+    if (-not $publicReleaseResult.checksums_verified -or
+        -not $publicReleaseResult.forbidden_internal_assets_absent -or
+        $publicReleaseResult.user_facing_asset_count -ne 4) {
+        throw 'The public-release asset audit did not accept its valid fixture.'
+    }
+    Set-Content -LiteralPath (Join-Path $publicReleaseFixture 'unexpected.dll') -Value 'forbidden' -Encoding utf8NoBOM
+    $null = Get-ExpectedFailure -Pattern 'exactly' -Action {
+        & $publicReleaseAssetSmoke -Directory $publicReleaseFixture -Version '0.1.3'
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $publicReleaseFixture) {
+        Remove-Item -LiteralPath $publicReleaseFixture -Recurse -Force
+    }
 }
 try {
     New-Item -ItemType Directory -Path (Join-Path $versionFixture 'docs') -Force | Out-Null
@@ -748,6 +785,19 @@ foreach ($requiredPublicReleaseToken in @(
 )) {
     if ($releaseSource -notmatch [Regex]::Escape($requiredPublicReleaseToken)) {
         throw "The stable GitHub release does not publish the unsigned public build: $requiredPublicReleaseToken"
+    }
+}
+$publicReleaseAssetSmokeSource = Get-Content -Raw -LiteralPath $publicReleaseAssetSmoke
+foreach ($requiredPublicReleaseAuditToken in @(
+    'Audit user-facing release assets',
+    'Audit user-facing stage assets',
+    'tests/smoke/public-release-assets.ps1',
+    'exactly one entry for each user-facing installer and portable executable',
+    'forbidden_internal_assets_absent'
+)) {
+    if ($releaseSource -notmatch [Regex]::Escape($requiredPublicReleaseAuditToken) -and
+        $publicReleaseAssetSmokeSource -notmatch [Regex]::Escape($requiredPublicReleaseAuditToken)) {
+        throw "Public release asset audit omits required token: $requiredPublicReleaseAuditToken"
     }
 }
 $manifestSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'packaging\msix\AppxManifest.xml')
