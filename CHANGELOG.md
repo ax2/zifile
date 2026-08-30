@@ -11,6 +11,9 @@ All notable changes to ZiFile are documented here. The format follows
 - Add `Ctrl+R` to reload the current archive in both desktop UIs, expose the
   shortcut on semantic reload controls, and include it in bilingual shortcut
   help and user documentation.
+- Add `Ctrl+F` to move directly to the loaded archive's search field in both
+  desktop UIs while preserving the current query, with semantic metadata and
+  bilingual help.
 
 ## [0.1.5] - 2026-08-31
 

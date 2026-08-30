@@ -25,6 +25,7 @@ Preferences are written to a temporary file, flushed and synced, then atomically
 | `Ctrl+O` | Open an archive |
 | `Ctrl+N` | Open the create page |
 | `Ctrl+R` | Reload the current archive |
+| `Ctrl+F` | Focus search for the current archive |
 | `Ctrl+A` | Select every entry while the archive region is focused |
 | `F1` | Open About and keyboard-shortcut help |
 | `Escape` | Cancel the current cancellable operation |
