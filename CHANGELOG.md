@@ -40,7 +40,7 @@ All notable changes to ZiFile are documented here. The format follows
 - Recomputed stable-release checksums after cloud signing replaces the staged
   executable and package files.
 
-## [Unreleased]
+## [0.1.1] - 2026-08-30
 
 ### Added
 
@@ -390,3 +390,7 @@ All notable changes to ZiFile are documented here. The format follows
   single-file stream formats before opening a save dialog or starting the Worker.
 - The Cargo workspace version is the single source for packages, documentation, tags,
   Release runs, and deterministic four-part MSIX version mapping.
+
+## [Unreleased]
+
+Future changes will be recorded here.
