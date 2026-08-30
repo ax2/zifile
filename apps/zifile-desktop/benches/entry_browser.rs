@@ -2,12 +2,13 @@ use std::collections::HashSet;
 use std::hint::black_box;
 use std::path::{Path, PathBuf};
 
-use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use zifile_core::{ArchiveEntryInfo, ArchiveFormat, ArchiveInfo};
 use zifile_desktop::entry_view::{
     EntrySort, SortDirection, browser_entry_page, child_directory_selections, filtered_entry_count,
     filtered_entry_page, sorted_filtered_entry_page,
 };
+use zifile_desktop::invert_archive_file_selection;
 
 fn archive_with_100k_entries() -> ArchiveInfo {
     ArchiveInfo {
@@ -108,6 +109,19 @@ fn entry_browser(criterion: &mut Criterion) {
             assert_eq!(counts[Path::new("folder")].total, 100_000);
             black_box(counts);
         });
+    });
+    group.bench_function("invert half selection", |bencher| {
+        bencher.iter_batched(
+            || selected.clone(),
+            |mut selection| {
+                assert_eq!(
+                    invert_archive_file_selection(black_box(&archive), &mut selection),
+                    50_000
+                );
+                black_box(selection);
+            },
+            BatchSize::SmallInput,
+        );
     });
     group.finish();
 }
