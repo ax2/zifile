@@ -6,6 +6,8 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-08-31
+
 ### Added
 
 - Add `Ctrl+R` to reload the current archive in both desktop UIs, expose the
