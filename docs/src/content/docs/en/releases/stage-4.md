@@ -179,3 +179,9 @@ Stable 1.0 has not been published; `v0.1.6` is the current usable public GitHub 
 - Both archive pages now expose explicit `Select all`, `Select none`, and `Invert selection` actions instead of requiring users to infer clearing from a changing checkbox state. Bulk scope is every regular file in the archive, independent of folder, search, or pagination.
 - Exact `Ctrl+I` inversion joins the existing `Ctrl+A` select-all path. Dioxus controls expose `aria-keyshortcuts="Control+I"`; bulk changes report the new count through the existing status region and retain IME composition protection.
 - A shared linear helper ignores directories and updates the set in place. Unit coverage uses a mixed file/directory archive, Criterion adds a half-selected 100,000-file inversion benchmark, and both UIs lock shortcut wiring and visible help.
+
+## 2026-08-31 — Complete standalone EXE round-trip gate
+
+- The desktop EXE is confirmed to spawn its constrained isolated child from its own path with `--zifile-worker`, so the public single-file download does not depend on an adjacent `zifile-worker.exe`.
+- The x64 Release smoke advances from reading an externally authored ZIP to using only that EXE to create a ZIP, list its entry, extract it, and byte-compare the source; the temporary directory explicitly rejects any adjacent Worker.
+- ARM64 retains PE-architecture and no-adjacent-Worker audits on the x64 runner. Full execution remains a physical ARM64 gate rather than being overstated from a cross-architecture static check.
