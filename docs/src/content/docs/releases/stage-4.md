@@ -130,3 +130,9 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - [Release workflow 33327132468](https://github.com/ax2/zifile/actions/runs/33327132468) 成功完成工作区测试、双架构构建、x64 独立 EXE 冒烟、ARM64 PE 架构审计、all-in-one MSIX Bundle、来源证明和公开发布。
 - [v0.1.5 Release](https://github.com/ax2/zifile/releases/tag/v0.1.5) 为非草稿、非预发布版本，公开资产严格为 `ZiFile-0.1.5.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`，没有附带 DLL、JSON、YAML、SBOM 或来源证明内部文件。
 - 发布后重新下载四个公开文件；MSIX Bundle、x64 EXE 和 ARM64 EXE 的 SHA-256 均与 `SHA256SUMS.txt` 及 GitHub asset digest 一致。该证据证明 GitHub 发布完整性，不替代可信签名、WACK、Store、WinGet 或物理 ARM64 运行门禁。
+
+## 2026-08-31 — 归档重新加载快捷键
+
+- 两套桌面 UI 原有“重新加载”按钮，但键盘用户需要遍历到按钮才能刷新已打开归档；文件管理器常用的 `Ctrl+R` 未接入，也未出现在快捷键帮助中。
+- 默认 Iced 与可访问候选现在把精确 `Ctrl+R` 映射到现有重新加载队列路径；没有当前或待打开归档时保持无操作，不猜测路径。可访问候选的重新加载/解锁按钮公开 `aria-keyshortcuts="Control+R"`。
+- 中英文关于页和用户文档同步加入快捷键；键盘映射、精确修饰键、可见帮助和辅助技术元数据由两套 UI 单测锁定。真实前台键盘与 Narrator 复验仍保留为外部门禁。

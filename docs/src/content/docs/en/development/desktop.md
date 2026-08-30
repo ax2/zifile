@@ -24,7 +24,9 @@ Preferences are written to a temporary file, flushed and synced, then atomically
 | --- | --- |
 | `Ctrl+O` | Open an archive |
 | `Ctrl+N` | Open the create page |
+| `Ctrl+R` | Reload the current archive |
 | `Ctrl+A` | Select every entry while the archive region is focused |
+| `F1` | Open About and keyboard-shortcut help |
 | `Escape` | Cancel the current cancellable operation |
 
 Search is immediate and results are paged at 500 rows, keeping 100,000-entry archives bounded. Safety limits still apply during listing. Worker byte progress, or entry progress when bytes are unavailable, is mirrored to the Windows taskbar.

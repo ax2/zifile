@@ -55,6 +55,7 @@ const ARCHIVE_FILTER_LIVE: &str = "off";
 const OPERATION_PROGRESS_LIVE: &str = "off";
 const ARIA_SHORTCUT_OPEN: &str = "Control+O";
 const ARIA_SHORTCUT_CREATE: &str = "Control+N";
+const ARIA_SHORTCUT_RELOAD: &str = "Control+R";
 const ARIA_SHORTCUT_ABOUT: &str = "F1";
 const ARIA_SHORTCUT_CANCEL: &str = "Escape";
 const ARIA_SHORTCUT_SELECT_ALL: &str = "Control+A";
@@ -122,6 +123,7 @@ fn lock_operation_queue(
 enum AccessibleShortcut {
     Open,
     Create,
+    Reload,
     About,
     Cancel,
 }
@@ -411,6 +413,7 @@ fn AboutPage(state: Signal<UiState>) -> Element {
             dl {
                 div { dt { kbd { "Ctrl+O" } } dd { {locale.text(Text::ShortcutOpen)} } }
                 div { dt { kbd { "Ctrl+N" } } dd { {locale.text(Text::ShortcutCreate)} } }
+                div { dt { kbd { "Ctrl+R" } } dd { {locale.text(Text::ShortcutReload)} } }
                 div { dt { kbd { "Ctrl+A" } } dd { {locale.text(Text::ShortcutSelectAll)} } }
                 div { dt { kbd { "F1" } } dd { {locale.text(Text::ShortcutAbout)} } }
                 div { dt { kbd { "Esc" } } dd { {locale.text(Text::ShortcutCancel)} } }
@@ -450,7 +453,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                     label { span { {locale.text(Text::PasswordEncrypted)} }
                         input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() }
                     }
-                    button { class: "primary", disabled: pending.is_none() || view.busy, onclick: move |_| reload_archive(state), {locale.text(Text::UnlockArchive)} }
+                    button { class: "primary", disabled: pending.is_none() || view.busy, "aria-keyshortcuts": ARIA_SHORTCUT_RELOAD, onclick: move |_| reload_archive(state), {locale.text(Text::UnlockArchive)} }
                 }
                 button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} }
             }
@@ -522,7 +525,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 button { onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} } } }
         div { class: "toolbar",
             label { span { {locale.text(Text::PasswordEncrypted)} } input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() } }
-            button { onclick: move |_| reload_archive(state), {locale.text(Text::Reload)} }
+            button { "aria-keyshortcuts": ARIA_SHORTCUT_RELOAD, onclick: move |_| reload_archive(state), {locale.text(Text::Reload)} }
             div { class: "search-field",
                 div { class: "search-row",
                     label { span { {locale.text(Text::Search)} }
@@ -811,6 +814,7 @@ fn accessible_shortcut(
     match key.to_ascii_lowercase().as_str() {
         "o" => Some(AccessibleShortcut::Open),
         "n" => Some(AccessibleShortcut::Create),
+        "r" => Some(AccessibleShortcut::Reload),
         _ => None,
     }
 }
@@ -832,6 +836,7 @@ fn apply_accessible_shortcut(mut state: Signal<UiState>, shortcut: AccessibleSho
     match shortcut {
         AccessibleShortcut::Open => open_archive_dialog(state),
         AccessibleShortcut::Create => state.write().page = Page::Create,
+        AccessibleShortcut::Reload => reload_archive(state),
         AccessibleShortcut::About => state.write().page = Page::About,
         AccessibleShortcut::Cancel => cancel_operation(state),
     }
@@ -1970,6 +1975,7 @@ mod tests {
         for (keys, text_key) in [
             ("Ctrl+O", "Text::ShortcutOpen"),
             ("Ctrl+N", "Text::ShortcutCreate"),
+            ("Ctrl+R", "Text::ShortcutReload"),
             ("Ctrl+A", "Text::ShortcutSelectAll"),
             ("F1", "Text::ShortcutAbout"),
             ("Esc", "Text::ShortcutCancel"),
@@ -2300,6 +2306,14 @@ mod tests {
             Some(AccessibleShortcut::Create)
         );
         assert_eq!(
+            accessible_shortcut("r", Modifiers::CONTROL, false),
+            Some(AccessibleShortcut::Reload)
+        );
+        assert_eq!(
+            accessible_shortcut("r", Modifiers::CONTROL | Modifiers::SHIFT, false),
+            None
+        );
+        assert_eq!(
             accessible_shortcut("Escape", Modifiers::empty(), true),
             Some(AccessibleShortcut::Cancel)
         );
@@ -2335,6 +2349,7 @@ mod tests {
     fn handled_shortcuts_are_exposed_to_assistive_technology() {
         assert_eq!(ARIA_SHORTCUT_OPEN, "Control+O");
         assert_eq!(ARIA_SHORTCUT_CREATE, "Control+N");
+        assert_eq!(ARIA_SHORTCUT_RELOAD, "Control+R");
         assert_eq!(ARIA_SHORTCUT_ABOUT, "F1");
         assert_eq!(ARIA_SHORTCUT_CANCEL, "Escape");
         assert_eq!(ARIA_SHORTCUT_SELECT_ALL, "Control+A");
@@ -2343,6 +2358,7 @@ mod tests {
         for shortcut in [
             "ARIA_SHORTCUT_OPEN",
             "ARIA_SHORTCUT_CREATE",
+            "ARIA_SHORTCUT_RELOAD",
             "ARIA_SHORTCUT_ABOUT",
             "ARIA_SHORTCUT_CANCEL",
             "ARIA_SHORTCUT_SELECT_ALL",
