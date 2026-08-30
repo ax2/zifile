@@ -1187,7 +1187,10 @@ foreach ($requiredWingetClientToken in @(
     "[string]`$ClientVersion = '1.29.280'",
     'Install-Module',
     'Microsoft.WinGet.Client',
+    'for ($attempt = 1; $attempt -le $RepairAttempts; $attempt++)',
     'Repair-WinGetPackageManager -Version $ClientVersion -Force',
+    'Start-Sleep -Seconds $delaySeconds',
+    'repair_attempts = $RepairAttempts',
     'current_stable_client_pinned = $true'
 )) {
     if ($wingetClientInstallerSource -notmatch [Regex]::Escape($requiredWingetClientToken)) {
