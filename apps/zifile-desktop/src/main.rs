@@ -197,6 +197,7 @@ enum Message {
     ConflictChanged(ConflictChoice),
     Extract,
     ExtractAll,
+    ExtractToNamedFolder,
     ExtractDialogFinished(Option<PathBuf>, bool),
     ExtractFinished(u64, Option<PathBuf>, Result<OperationSummary, String>),
     TestArchive,
@@ -536,6 +537,10 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::ExtractAll => {
             return extraction_dialog_task(state, true);
+        }
+        Message::ExtractToNamedFolder => {
+            return quick_extraction_operation(state)
+                .map_or_else(Task::none, |operation| submit_operation(state, operation));
         }
         Message::ExtractDialogFinished(destination, extract_all) => {
             state.dialog_open = false;
@@ -1075,6 +1080,11 @@ fn extract_operation(
         ),
         archive_path: None,
     })
+}
+
+fn quick_extraction_operation(state: &ZiFile) -> Option<QueuedOperation> {
+    let destination = startup::extraction_destination(&state.archive.as_ref()?.path);
+    extract_operation(state, destination, true)
 }
 
 fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Message> {
@@ -1632,6 +1642,9 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         button(state.locale.text(Text::ExtractSelected))
             .style(button::secondary)
             .on_press_maybe((!state.selected.is_empty()).then_some(Message::Extract)),
+        button(state.locale.text(Text::ExtractToNamedFolder))
+            .style(button::secondary)
+            .on_press(Message::ExtractToNamedFolder),
         button(state.locale.text(Text::ExtractAll))
             .style(button::primary)
             .on_press(Message::ExtractAll),
@@ -2705,9 +2718,43 @@ mod tests {
         let source = include_str!("main.rs");
         assert!(source.contains("Text::ExtractSelected"));
         assert!(source.contains(".style(button::secondary)"));
+        assert!(source.contains("Text::ExtractToNamedFolder"));
+        assert!(source.contains("Message::ExtractToNamedFolder"));
         assert!(source.contains("Text::ExtractAll"));
         assert!(source.contains(".style(button::primary)"));
         assert!(source.contains("Message::ExtractAll"));
+    }
+
+    #[test]
+    fn quick_extraction_targets_the_matching_sibling_folder_and_all_entries() {
+        let state = ZiFile {
+            archive: Some(ArchiveInfo {
+                path: PathBuf::from(r"C:\archives\backup.tar.gz"),
+                format: ArchiveFormat::TarGzip,
+                entries: Vec::new(),
+                total_size: 0,
+                compressed_size: 0,
+            }),
+            selected: HashSet::from([PathBuf::from("partial.txt")]),
+            password: "session-secret".to_owned(),
+            ..ZiFile::default()
+        };
+
+        let operation = quick_extraction_operation(&state).expect("archive should be extractable");
+        let WorkerRequest::Extract {
+            archive,
+            destination,
+            password,
+            selected_paths,
+            ..
+        } = operation.request
+        else {
+            panic!("quick extraction should create an extract request");
+        };
+        assert_eq!(archive, PathBuf::from(r"C:\archives\backup.tar.gz"));
+        assert_eq!(destination, PathBuf::from(r"C:\archives\backup"));
+        assert_eq!(password.as_deref(), Some("session-secret"));
+        assert!(selected_paths.is_none());
     }
 
     #[test]

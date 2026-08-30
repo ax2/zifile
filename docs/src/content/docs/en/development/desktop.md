@@ -33,6 +33,8 @@ Preferences are written to a temporary file, flushed and synced, then atomically
 
 The archive header also exposes a `Close archive` button. Closing immediately releases the current archive password, metadata, selection, search, and folder-navigation state, then returns home. The current archive cannot be closed while an operation or queue handoff is active.
 
+`Extract to named folder` skips the folder picker and extracts every entry to a matching directory beside the archive: `sample.zip` uses `sample/`, while `backup.tar.gz` uses `backup/`. It shares naming rules with the File Explorer command and keeps the current conflict policy, operation queue, isolated Worker, and post-completion `Show output` action. Use `Extract all` when choosing a different destination.
+
 Search is immediate and results are paged at 500 rows, keeping 100,000-entry archives bounded. Safety limits still apply during listing. Worker byte progress, or entry progress when bytes are unavailable, is mirrored to the Windows taskbar.
 
 ## Integrity-test checksums
