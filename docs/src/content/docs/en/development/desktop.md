@@ -28,10 +28,13 @@ Settings are written to a temporary file, flushed and synced, then atomically re
 | `Ctrl+F` | Focus search for the current archive |
 | `Ctrl+W` | Close the current archive and return home |
 | `Ctrl+A` | Select every entry while the archive region is focused |
+| `Ctrl+I` | Invert every file selection in the current archive |
 | `F1` | Open About and keyboard-shortcut help |
 | `Escape` | Cancel the current cancellable operation |
 
 The archive header also exposes a `Close archive` button. Closing immediately releases the current archive password, metadata, selection, search, and folder-navigation state, then returns home. The current archive cannot be closed while an operation or queue handoff is active.
+
+The archive selection bar provides explicit `Select all`, `Select none`, and `Invert selection` actions. Their scope is every regular file in the archive, independent of the current folder, search query, or page; directories remain navigation nodes. `Ctrl+A` selects all and `Ctrl+I` inverts selection, with each bulk change reporting the new selected count in the status region.
 
 `Extract to named folder` skips the folder picker and extracts every entry to a matching directory beside the archive: `sample.zip` uses `sample/`, while `backup.tar.gz` uses `backup/`. It shares naming rules with the File Explorer command and keeps the current conflict policy, operation queue, isolated Worker, and post-completion `Show output` action. Use `Extract all` when choosing a different destination.
 
