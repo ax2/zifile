@@ -15,7 +15,7 @@ ZiFile requires no account and contains no advertising, analytics SDK, default t
 
 Files and archives that the user selects or drops are processed only on the device. Input files, created archives, and extracted results remain in locations selected by the user on the local file system. ZiCode does not receive this content and sets no remote retention period for it.
 
-ZIP and 7z passwords are passed and used only for the current operation. They are not written to settings, logs, or command-line arguments. The CLI reads passwords from standard input. The app does not intentionally retain a password after the operation; as with any desktop process, data can exist briefly in memory while the process is running.
+ZIP and 7z passwords are passed and used locally and are not written to settings, logs, or command-line arguments. The CLI reads passwords from standard input. After a create request is accepted for execution or queuing, the desktop immediately clears the create-form password. A password used to open an encrypted archive remains only for that archive session so subsequent test or extract operations can reuse it, and is released when another archive is opened or the app exits. Queued request snapshots release their passwords after completion, clearing, or exit. As with any desktop process, data can exist briefly in memory while the process is running.
 
 ZiFile stores only non-sensitive preferences such as interface language and theme in `%LOCALAPPDATA%\ZiFile\settings.conf`. Users can change them in the app or delete that file after closing ZiFile. Whether uninstall or Windows app reset removes a file in an ordinary desktop path depends on deployment behavior, so this statement does not promise automatic removal.
 

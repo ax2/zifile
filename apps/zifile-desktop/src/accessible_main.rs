@@ -1197,6 +1197,7 @@ fn launch_worker(
     kind: OperationKind,
     status: String,
 ) {
+    let submitted_kind = kind;
     let archive_path = match &request {
         WorkerRequest::List { archive, .. } => Some(archive.clone()),
         _ => None,
@@ -1210,8 +1211,12 @@ fn launch_worker(
     let operations = state.read().operations.clone();
     let submission = lock_operation_queue(&operations).submit(operation);
     match submission {
-        Ok(Submission::Start(job)) => start_worker(state, job),
+        Ok(Submission::Start(job)) => {
+            clear_submitted_create_password(&mut state.write(), submitted_kind, true);
+            start_worker(state, job);
+        }
         Ok(Submission::Queued { position, .. }) => {
+            clear_submitted_create_password(&mut state.write(), submitted_kind, true);
             let locale = state.read().locale;
             let status = match locale {
                 Locale::En => format!(
@@ -1222,6 +1227,7 @@ fn launch_worker(
             state.write().set_status(status);
         }
         Err(error) => {
+            clear_submitted_create_password(&mut state.write(), submitted_kind, false);
             let locale = state.read().locale;
             let status = match locale {
                 Locale::En => format!("Operation queue is full (maximum {})", error.capacity),
@@ -1229,6 +1235,12 @@ fn launch_worker(
             };
             state.write().set_error(status);
         }
+    }
+}
+
+fn clear_submitted_create_password(state: &mut UiState, kind: OperationKind, accepted: bool) {
+    if accepted && kind == OperationKind::Create {
+        state.create_password.clear();
     }
 }
 
@@ -1928,6 +1940,23 @@ mod tests {
             )));
         }
         assert!(STYLES.contains(".shortcut-help kbd"));
+    }
+
+    #[test]
+    fn accepted_create_submission_releases_the_form_password() {
+        let mut state = UiState {
+            create_password: "not-for-retention".to_owned(),
+            ..UiState::default()
+        };
+        clear_submitted_create_password(&mut state, OperationKind::Create, true);
+        assert!(state.create_password.is_empty());
+
+        state.create_password.push_str("retry-secret");
+        clear_submitted_create_password(&mut state, OperationKind::Create, false);
+        assert_eq!(state.create_password, "retry-secret");
+
+        clear_submitted_create_password(&mut state, OperationKind::Extract, true);
+        assert_eq!(state.create_password, "retry-secret");
     }
 
     #[test]

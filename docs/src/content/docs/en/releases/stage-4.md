@@ -98,3 +98,9 @@ Stable 1.0 has not been published; `v0.1.4` is the current usable public GitHub 
 - The default Iced desktop already handled `Ctrl+O` for open, `Ctrl+N` for create, archive-page `Ctrl+A` for select all, `F1` for help, and `Esc` for cancellation, but previously exposed no visible user reference.
 - The About pages in both the default Iced UI and accessible candidate now present all five shortcuts and their actions as a bilingual keycap list. A default-UI source regression binds the displayed combinations to the implemented keyboard map so one side cannot silently drift.
 - `cargo fmt --all -- --check`, `cargo test -p zifile-desktop --all-targets --all-features --locked`, and full-workspace Clippy pass, covering 32 shared desktop library tests, 37 default application tests, 38 accessible-candidate tests, and six 100,000-entry browser benchmarks. This code-level evidence does not replace real foreground keyboard traversal, Narrator, high-contrast, or visible-focus acceptance.
+
+## 2026-08-31 — Create-password lifecycle closeout
+
+- The default Iced UI and accessible candidate previously retained a create password in form state after the request had already entered execution or the in-memory queue, which was broader than the temporary-retention boundary described by the public privacy statement.
+- Both UIs now clear the create-form password immediately only when submission is accepted. A full queue leaves the rejected input available for retry. Worker and queue snapshots continue to release their data on completion, clearing, or exit and never write it to settings or logs.
+- New tests cover accepted clearing, rejected retention, and non-create isolation in both implementations. Archive decryption passwords remain scoped to the current archive session so later test and extract operations continue to work.

@@ -445,6 +445,9 @@ All notable changes to ZiFile are documented here. The format follows
 - Generate and verify WinGet candidates from the same public all-in-one MSIX
   bundle used by GitHub Releases, without unpublished per-architecture MSIX
   inputs.
+- Clear the create-form password in both desktop UIs immediately after a create
+  request is accepted for execution or queuing, while retaining it when a full
+  queue rejects the request so the user can retry.
 - Retry the pinned WinGet validation-client repair up to three times with
   bounded backoff for transient CDN connection failures, and record the retry
   limit in validation evidence.

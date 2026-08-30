@@ -1027,9 +1027,14 @@ fn extract_operation(
 }
 
 fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Message> {
+    let kind = operation.kind;
     match state.operations.submit(operation) {
-        Ok(Submission::Start(job)) => start_operation(state, job),
+        Ok(Submission::Start(job)) => {
+            clear_submitted_create_password(&mut state.create_password, kind, true);
+            start_operation(state, job)
+        }
         Ok(Submission::Queued { position, .. }) => {
+            clear_submitted_create_password(&mut state.create_password, kind, true);
             set_status(
                 state,
                 match state.locale {
@@ -1042,6 +1047,7 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
             Task::none()
         }
         Err(error) => {
+            clear_submitted_create_password(&mut state.create_password, kind, false);
             set_error(
                 state,
                 match state.locale {
@@ -1051,6 +1057,12 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
             );
             Task::none()
         }
+    }
+}
+
+fn clear_submitted_create_password(password: &mut String, kind: OperationKind, accepted: bool) {
+    if accepted && kind == OperationKind::Create {
+        password.clear();
     }
 }
 
@@ -2133,6 +2145,20 @@ mod tests {
         ] {
             assert!(source.contains(&format!("shortcut(\"{keys}\", locale.text({text_key}))")));
         }
+    }
+
+    #[test]
+    fn accepted_create_submission_releases_the_form_password() {
+        let mut password = "not-for-retention".to_owned();
+        clear_submitted_create_password(&mut password, OperationKind::Create, true);
+        assert!(password.is_empty());
+
+        password.push_str("retry-secret");
+        clear_submitted_create_password(&mut password, OperationKind::Create, false);
+        assert_eq!(password, "retry-secret");
+
+        clear_submitted_create_password(&mut password, OperationKind::Extract, true);
+        assert_eq!(password, "retry-secret");
     }
 
     #[test]
