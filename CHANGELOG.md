@@ -10,8 +10,11 @@ All notable changes to ZiFile are documented here. The format follows
 
 - Add a bilingual recent-archives section to both desktop home pages. The eight
   most recently opened archives are persisted only after successful listing,
-  deduplicated with Windows path identity, reusable with one click, and
-  clearable without affecting files or active archive state.
+  deduplicated with Windows path identity, reusable with one click, removable
+  individually or clearable without affecting files or active archive state.
+- Align the README, bilingual privacy policy, and desktop documentation with
+  recent-path persistence, including local retention, user controls, and the
+  explicit statement that hexadecimal field encoding is not encryption.
 
 ## [0.1.6] - 2026-08-31
 

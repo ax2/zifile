@@ -3,7 +3,7 @@ title: Privacy statement
 description: How ZiFile handles files, passwords, settings, and diagnostics locally.
 ---
 
-Effective and last updated: August 25, 2026.
+Effective: August 25, 2026. Last updated: August 31, 2026.
 
 ZiFile is published by ZiCode and is an open-source Windows archive utility licensed under the MIT License. This statement applies to the ZiFile desktop app, command-line tool, isolated Worker, and File Explorer extension.
 
@@ -17,7 +17,9 @@ Files and archives that the user selects or drops are processed only on the devi
 
 ZIP and 7z passwords are passed and used locally and are not written to settings, logs, or command-line arguments. The CLI reads passwords from standard input. After a create request is accepted for execution or queuing, the desktop immediately clears the create-form password. A password used to open an encrypted archive remains only for that archive session so subsequent test or extract operations can reuse it, and is released when another archive is opened or the app exits. Queued request snapshots release their passwords after completion, clearing, or exit. As with any desktop process, data can exist briefly in memory while the process is running.
 
-ZiFile stores only non-sensitive preferences such as interface language and theme in `%LOCALAPPDATA%\ZiFile\settings.conf`. Users can change them in the app or delete that file after closing ZiFile. Whether uninstall or Windows app reset removes a file in an ordinary desktop path depends on deployment behavior, so this statement does not promise automatic removal.
+ZiFile stores interface language, theme, and up to eight local archive paths that the Worker opened successfully in `%LOCALAPPDATA%\ZiFile\settings.conf`. These paths power the home-page recent list. Failed open requests are not recorded, and passwords and archive contents are not written to this file. Paths use hexadecimal field encoding to protect the configuration structure, not encryption; anyone who can read the current Windows user's profile can recover them.
+
+Users can remove one recent entry, clear all recent history, or delete `settings.conf` after closing ZiFile. An entry remains until displaced by a newer item, removed or cleared by the user, or removed with the settings file. Removing history does not delete the referenced file. Whether uninstall or Windows app reset removes a settings file in an ordinary desktop path depends on deployment behavior, so this statement does not promise automatic removal.
 
 ## Network and third parties
 

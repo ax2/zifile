@@ -16,7 +16,7 @@ $password | zifile extract archive.7z output --password-stdin
 
 ## Settings and shortcuts
 
-The first launch selects Simplified Chinese or English from the system locale. Language and light/dark theme can be changed at any time. `%LOCALAPPDATA%\ZiFile\settings.conf` stores those preferences and up to eight local archive paths that were listed successfully; passwords, archive contents, and failed-open paths are never stored. Recent entries use Windows path identity for deduplication and can be reopened or cleared from the home page. Clearing removes only local history, not files or the active archive session.
+The first launch selects Simplified Chinese or English from the system locale. Language and light/dark theme can be changed at any time. `%LOCALAPPDATA%\ZiFile\settings.conf` stores those preferences and up to eight local archive paths that were listed successfully; passwords, archive contents, and failed-open paths are never stored. Recent entries use Windows path identity for deduplication and can be reopened, removed individually, or cleared from the home page. These controls remove only local history, not files or the active archive session.
 
 Settings are written to a temporary file, flushed and synced, then atomically replaced on Windows. Paths use a bounded hexadecimal field encoding so line breaks or equals signs cannot alter the configuration structure; save failures are surfaced in both UIs instead of silently leaving a partial settings file.
 
@@ -49,12 +49,13 @@ table.
 
 After opening an archive, `Show in File Explorer` in the header opens its
 containing folder and selects the current file. This is a local action; a
-launch failure is surfaced as an error status, and the path is not written to
-settings or logs.
+launch failure is surfaced as an error status. Successfully opening the archive
+already updates recent history under the policy above; `Show in File Explorer`
+does not add another settings entry or log record.
 
 ## Operation queue
 
-Open, reload, test, extract, and create requests may be submitted while work is running. A 32-item in-memory FIFO executes snapshots in order. Clearing removes only waiting work; cancel affects only the current Worker and then advances the queue. Both desktop UIs clear the create-form password as soon as a create request is accepted for execution or queuing, while retaining the input when a full queue rejects the request for retry. Request snapshots release paths and passwords after clearing, completion, or exit and never write them to settings or logs.
+Open, reload, test, extract, and create requests may be submitted while work is running. A 32-item in-memory FIFO executes snapshots in order. Clearing removes only waiting work; cancel affects only the current Worker and then advances the queue. Both desktop UIs clear the create-form password as soon as a create request is accepted for execution or queuing, while retaining the input when a full queue rejects the request for retry. Request snapshots release paths and passwords after clearing, completion, or exit. Settings and logs do not retain the queue, passwords, create sources, or output destinations; only a successfully listed archive path is persisted under the recent-history policy above.
 
 After successful creation or extraction, the status bar provides a bilingual `Show output` action that selects the generated archive or extraction directory in File Explorer. Starting new work clears the old output action; failures, cancellation, and Worker protocol result-type mismatches never leave a clickable success path, so status text and follow-up action cannot refer to different jobs.
 

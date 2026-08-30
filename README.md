@@ -12,14 +12,16 @@ read-only beta providers.
 
 The current build is feature-complete for the currently supported archive contract:
 the source, x64/ARM64 builds, package audits, reproducibility checks and release
-rehearsals are automated. The public [`v0.1.4` GitHub release](https://github.com/ax2/zifile/releases/tag/v0.1.4)
+rehearsals are automated. The public [`v0.1.6` GitHub release](https://github.com/ax2/zifile/releases/tag/v0.1.6)
 uses unsigned artifacts; a stable 1.0 release is still gated on
 trusted signing, real foreground Windows validation, physical ARM64, WACK,
 Partner Center/Microsoft Store certification and WinGet acceptance.
 
 The desktop UI is available in Simplified Chinese and English, follows the
-system language on first launch, and persists only the selected language and
-theme. Archive rows are searchable and paged in bounded groups of 500 so very
+system language on first launch, and persists the selected language, theme, and
+up to eight successfully opened local archive paths. Recent history can be
+reopened, removed one item at a time, or cleared from the home page; passwords
+and archive contents are never persisted. Archive rows are searchable and paged in bounded groups of 500 so very
 large listings do not create an unbounded widget tree.
 
 The packaged Windows 11 Explorer integration adds a create command for selected
