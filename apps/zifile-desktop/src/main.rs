@@ -1765,6 +1765,16 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
     let source_issue = create_source_issue(state.create_format, &state.create_sources);
     let single_file_format =
         state.create_format.create_input() == Some(CreateInputKind::SingleFile);
+    let validation_notice: Element<'_, Message> = match source_issue {
+        Some(issue) if !state.create_sources.is_empty() => {
+            container(text(create_source_issue_text(state.locale, issue)))
+                .padding(12)
+                .width(Fill)
+                .style(container::danger)
+                .into()
+        }
+        _ => space().height(0).into(),
+    };
     let compression_control: Element<'_, Message> =
         if let Some((minimum, maximum)) = state.create_format.compression_level_range() {
             column![
@@ -1809,6 +1819,7 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
             state.create_sources.len()
         ))
         .size(13),
+        validation_notice,
         container(scrollable(sources).height(Length::Fixed(240.0)))
             .padding(16)
             .width(Fill)
@@ -2427,5 +2438,14 @@ mod tests {
         assert!(source.contains("Text::ExtractAll"));
         assert!(source.contains(".style(button::primary)"));
         assert!(source.contains("Message::ExtractAll"));
+    }
+
+    #[test]
+    fn create_view_surfaces_non_empty_source_validation_inline() {
+        let source = include_str!("main.rs");
+        assert!(source.contains("let validation_notice: Element<'_, Message>"));
+        assert!(source.contains("!state.create_sources.is_empty()"));
+        assert!(source.contains(".style(container::danger)"));
+        assert!(source.contains("validation_notice,"));
     }
 }
