@@ -17,7 +17,7 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 - `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, fifteen creation formats, seventeen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
 - `release/readiness.json` binds stable tags to accessibility, queue, trusted-install, ARM64, screenshot, WACK, WinGet, Store, Partner Center, and signing evidence.
 - The Release workflow derives dual-architecture builds, audits, checksums, SBOMs, provenance, and GitHub Releases from the workspace version; ordinary public releases use unsigned artifacts, while formal signing can be enabled explicitly through workflow inputs.
-- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, and `v0.1.3` have been published as public GitHub Releases from matching tags.
+- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, and `v0.1.4` have been published as public GitHub Releases from matching tags.
 
 ## Required to finish
 
@@ -27,7 +27,7 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 ## Release result
 
-Stable 1.0 has not been published; `v0.1.3` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+Stable 1.0 has not been published; `v0.1.4` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
 
 ## 2026-08-29 public release result
 
@@ -66,6 +66,12 @@ Stable 1.0 has not been published; `v0.1.3` is the current usable public GitHub 
 - The final public assets are exactly `ZiFile-0.1.3.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`. The desktop EXE embeds the Worker runtime and starts itself with `--zifile-worker`, so the portable downloads do not require a second Worker file.
 - The x64 portable EXE was downloaded from the published Release and matched `SHA256SUMS.txt`; the ARM64 hash is retained in the workflow-generated checksum manifest. The Release remains explicitly unsigned and is not a Store-certified package.
 - The ordinary public Release path still produces unsigned GitHub Windows artifacts; SignPath, WinGet community acceptance, Microsoft Store, WACK, physical ARM64, and full assistive-technology gates remain tracked independently. The standalone desktop EXEs are self-contained and do not require a separately downloaded Worker executable.
+
+## 2026-08-30 — 0.1.4 public release result
+
+- [`v0.1.4 Release`](https://github.com/ax2/zifile/releases/tag/v0.1.4) was published automatically by workflow [33315987748](https://github.com/ax2/zifile/actions/runs/33315987748); PR #51 passed version consistency, Rust quality, interoperability, performance, fuzz, and x64/ARM64 reproducible double-build checks.
+- The final public assets are exactly `ZiFile-0.1.4.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; standalone DLLs, JSON/YAML configuration, SBOM, and provenance files are not published separately.
+- The x64/ARM64 Windows jobs, all-in-one MSIX bundle job, SBOM job, and GitHub Release job all succeeded. The signing job was conditionally skipped because SignPath is not configured yet, so this remains an explicitly unsigned GitHub build.
 
 ## 2026-08-30 — Public Release asset audit fix
 
