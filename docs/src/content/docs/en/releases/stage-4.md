@@ -37,6 +37,7 @@ Stable 1.0 has not been published; `v0.1.0` is the current usable public GitHub 
 
 ## 2026-08-29 quality closeout
 
+- Both desktop archive views now provide a bilingual primary `Extract all` action while retaining precise `Extract selected`; archives opened from Explorer continue to extract all contents automatically, so users do not need to select every entry first.
 - Both desktop archive tables now provide a bilingual `Copy checksum` action: Iced uses the system clipboard, the accessible Dioxus UI uses the Clipboard API, and missing capability or Promise failure becomes an error state. Copy labels, wiring, and failure fallback are covered by tests.
 - Both desktop archive headers now provide a bilingual `Show in File Explorer` action that selects the current archive in its containing folder; launch failures become error status and the path is not persisted.
 - The accessible archive browser now uses a lightweight busy summary during high-frequency progress refreshes for large archives, retaining cancel, queue, open-another, and File Explorer actions before restoring the table after completion; this avoids repeatedly scanning 100,000 entries while foreground queue actions are submitted.

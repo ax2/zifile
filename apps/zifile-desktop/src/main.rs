@@ -186,7 +186,8 @@ enum Message {
     NextEntryPage,
     ConflictChanged(ConflictChoice),
     Extract,
-    ExtractDialogFinished(Option<PathBuf>),
+    ExtractAll,
+    ExtractDialogFinished(Option<PathBuf>, bool),
     ExtractFinished(u64, Result<OperationSummary, String>),
     TestArchive,
     TestFinished(u64, Result<ArchiveInfo, String>),
@@ -398,7 +399,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     state.pending_archive_requires_password = false;
                     state.page = Page::Archive;
                     if let Some(destination) = state.automatic_extract_destination.take()
-                        && let Some(operation) = extract_operation(state, destination)
+                        && let Some(operation) = extract_operation(state, destination, true)
                     {
                         drop(submit_operation(state, operation));
                     }
@@ -504,34 +505,15 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::ConflictChanged(conflict) => state.conflict = conflict,
         Message::Extract => {
-            if state.dialog_open {
-                return Task::none();
-            }
-            let Some(archive) = state.archive.as_ref() else {
-                return Task::none();
-            };
-            let default_folder = archive
-                .path
-                .parent()
-                .unwrap_or_else(|| Path::new("."))
-                .join(archive.path.file_stem().unwrap_or_default());
-            state.dialog_open = true;
-            let dialog = FileDialog::new()
-                .set_title(state.locale.text(Text::ChooseExtractionFolder))
-                .set_directory(default_folder.parent().unwrap_or_else(|| Path::new(".")));
-            return Task::perform(
-                async move {
-                    tokio::task::spawn_blocking(move || dialog.pick_folder())
-                        .await
-                        .unwrap_or(None)
-                },
-                Message::ExtractDialogFinished,
-            );
+            return extraction_dialog_task(state, false);
         }
-        Message::ExtractDialogFinished(destination) => {
+        Message::ExtractAll => {
+            return extraction_dialog_task(state, true);
+        }
+        Message::ExtractDialogFinished(destination, extract_all) => {
             state.dialog_open = false;
             if let Some(destination) = destination {
-                return extract_operation(state, destination)
+                return extract_operation(state, destination, extract_all)
                     .map_or_else(Task::none, |operation| submit_operation(state, operation));
             }
         }
@@ -978,14 +960,44 @@ fn begin_load(state: &mut ZiFile, path: PathBuf) -> Task<Message> {
     )
 }
 
-fn extract_operation(state: &ZiFile, destination: PathBuf) -> Option<QueuedOperation> {
+fn extraction_dialog_task(state: &mut ZiFile, extract_all: bool) -> Task<Message> {
+    if state.dialog_open {
+        return Task::none();
+    }
+    let Some(archive) = state.archive.as_ref() else {
+        return Task::none();
+    };
+    let default_folder = archive
+        .path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(archive.path.file_stem().unwrap_or_default());
+    state.dialog_open = true;
+    let dialog = FileDialog::new()
+        .set_title(state.locale.text(Text::ChooseExtractionFolder))
+        .set_directory(default_folder.parent().unwrap_or_else(|| Path::new(".")));
+    Task::perform(
+        async move {
+            tokio::task::spawn_blocking(move || dialog.pick_folder())
+                .await
+                .unwrap_or(None)
+        },
+        move |destination| Message::ExtractDialogFinished(destination, extract_all),
+    )
+}
+
+fn extract_operation(
+    state: &ZiFile,
+    destination: PathBuf,
+    extract_all: bool,
+) -> Option<QueuedOperation> {
     let archive = state.archive.as_ref()?;
     let file_count = archive
         .entries
         .iter()
         .filter(|entry| !entry.is_directory)
         .count();
-    let selected_paths = if state.selected.len() == file_count {
+    let selected_paths = if extract_all || state.selected.len() == file_count {
         None
     } else {
         Some(state.selected.iter().cloned().collect())
@@ -1498,8 +1510,11 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             |value| Message::ConflictChanged(value.choice)
         ),
         button(state.locale.text(Text::ExtractSelected))
-            .style(button::primary)
+            .style(button::secondary)
             .on_press_maybe((!state.selected.is_empty()).then_some(Message::Extract)),
+        button(state.locale.text(Text::ExtractAll))
+            .style(button::primary)
+            .on_press(Message::ExtractAll),
     ]
     .align_y(iced::Alignment::Center)
     .spacing(10);
@@ -2367,5 +2382,15 @@ mod tests {
         assert!(state.automatic_extract_destination.is_none());
         assert!(state.status.contains(&destination.display().to_string()));
         assert_eq!(state.selected, HashSet::from([PathBuf::from("hello.txt")]));
+    }
+
+    #[test]
+    fn archive_view_exposes_separate_selected_and_all_extraction_actions() {
+        let source = include_str!("main.rs");
+        assert!(source.contains("Text::ExtractSelected"));
+        assert!(source.contains(".style(button::secondary)"));
+        assert!(source.contains("Text::ExtractAll"));
+        assert!(source.contains(".style(button::primary)"));
+        assert!(source.contains("Message::ExtractAll"));
     }
 }
