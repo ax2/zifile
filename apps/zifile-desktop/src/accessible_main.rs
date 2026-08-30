@@ -46,8 +46,8 @@ use zifile_desktop::entry_view::{
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 use zifile_desktop::{
-    append_unique_paths as append_unique, ensure_archive_extension, is_openable_archive_path,
-    reveal_in_file_manager,
+    append_unique_paths as append_unique, ensure_archive_extension, invert_archive_file_selection,
+    is_openable_archive_path, reveal_in_file_manager,
 };
 
 const STYLES: &str = include_str!("accessible_ui.css");
@@ -61,6 +61,7 @@ const ARIA_SHORTCUT_CLOSE: &str = "Control+W";
 const ARIA_SHORTCUT_ABOUT: &str = "F1";
 const ARIA_SHORTCUT_CANCEL: &str = "Escape";
 const ARIA_SHORTCUT_SELECT_ALL: &str = "Control+A";
+const ARIA_SHORTCUT_INVERT_SELECTION: &str = "Control+I";
 const FOCUS_MAIN_SCRIPT: &str =
     "requestAnimationFrame(() => document.getElementById('main-content')?.focus())";
 const FOCUS_ARCHIVE_SEARCH_SCRIPT: &str =
@@ -130,6 +131,7 @@ enum AccessibleShortcut {
     Reload,
     Search,
     Close,
+    InvertSelection,
     About,
     Cancel,
 }
@@ -447,6 +449,7 @@ fn AboutPage(state: Signal<UiState>) -> Element {
                 div { dt { kbd { "Ctrl+F" } } dd { {locale.text(Text::ShortcutSearch)} } }
                 div { dt { kbd { "Ctrl+W" } } dd { {locale.text(Text::ShortcutClose)} } }
                 div { dt { kbd { "Ctrl+A" } } dd { {locale.text(Text::ShortcutSelectAll)} } }
+                div { dt { kbd { "Ctrl+I" } } dd { {locale.text(Text::ShortcutInvertSelection)} } }
                 div { dt { kbd { "F1" } } dd { {locale.text(Text::ShortcutAbout)} } }
                 div { dt { kbd { "Esc" } } dd { {locale.text(Text::ShortcutCancel)} } }
             }
@@ -585,6 +588,9 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 output { id: "archive-selection-summary", role: "status", "aria-live": "polite", "aria-atomic": "true", {selection_summary.clone()} }
             }
             div { class: "button-row",
+                button { "aria-describedby": "archive-selection-summary", onclick: move |_| select_all(state, true), {locale.text(Text::SelectAll)} }
+                button { disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| select_all(state, false), {locale.text(Text::SelectNone)} }
+                button { "aria-describedby": "archive-selection-summary", "aria-keyshortcuts": ARIA_SHORTCUT_INVERT_SELECTION, onclick: move |_| invert_selection(state), {locale.text(Text::InvertSelection)} }
                 select { value: conflict_value(view.conflict), "aria-label": choose(locale, "Conflict policy", "文件冲突策略"), onchange: move |event| state.write().conflict = parse_conflict(&event.value()),
                     for policy in [ConflictPolicy::Rename, ConflictPolicy::Overwrite, ConflictPolicy::Skip, ConflictPolicy::Error] { option { value: conflict_value(policy), {conflict_label(locale, policy)} } } }
                 button { disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
@@ -856,6 +862,7 @@ fn accessible_shortcut(
         "n" => Some(AccessibleShortcut::Create),
         "r" => Some(AccessibleShortcut::Reload),
         "f" if archive_search_available => Some(AccessibleShortcut::Search),
+        "i" if archive_search_available => Some(AccessibleShortcut::InvertSelection),
         "w" if archive_search_available && archive_close_available => {
             Some(AccessibleShortcut::Close)
         }
@@ -883,6 +890,7 @@ fn apply_accessible_shortcut(mut state: Signal<UiState>, shortcut: AccessibleSho
         AccessibleShortcut::Reload => reload_archive(state),
         AccessibleShortcut::Search => focus_archive_search(state),
         AccessibleShortcut::Close => close_archive(state),
+        AccessibleShortcut::InvertSelection => invert_selection(state),
         AccessibleShortcut::About => state.write().page = Page::About,
         AccessibleShortcut::Cancel => cancel_operation(state),
     }
@@ -1607,6 +1615,22 @@ fn select_all(mut state: Signal<UiState>, selected: bool) {
     value.set_status(status);
 }
 
+fn invert_selection(mut state: Signal<UiState>) {
+    let mut value = state.write();
+    let UiState {
+        archive, selected, ..
+    } = &mut *value;
+    let Some(archive) = archive.as_ref() else {
+        return;
+    };
+    let selected = invert_archive_file_selection(archive, selected);
+    let status = match value.locale {
+        Locale::En => format!("Selection inverted; {selected} files selected"),
+        Locale::ZhCn => format!("已反选；当前选择 {selected} 个文件"),
+    };
+    value.set_status(status);
+}
+
 fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected: bool) {
     let mut value = state.write();
     if selected {
@@ -2197,6 +2221,7 @@ mod tests {
             ("Ctrl+F", "Text::ShortcutSearch"),
             ("Ctrl+W", "Text::ShortcutClose"),
             ("Ctrl+A", "Text::ShortcutSelectAll"),
+            ("Ctrl+I", "Text::ShortcutInvertSelection"),
             ("F1", "Text::ShortcutAbout"),
             ("Esc", "Text::ShortcutCancel"),
         ] {
@@ -2573,6 +2598,24 @@ mod tests {
             None
         );
         assert_eq!(
+            accessible_shortcut("i", Modifiers::CONTROL, false, true, false),
+            Some(AccessibleShortcut::InvertSelection)
+        );
+        assert_eq!(
+            accessible_shortcut("i", Modifiers::CONTROL, false, false, false),
+            None
+        );
+        assert_eq!(
+            accessible_shortcut(
+                "i",
+                Modifiers::CONTROL | Modifiers::SHIFT,
+                true,
+                false,
+                false,
+            ),
+            None
+        );
+        assert_eq!(
             accessible_shortcut("Escape", Modifiers::empty(), true, false, false),
             Some(AccessibleShortcut::Cancel)
         );
@@ -2629,6 +2672,7 @@ mod tests {
         assert_eq!(ARIA_SHORTCUT_ABOUT, "F1");
         assert_eq!(ARIA_SHORTCUT_CANCEL, "Escape");
         assert_eq!(ARIA_SHORTCUT_SELECT_ALL, "Control+A");
+        assert_eq!(ARIA_SHORTCUT_INVERT_SELECTION, "Control+I");
 
         let source = include_str!("accessible_main.rs");
         for shortcut in [
@@ -2640,6 +2684,7 @@ mod tests {
             "ARIA_SHORTCUT_ABOUT",
             "ARIA_SHORTCUT_CANCEL",
             "ARIA_SHORTCUT_SELECT_ALL",
+            "ARIA_SHORTCUT_INVERT_SELECTION",
         ] {
             assert!(
                 source.contains(&format!("\"aria-keyshortcuts\": {shortcut}")),
