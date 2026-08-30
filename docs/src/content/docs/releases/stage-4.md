@@ -17,7 +17,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、15 个创建格式、17 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0` 已通过匹配 tag 自动生成公开 GitHub Release。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0` 和 `v0.1.2` 均通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -27,7 +27,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.0` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.2` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
 
 ## 2026-08-29 正式公开版本结果
 
@@ -55,3 +55,9 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 - 将 workspace、内部 crate 依赖、文档包和 Cargo.lock 版本统一推进到 `0.1.2`，为 all-in-one MSIX 与便携 EXE 发布资产创建稳定补丁版本。
 - 版本仍通过普通公开 Release 流程生成未签名的 GitHub Windows 产物；SignPath、WinGet 社区接纳、Microsoft Store、WACK、物理 ARM64 和完整辅助技术门禁继续保持独立状态。
+
+## 2026-08-30 — 0.1.2 正式发布结果
+
+- [`v0.1.2 Release`](https://github.com/ax2/zifile/releases/tag/v0.1.2) 已由 tag 自动发布；Release 为非 Draft、非 prerelease，发布工作流 [33291234378](https://github.com/ax2/zifile/actions/runs/33291234378) 成功完成。
+- 公开资产严格收敛为一个 all-in-one `msixbundle`、x64/ARM64 桌面端与 Worker 可运行 EXE 各一份，以及 `SHA256SUMS.txt`；DLL、构建配置、SBOM 和 WinGet 清单候选只保留在工作流证据中。
+- 下载后的 5 个二进制资产均与 `SHA256SUMS.txt` 匹配。桌面端与 Worker 需要使用相同架构并放在同一目录运行；Release 仍明确标记为未签名 GitHub 构建。
