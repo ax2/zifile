@@ -747,6 +747,14 @@ foreach ($requiredStageReleaseToken in @(
         throw "The release workflow omits stage-release token: $requiredStageReleaseToken"
     }
 }
+$stageReleaseSource = [Regex]::Match(
+    $releaseSource,
+    '(?ms)^  publish-stage:.*?(?=^  [A-Za-z0-9_-]+:\s*$|\z)'
+).Value
+if ([string]::IsNullOrWhiteSpace($stageReleaseSource) -or
+    $stageReleaseSource -notmatch [Regex]::Escape('- uses: actions/checkout@v7')) {
+    throw 'The stage release job must checkout the repository before running repository scripts.'
+}
 if ($releaseSource -match [Regex]::Escape('sha256sum release/* > release/SHA256SUMS-stage.txt')) {
     throw 'The stage release checksum manifest must not hash itself.'
 }
