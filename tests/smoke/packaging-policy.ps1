@@ -678,6 +678,10 @@ foreach ($requiredPortableSmokeSourceToken in @(
     '--zifile-worker',
     'separate_worker_present',
     'archive_entry',
+    "operation = 'create'",
+    "operation = 'list'",
+    "operation = 'extract'",
+    'round_trip_verified',
     'Get-PeMachine',
     '0xAA64',
     'execution_skipped'

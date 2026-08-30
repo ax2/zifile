@@ -18,6 +18,8 @@ All notable changes to ZiFile are documented here. The format follows
 - Add explicit Select all, Select none, and Invert selection actions to both
   archive views, with `Ctrl+I`, bilingual status feedback, semantic shortcut
   metadata, and a 100,000-entry inversion benchmark.
+- Strengthen the standalone x64 Release EXE smoke from read-only listing to a
+  create-list-extract ZIP round trip in a directory without a separate Worker.
 
 ## [0.1.6] - 2026-08-31
 
