@@ -17,7 +17,7 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 - `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, fifteen creation formats, seventeen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
 - `release/readiness.json` binds stable tags to accessibility, queue, trusted-install, ARM64, screenshot, WACK, WinGet, Store, Partner Center, and signing evidence.
 - The Release workflow derives dual-architecture builds, audits, checksums, SBOMs, provenance, and GitHub Releases from the workspace version; ordinary public releases use unsigned artifacts, while formal signing can be enabled explicitly through workflow inputs.
-- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, and `v0.1.4` have been published as public GitHub Releases from matching tags.
+- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, and `v0.1.5` have been published as public GitHub Releases from matching tags.
 
 ## Required to finish
 
@@ -27,7 +27,7 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 ## Release result
 
-Stable 1.0 has not been published; `v0.1.4` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+Stable 1.0 has not been published; `v0.1.5` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
 
 ## 2026-08-29 public release result
 
@@ -122,3 +122,10 @@ Stable 1.0 has not been published; `v0.1.4` is the current usable public GitHub 
 - Create-source validation, all-in-one WinGet manifests, shortcut help, create-password lifecycle handling, and post-completion output discovery accumulated after 0.1.4 now form a useful patch-release boundary.
 - The workspace, three internal dependency constraints, six workspace lock entries, and Astro documentation package are aligned at `0.1.5`; the version gate confirms tag `v0.1.5` maps to MSIX `0.1.5.0`.
 - `CHANGELOG.md` now follows the standard reverse order with an empty top `[Unreleased]`, then 0.1.5 and older releases. Six 0.1.5 entries pass the tag-ready gate. Download documentation continues to name v0.1.4 until the new Release actually succeeds.
+
+## 2026-08-31 — 0.1.5 release outcome
+
+- PR [#57](https://github.com/ax2/zifile/pull/57) merged after all seven normal quality gates and both x64/ARM64 reproducible double builds passed. Annotated tag `v0.1.5` points exactly to merge commit `8959f3d0042bf9ba29eed299a416bf952821b0c1`.
+- [Release workflow 33327132468](https://github.com/ax2/zifile/actions/runs/33327132468) completed workspace tests, both architecture builds, the standalone x64 EXE smoke, ARM64 PE architecture audit, all-in-one MSIX Bundle, attestations, and public publication successfully.
+- The non-draft, non-prerelease [v0.1.5 Release](https://github.com/ax2/zifile/releases/tag/v0.1.5) exposes exactly `ZiFile-0.1.5.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, SBOM, or provenance internals are public Release assets.
+- All four public files were downloaded again after publication. SHA-256 for the MSIX Bundle and both EXEs matches `SHA256SUMS.txt` and the GitHub asset digests. This proves GitHub publication integrity, not trusted signing, WACK, Store, WinGet, or physical ARM64 execution.

@@ -3,7 +3,7 @@ title: Getting started
 description: Browse, test, extract, and create archives with ZiFile.
 ---
 
-ZiFile is currently a Stage 4 public release and has not shipped through Microsoft Store or WinGet. GitHub users can obtain the unsigned Windows build from the current [v0.1.4 Release](https://github.com/ax2/zifile/releases/tag/v0.1.4); verify every download with the included `SHA256SUMS.txt` first. The portable downloads are `zifile-windows-x64.exe` and `zifile-windows-arm64.exe`; each is self-contained and does not need a separate Worker file. Never import an unknown root certificate or disable Windows security checks to install a development package.
+ZiFile is currently a Stage 4 public release and has not shipped through Microsoft Store or WinGet. GitHub users can obtain the unsigned Windows build from the current [v0.1.5 Release](https://github.com/ax2/zifile/releases/tag/v0.1.5); verify every download with the included `SHA256SUMS.txt` first. The portable downloads are `zifile-windows-x64.exe` and `zifile-windows-arm64.exe`; each is self-contained and does not need a separate Worker file. Never import an unknown root certificate or disable Windows security checks to install a development package.
 
 ## Open and inspect an archive
 
