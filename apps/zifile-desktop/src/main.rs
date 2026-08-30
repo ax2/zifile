@@ -53,6 +53,7 @@ use zifile_desktop::{
 };
 
 const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
+const ARCHIVE_TABLE_MIN_WIDTH: f32 = 1_040.0;
 
 pub fn main() -> iced::Result {
     if std::env::args_os().any(|argument| argument == zifile_worker::WORKER_MODE_ARGUMENT) {
@@ -1407,18 +1408,17 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             .to_string_lossy();
         return container(
             column![
+                column![
+                    text(archive_name).size(28),
+                    text(format!(
+                        "{} · {} entries · {}",
+                        archive.format,
+                        archive.entries.len(),
+                        format_bytes(archive.total_size)
+                    )),
+                ]
+                .spacing(5),
                 row![
-                    column![
-                        text(archive_name).size(28),
-                        text(format!(
-                            "{} · {} entries · {}",
-                            archive.format,
-                            archive.entries.len(),
-                            format_bytes(archive.total_size)
-                        )),
-                    ]
-                    .spacing(5)
-                    .width(Fill),
                     button(state.locale.text(Text::OpenAnother))
                         .style(button::secondary)
                         .on_press(Message::OpenArchiveDialog),
@@ -1429,7 +1429,6 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                         .style(button::secondary)
                         .on_press(Message::TestArchive),
                 ]
-                .align_y(iced::Alignment::Center)
                 .spacing(10),
                 container(text(state.locale.text(Text::BusyArchiveDescription))).padding(24),
             ]
@@ -1447,7 +1446,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         .filter(|entry| !entry.is_directory)
         .count();
     let all_selected = all_files > 0 && state.selected.len() == all_files;
-    let header = row![
+    let header = column![
         column![
             text(
                 archive
@@ -1473,22 +1472,23 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                 )
             }),
         ]
-        .spacing(5)
-        .width(Fill),
-        button(state.locale.text(Text::OpenAnother))
-            .style(button::secondary)
-            .on_press(Message::OpenArchiveDialog),
-        button(state.locale.text(Text::RevealInExplorer))
-            .style(button::secondary)
-            .on_press(Message::RevealArchive),
-        button(state.locale.text(Text::TestArchive))
-            .style(button::secondary)
-            .on_press(Message::TestArchive),
+        .spacing(5),
+        row![
+            button(state.locale.text(Text::OpenAnother))
+                .style(button::secondary)
+                .on_press(Message::OpenArchiveDialog),
+            button(state.locale.text(Text::RevealInExplorer))
+                .style(button::secondary)
+                .on_press(Message::RevealArchive),
+            button(state.locale.text(Text::TestArchive))
+                .style(button::secondary)
+                .on_press(Message::TestArchive),
+        ]
+        .spacing(10),
     ]
-    .align_y(iced::Alignment::Center)
-    .spacing(10);
+    .spacing(12);
 
-    let controls = row![
+    let selection_controls = row![
         checkbox(all_selected)
             .label(format!(
                 "{} {}",
@@ -1501,6 +1501,11 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             .secure(true)
             .on_input(Message::PasswordChanged)
             .width(220),
+    ]
+    .align_y(iced::Alignment::Center)
+    .spacing(10);
+
+    let operation_controls = row![
         button(state.locale.text(Text::Reload)).on_press(Message::ReloadArchive),
         pick_list(
             ConflictChoice::ALL.map(|choice| LocalizedConflict {
@@ -1520,8 +1525,9 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             .style(button::primary)
             .on_press(Message::ExtractAll),
     ]
-    .align_y(iced::Alignment::Center)
     .spacing(10);
+
+    let controls = column![selection_controls, operation_controls].spacing(10);
 
     let filtered_count = browser_entry_count(archive, &state.entry_directory, &state.entry_filter);
     let last_page = filtered_count.saturating_sub(1) / ENTRIES_PER_PAGE;
@@ -1532,7 +1538,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         filtered_count,
         archive.entries.len(),
     );
-    let browser_controls = row![
+    let search_controls = row![
         text_input(state.locale.text(Text::Search), &state.entry_filter)
             .on_input(Message::EntryFilterChanged)
             .width(Fill),
@@ -1541,7 +1547,12 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             .on_press_maybe(
                 (!state.entry_filter.is_empty()).then_some(Message::ClearArchiveFilter),
             ),
+    ]
+    .spacing(10)
+    .align_y(iced::Alignment::Center);
+    let pagination_controls = row![
         text(filter_summary).size(12),
+        space().width(Fill),
         text(if filtered_count == 0 {
             "—".to_owned()
         } else {
@@ -1561,6 +1572,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     ]
     .spacing(10)
     .align_y(iced::Alignment::Center);
+    let browser_controls = column![search_controls, pagination_controls].spacing(8);
 
     let mut breadcrumbs = row![
         button(choose(state.locale, "Archive root", "归档根目录"))
@@ -1714,10 +1726,17 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         controls,
         breadcrumbs,
         browser_controls,
-        container(scrollable(entries).height(Fill))
-            .padding(12)
-            .height(Fill)
-            .style(container::rounded_box),
+        container(
+            scrollable(container(entries).width(Length::Fixed(ARCHIVE_TABLE_MIN_WIDTH)))
+                .height(Fill)
+                .direction(scrollable::Direction::Both {
+                    vertical: scrollable::Scrollbar::default(),
+                    horizontal: scrollable::Scrollbar::default(),
+                }),
+        )
+        .padding(12)
+        .height(Fill)
+        .style(container::rounded_box),
     ]
     .spacing(14)
     .height(Fill)
@@ -1959,6 +1978,16 @@ mod tests {
             settings.position,
             iced::window::Position::Centered
         ));
+    }
+
+    #[test]
+    fn archive_layout_keeps_dense_columns_scrollable_at_the_minimum_width() {
+        assert!(ARCHIVE_TABLE_MIN_WIDTH >= 1_000.0);
+        let source = include_str!("main.rs");
+        assert!(source.contains("let selection_controls ="));
+        assert!(source.contains("let pagination_controls ="));
+        assert!(source.contains("scrollable::Direction::Both"));
+        assert!(source.contains("scrollable::Scrollbar::default()"));
     }
 
     #[test]
