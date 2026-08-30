@@ -167,3 +167,9 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - [Release workflow #33334902669](https://github.com/ax2/zifile/actions/runs/33334902669) 成功完成 SBOM、x64/ARM64 构建、x64 独立 EXE 启动冒烟、ARM64 架构审计、产物证明、一体化 MSIX Bundle 和公开发布；签名分支按本次未签名常规发布策略跳过。
 - 非草稿、非预发布的 [v0.1.6 Release](https://github.com/ax2/zifile/releases/tag/v0.1.6) 严格只公开 `ZiFile-0.1.6.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`，没有 DLL、JSON、YAML 或内部组件。
 - 独立下载后重算 SHA-256：MSIX Bundle 为 `76ac635432d58325c1f1d48c721cf198e68a33734ac8e35ce173e4ddc7edd842`，x64 EXE 为 `2beae4ced17689689973485f3ac9b015c38befc1faebdadb1145025f8a8b738b`，ARM64 EXE 为 `71f6854d15b85f0124bd2442f8f82239abddba3b9ab4930753dc9c982e6d3fb4`；三者均与 `SHA256SUMS.txt` 和 GitHub asset digest 一致。
+
+## 2026-08-31 — 最近打开的压缩文件
+
+- 两套桌面主页新增最近打开区，只在 Worker 成功列出归档后记录，失败路径和密码不进入设置；最多保留 8 项，最新项置顶，并按 Windows 大小写与斜杠等价路径去重。
+- 用户可在主页一键重新打开或清空历史；忙碌期间入口禁用，清空不删除文件、不关闭当前归档，也不触碰操作队列。
+- 设置继续使用临时文件 flush/sync 后原子替换；路径以有界十六进制字段编码，避免换行和等号注入配置结构。设置单测覆盖 Unicode/分隔符往返、畸形输入、容量、排序和 Windows 路径去重，两套 UI 目标均完成编译与单测。

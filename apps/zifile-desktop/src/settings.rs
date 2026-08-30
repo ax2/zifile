@@ -4,10 +4,13 @@ use std::path::{Path, PathBuf};
 
 use crate::i18n::Locale;
 
-#[derive(Debug, Clone, Copy)]
+pub const MAX_RECENT_ARCHIVES: usize = 8;
+
+#[derive(Debug, Clone)]
 pub struct AppSettings {
     pub locale: Locale,
     pub dark: bool,
+    pub recent_archives: Vec<PathBuf>,
 }
 
 impl Default for AppSettings {
@@ -15,6 +18,7 @@ impl Default for AppSettings {
         Self {
             locale: Locale::detect(),
             dark: true,
+            recent_archives: Vec::new(),
         }
     }
 }
@@ -42,12 +46,29 @@ impl AppSettings {
                 ("language", "en-US") => self.locale = Locale::En,
                 ("theme", "light") => self.dark = false,
                 ("theme", "dark") => self.dark = true,
+                ("recent_archive", encoded) if self.recent_archives.len() < MAX_RECENT_ARCHIVES => {
+                    if let Some(path) = decode_path(encoded)
+                        && !self
+                            .recent_archives
+                            .iter()
+                            .any(|existing| same_path(existing, &path))
+                    {
+                        self.recent_archives.push(path);
+                    }
+                }
                 _ => {}
             }
         }
     }
 
-    pub fn save(self) -> io::Result<()> {
+    pub fn record_recent_archive(&mut self, path: PathBuf) {
+        self.recent_archives
+            .retain(|existing| !same_path(existing, &path));
+        self.recent_archives.insert(0, path);
+        self.recent_archives.truncate(MAX_RECENT_ARCHIVES);
+    }
+
+    pub fn save(&self) -> io::Result<()> {
         let Some(path) = settings_path() else {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
@@ -64,7 +85,7 @@ impl AppSettings {
         self.save_to_path(&path)
     }
 
-    fn save_to_path(self, path: &Path) -> io::Result<()> {
+    fn save_to_path(&self, path: &Path) -> io::Result<()> {
         let temporary = path.with_extension("conf.tmp");
         let result = (|| {
             let mut file = fs::OpenOptions::new()
@@ -83,9 +104,51 @@ impl AppSettings {
         result
     }
 
-    fn contents(self) -> String {
+    fn contents(&self) -> String {
         let theme = if self.dark { "dark" } else { "light" };
-        format!("language={}\ntheme={theme}\n", self.locale.code())
+        let mut contents = format!("language={}\ntheme={theme}\n", self.locale.code());
+        for path in &self.recent_archives {
+            contents.push_str("recent_archive=");
+            contents.push_str(&encode_path(path));
+            contents.push('\n');
+        }
+        contents
+    }
+}
+
+fn encode_path(path: &Path) -> String {
+    path.to_string_lossy()
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn decode_path(encoded: &str) -> Option<PathBuf> {
+    if encoded.is_empty() || encoded.len() > 32_768 || !encoded.len().is_multiple_of(2) {
+        return None;
+    }
+    let bytes = encoded
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let pair = std::str::from_utf8(pair).ok()?;
+            u8::from_str_radix(pair, 16).ok()
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let path = String::from_utf8(bytes).ok()?;
+    (!path.is_empty()).then(|| PathBuf::from(path))
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        let normalized = |path: &Path| path.to_string_lossy().replace('/', "\\").to_lowercase();
+        normalized(left) == normalized(right)
+    }
+    #[cfg(not(windows))]
+    {
+        left == right
     }
 }
 
@@ -143,6 +206,7 @@ mod tests {
         let mut settings = AppSettings {
             locale: Locale::En,
             dark: true,
+            recent_archives: Vec::new(),
         };
         settings.apply_contents("language=zh-CN\ntheme=light\nfuture=value\n");
         assert_eq!(settings.locale, Locale::ZhCn);
@@ -154,6 +218,7 @@ mod tests {
         let settings = AppSettings {
             locale: Locale::ZhCn,
             dark: false,
+            recent_archives: Vec::new(),
         };
         assert_eq!(settings.contents(), "language=zh-CN\ntheme=light\n");
     }
@@ -167,6 +232,7 @@ mod tests {
         AppSettings {
             locale: Locale::ZhCn,
             dark: false,
+            recent_archives: Vec::new(),
         }
         .save_to_path(&path)
         .unwrap();
@@ -176,5 +242,60 @@ mod tests {
             "language=zh-CN\ntheme=light\n"
         );
         assert!(!path.with_extension("conf.tmp").exists());
+    }
+
+    #[test]
+    fn recent_archives_round_trip_without_delimiter_injection() {
+        let path = PathBuf::from(r"C:\资料\work=sample.zip");
+        let mut settings = AppSettings {
+            locale: Locale::ZhCn,
+            dark: true,
+            recent_archives: Vec::new(),
+        };
+        settings.record_recent_archive(path.clone());
+        let contents = settings.contents();
+        assert!(!contents.contains("资料"));
+
+        let mut restored = AppSettings::default();
+        restored.apply_contents(&contents);
+        assert_eq!(restored.recent_archives, vec![path]);
+    }
+
+    #[test]
+    fn recent_archives_are_most_recent_first_deduplicated_and_bounded() {
+        let mut settings = AppSettings::default();
+        for index in 0..=MAX_RECENT_ARCHIVES {
+            settings.record_recent_archive(PathBuf::from(format!("archive-{index}.zip")));
+        }
+        settings.record_recent_archive(PathBuf::from("archive-4.zip"));
+        assert_eq!(settings.recent_archives.len(), MAX_RECENT_ARCHIVES);
+        assert_eq!(settings.recent_archives[0], PathBuf::from("archive-4.zip"));
+        assert_eq!(
+            settings
+                .recent_archives
+                .iter()
+                .filter(|path| *path == &PathBuf::from("archive-4.zip"))
+                .count(),
+            1
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn recent_archives_deduplicate_windows_case_and_separator_variants() {
+        let mut settings = AppSettings::default();
+        settings.record_recent_archive(PathBuf::from(r"C:\Data\Sample.zip"));
+        settings.record_recent_archive(PathBuf::from("c:/data/sample.ZIP"));
+        assert_eq!(
+            settings.recent_archives,
+            vec![PathBuf::from("c:/data/sample.ZIP")]
+        );
+    }
+
+    #[test]
+    fn malformed_recent_archive_lines_are_ignored() {
+        let mut settings = AppSettings::default();
+        settings.apply_contents("recent_archive=not-hex\nrecent_archive=0\nrecent_archive=\n");
+        assert!(settings.recent_archives.is_empty());
     }
 }

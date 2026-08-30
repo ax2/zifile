@@ -132,6 +132,7 @@ struct ZiFile {
     cancellation: Option<CancellationToken>,
     progress: Option<OperationProgress>,
     operations: OperationQueue<QueuedOperation>,
+    recent_archives: Vec<PathBuf>,
     dark: bool,
     locale: Locale,
 }
@@ -165,6 +166,7 @@ impl Default for ZiFile {
             cancellation: None,
             progress: None,
             operations: OperationQueue::default(),
+            recent_archives: settings.recent_archives,
             dark: settings.dark,
             locale: settings.locale,
         }
@@ -178,6 +180,8 @@ enum Message {
     ToggleLocale,
     OpenArchiveDialog,
     OpenArchiveDialogFinished(Option<PathBuf>),
+    OpenRecentArchive(PathBuf),
+    ClearRecentArchives,
     ArchiveLoaded(u64, Result<ArchiveInfo, String>),
     PasswordChanged(String),
     ReloadArchive,
@@ -374,6 +378,27 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 return begin_load(state, path);
             }
         }
+        Message::OpenRecentArchive(path) => {
+            if !state.busy {
+                state.password.clear();
+                state.automatic_extract_destination = None;
+                return begin_load(state, path);
+            }
+        }
+        Message::ClearRecentArchives => {
+            if !state.busy {
+                state.recent_archives.clear();
+                save_settings(state);
+                set_status(
+                    state,
+                    choose(
+                        state.locale,
+                        "Recent archives cleared",
+                        "最近打开记录已清空",
+                    ),
+                );
+            }
+        }
         Message::ArchiveLoaded(id, result) => {
             if state.operations.active_id() != Some(id) {
                 return Task::none();
@@ -383,6 +408,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             state.progress = None;
             match result {
                 Ok(archive) => {
+                    let recent_path = archive.path.clone();
                     state.selected = archive
                         .entries
                         .iter()
@@ -409,6 +435,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     };
                     set_status(state, status);
                     state.archive = Some(archive);
+                    record_recent_archive(state, recent_path);
                     state.pending_archive = None;
                     state.pending_archive_requires_password = false;
                     state.page = Page::Archive;
@@ -986,6 +1013,7 @@ fn save_settings(state: &mut ZiFile) {
     if let Err(error) = (AppSettings {
         locale: state.locale,
         dark: state.dark,
+        recent_archives: state.recent_archives.clone(),
     }
     .save())
     {
@@ -997,6 +1025,17 @@ fn save_settings(state: &mut ZiFile) {
             ),
         );
     }
+}
+
+fn record_recent_archive(state: &mut ZiFile, path: PathBuf) {
+    let mut settings = AppSettings {
+        locale: state.locale,
+        dark: state.dark,
+        recent_archives: std::mem::take(&mut state.recent_archives),
+    };
+    settings.record_recent_archive(path);
+    state.recent_archives = settings.recent_archives;
+    save_settings(state);
 }
 
 fn begin_load(state: &mut ZiFile, path: PathBuf) -> Task<Message> {
@@ -1357,10 +1396,55 @@ fn home_view(state: &ZiFile) -> Element<'_, Message> {
         Message::Navigate(Page::Create),
         false,
     );
+    let recent_archives: Element<'_, Message> = if state.recent_archives.is_empty() {
+        container(text(choose(
+            state.locale,
+            "Archives you successfully open will appear here.",
+            "成功打开的压缩文件会显示在这里。",
+        )))
+        .padding(18)
+        .width(Fill)
+        .style(container::rounded_box)
+        .into()
+    } else {
+        let entries = state
+            .recent_archives
+            .iter()
+            .fold(column![].spacing(8), |entries, path| {
+                entries.push(
+                    button(text(recent_archive_label(path)).width(Fill))
+                        .style(button::secondary)
+                        .width(Fill)
+                        .on_press_maybe(
+                            (!state.busy).then_some(Message::OpenRecentArchive(path.clone())),
+                        ),
+                )
+            });
+        container(
+            column![
+                row![
+                    text(choose(state.locale, "Recent archives", "最近打开"))
+                        .size(20)
+                        .width(Fill),
+                    button(choose(state.locale, "Clear", "清空"))
+                        .style(button::secondary)
+                        .on_press_maybe((!state.busy).then_some(Message::ClearRecentArchives)),
+                ]
+                .align_y(iced::Alignment::Center),
+                entries,
+            ]
+            .spacing(12),
+        )
+        .padding(18)
+        .width(Fill)
+        .style(container::rounded_box)
+        .into()
+    };
     column![
         text(state.locale.text(Text::Hero)).size(42),
         text(state.locale.text(Text::HeroSub)).size(18),
         row![open, create].spacing(16),
+        recent_archives,
         container(
             column![
                 text(state.locale.text(Text::Privacy)).size(20),
@@ -1375,6 +1459,22 @@ fn home_view(state: &ZiFile) -> Element<'_, Message> {
     .spacing(26)
     .width(Fill)
     .into()
+}
+
+fn recent_archive_label(path: &Path) -> String {
+    let name = path.file_name().map_or_else(
+        || path.as_os_str().to_string_lossy(),
+        |name| name.to_string_lossy(),
+    );
+    let parent = path
+        .parent()
+        .map(|parent| parent.to_string_lossy())
+        .unwrap_or_default();
+    if parent.is_empty() {
+        name.into_owned()
+    } else {
+        format!("{name}  ·  {parent}")
+    }
 }
 
 fn about_view(state: &ZiFile) -> Element<'_, Message> {
@@ -2464,6 +2564,15 @@ mod tests {
         assert!(source.contains("Message::RevealArchive"));
         assert!(source.contains("reveal_in_file_manager(&path)"));
         assert!(source.contains("Text::RevealInExplorer"));
+    }
+
+    #[test]
+    fn home_page_wires_recent_archives_to_open_and_clear_actions() {
+        let source = include_str!("main.rs");
+        assert!(source.contains("Message::OpenRecentArchive(path.clone())"));
+        assert!(source.contains("Message::ClearRecentArchives"));
+        assert!(source.contains("record_recent_archive(state, recent_path)"));
+        assert!(source.contains("(!state.busy).then_some(Message::OpenRecentArchive"));
     }
 
     #[test]

@@ -167,6 +167,7 @@ struct UiState {
     cancellation: Option<CancellationToken>,
     progress: Option<OperationProgress>,
     operations: SharedOperationQueue,
+    recent_archives: Vec<PathBuf>,
     dark: bool,
     locale: Locale,
     revision: u64,
@@ -201,6 +202,7 @@ impl Default for UiState {
             cancellation: None,
             progress: None,
             operations: Arc::new(Mutex::new(OperationQueue::default())),
+            recent_archives: settings.recent_archives,
             dark: settings.dark,
             locale: settings.locale,
             revision: 0,
@@ -402,6 +404,19 @@ fn Home(mut state: Signal<UiState>) -> Element {
                 button { class: "primary", "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} } }
             article { h3 { {locale.text(Text::CreateArchive)} } p { {locale.text(Text::CreateDescription)} }
                 button { class: "primary", "aria-keyshortcuts": ARIA_SHORTCUT_CREATE, onclick: move |_| state.write().page = Page::Create, {locale.text(Text::StartCreating)} } }
+        }
+        section { class: "recent-archives", "aria-labelledby": "recent-archives-title",
+            div { class: "page-heading", h3 { id: "recent-archives-title", {choose(locale, "Recent archives", "最近打开")} }
+                button { disabled: view.busy || view.recent_archives.is_empty(), onclick: move |_| clear_recent_archives(state), {choose(locale, "Clear", "清空")} } }
+            if view.recent_archives.is_empty() {
+                p { class: "muted", {choose(locale, "Archives you successfully open will appear here.", "成功打开的压缩文件会显示在这里。")} }
+            } else {
+                ul { class: "recent-list",
+                    for path in view.recent_archives.iter() {
+                        li { key: "{path.display()}", button { disabled: view.busy, title: "{path.display()}", onclick: { let path = path.clone(); move |_| open_recent_archive(state, path.clone()) }, {recent_archive_label(path)} } }
+                    }
+                }
+            }
         }
         section { class: "privacy", "aria-labelledby": "privacy-title", h3 { id: "privacy-title", {locale.text(Text::Privacy)} } p { {locale.text(Text::PrivacyDescription)} } }
     } }
@@ -1401,6 +1416,7 @@ fn finish_worker(
     let mut automatic_extract = None;
     let (status, status_kind) = match (kind, result) {
         (OperationKind::List, Ok(WorkerOutput::Archive(archive))) => {
+            let recent_path = archive.path.clone();
             let status = if locale == Locale::ZhCn {
                 format!(
                     "已打开 {} 个项目 · 展开后 {}",
@@ -1422,6 +1438,7 @@ fn finish_worker(
                 .collect();
             let mut value = state.write();
             value.archive = Some(archive);
+            record_recent_archive(&mut value, recent_path);
             value.pending_archive = None;
             value.pending_archive_requires_password = false;
             value.selected = selected;
@@ -1757,6 +1774,7 @@ fn save_settings(state: &mut UiState) {
     if let Err(error) = (AppSettings {
         locale: state.locale,
         dark: state.dark,
+        recent_archives: state.recent_archives.clone(),
     }
     .save())
     {
@@ -1764,6 +1782,60 @@ fn save_settings(state: &mut UiState) {
             "{}: {error}",
             state.locale.text(Text::PreferencesSaveFailed)
         ));
+    }
+}
+
+fn record_recent_archive(state: &mut UiState, path: PathBuf) {
+    let mut settings = AppSettings {
+        locale: state.locale,
+        dark: state.dark,
+        recent_archives: std::mem::take(&mut state.recent_archives),
+    };
+    settings.record_recent_archive(path);
+    state.recent_archives = settings.recent_archives;
+    save_settings(state);
+}
+
+fn open_recent_archive(mut state: Signal<UiState>, path: PathBuf) {
+    if state.read().busy {
+        return;
+    }
+    let mut value = state.write();
+    value.password.clear();
+    value.automatic_extract_destination = None;
+    drop(value);
+    begin_load(state, path);
+}
+
+fn clear_recent_archives(mut state: Signal<UiState>) {
+    if state.read().busy {
+        return;
+    }
+    let mut value = state.write();
+    value.recent_archives.clear();
+    save_settings(&mut value);
+    let status = choose(
+        value.locale,
+        "Recent archives cleared",
+        "最近打开记录已清空",
+    )
+    .to_owned();
+    value.set_status(status);
+}
+
+fn recent_archive_label(path: &Path) -> String {
+    let name = path.file_name().map_or_else(
+        || path.as_os_str().to_string_lossy(),
+        |name| name.to_string_lossy(),
+    );
+    let parent = path
+        .parent()
+        .map(|parent| parent.to_string_lossy())
+        .unwrap_or_default();
+    if parent.is_empty() {
+        name.into_owned()
+    } else {
+        format!("{name}  ·  {parent}")
     }
 }
 
@@ -1937,6 +2009,15 @@ fn format_bytes(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recent_archive_controls_are_semantic_and_busy_safe() {
+        let source = include_str!("accessible_main.rs");
+        assert!(source.contains("\"aria-labelledby\": \"recent-archives-title\""));
+        assert!(source.contains("disabled: view.busy || view.recent_archives.is_empty()"));
+        assert!(source.contains("disabled: view.busy, title: \"{path.display()}\""));
+        assert!(source.contains("record_recent_archive(&mut value, recent_path)"));
+    }
 
     #[test]
     fn clearing_archive_session_releases_sensitive_and_navigation_state() {
