@@ -59,5 +59,11 @@ Stable 1.0 has not been published; `v0.1.3` is the current usable public GitHub 
 
 - [`v0.1.2 Release`](https://github.com/ax2/zifile/releases/tag/v0.1.2) was published automatically from its tag; the Release is neither a draft nor a prerelease, and workflow [33291234378](https://github.com/ax2/zifile/actions/runs/33291234378) completed successfully.
 - Public assets are limited to one all-in-one `msixbundle`, one standalone x64 EXE, one standalone ARM64 EXE, and `SHA256SUMS.txt`; DLLs, build configuration, SBOMs, and the WinGet manifest candidate remain workflow evidence only.
+
+## 2026-08-30 — 0.1.3 standalone portable release
+
+- [`v0.1.3 Release`](https://github.com/ax2/zifile/releases/tag/v0.1.3) was published automatically by workflow [33296532873](https://github.com/ax2/zifile/actions/runs/33296532873) after PR #39 passed all nine CI checks, including x64 and ARM64 reproducible double builds.
+- The final public assets are exactly `ZiFile-0.1.3.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`. The desktop EXE embeds the Worker runtime and starts itself with `--zifile-worker`, so the portable downloads do not require a second Worker file.
+- The x64 portable EXE was downloaded from the published Release and matched `SHA256SUMS.txt`; the ARM64 hash is retained in the workflow-generated checksum manifest. The Release remains explicitly unsigned and is not a Store-certified package.
 - All five downloaded binary assets matched `SHA256SUMS.txt`. The desktop and Worker executables must be kept together for the same architecture; the Release is explicitly an unsigned GitHub build.
 - The ordinary public Release path still produces unsigned GitHub Windows artifacts; SignPath, WinGet community acceptance, Microsoft Store, WACK, physical ARM64, and full assistive-technology gates remain tracked independently.

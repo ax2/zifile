@@ -632,6 +632,24 @@ foreach ($requiredBundleWorkflowToken in @(
         throw "The release workflow omits all-in-one installer token: $requiredBundleWorkflowToken"
     }
 }
+foreach ($requiredPortableSmokeToken in @(
+    'Smoke test standalone desktop executable',
+    'tests/smoke/portable-exe.ps1'
+)) {
+    if ($releaseSource -notmatch [Regex]::Escape($requiredPortableSmokeToken)) {
+        throw "The release workflow omits standalone portable EXE smoke coverage: $requiredPortableSmokeToken"
+    }
+}
+$portableSmokeSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'tests\smoke\portable-exe.ps1')
+foreach ($requiredPortableSmokeSourceToken in @(
+    '--zifile-worker',
+    'separate_worker_present',
+    'archive_entry'
+)) {
+    if ($portableSmokeSource -notmatch [Regex]::Escape($requiredPortableSmokeSourceToken)) {
+        throw "The standalone portable EXE smoke test omits required behavior: $requiredPortableSmokeSourceToken"
+    }
+}
 foreach ($retiredPfxToken in @('ZIFILE_PFX_BASE64', 'ZIFILE_PFX_PASSWORD')) {
     if ($releaseSource -match [Regex]::Escape($retiredPfxToken)) {
         throw "The release workflow still references retired PFX input: $retiredPfxToken"
