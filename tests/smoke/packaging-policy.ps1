@@ -676,6 +676,11 @@ foreach ($requiredStageReleaseToken in @(
     'prerelease: true',
     'Prepare user-facing stage release assets',
     '*.msixbundle',
+    'zifile-desktop-windows-x64.exe',
+    'zifile-worker-windows-x64.exe',
+    'zifile-desktop-windows-arm64.exe',
+    'zifile-worker-windows-arm64.exe',
+    'sha256sum ./*.msixbundle ./*.exe',
     'public-release/*'
 )) {
     if ($releaseSource -notmatch [Regex]::Escape($requiredStageReleaseToken)) {
@@ -710,6 +715,12 @@ foreach ($requiredPublicReleaseToken in @(
     'pattern: windows-*',
     'prerelease: false',
     'No all-in-one MSIX bundle was staged for the public release.',
+    'Expected x64 and ARM64 desktop/worker portable executables for the public release.',
+    'zifile-desktop-windows-x64.exe',
+    'zifile-worker-windows-x64.exe',
+    'zifile-desktop-windows-arm64.exe',
+    'zifile-worker-windows-arm64.exe',
+    'public-release',
     'files: public-release/*',
     'public unsigned Windows build',
     'Verify the included SHA256SUMS file'

@@ -79,8 +79,11 @@ Implemented packaging features:
 - an architecture-matched Rust `IExplorerCommand` COM DLL registered for the Windows 11 modern
   File Explorer menu, with its CLSID, item types and PE machine covered by the package audit.
 
-The desktop executable requires its matching Worker. GitHub release staging therefore publishes
-both architecture-suffixed files; complete runnable directories retain the canonical sibling name.
+The desktop executable requires its matching Worker. GitHub Release therefore publishes both
+architecture-suffixed desktop/Worker pairs as portable executable assets, alongside the single
+all-in-one MSIX bundle. Keep each pair in the same directory; the desktop executable resolves its
+matching Worker by filename. The MSIX contains both files internally and does not require a
+separate portable download.
 
 Stable tagged GitHub releases build with formal `ZIFILE_MSIX_IDENTITY` and
 `ZIFILE_MSIX_PUBLISHER` plus `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME` environment
