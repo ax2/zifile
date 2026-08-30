@@ -48,8 +48,8 @@ use zifile_desktop::entry_view::{
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 use zifile_desktop::{
-    append_unique_paths as append_unique, ensure_archive_extension, is_openable_archive_path,
-    reveal_in_file_manager,
+    append_unique_paths as append_unique, ensure_archive_extension, invert_archive_file_selection,
+    is_openable_archive_path, reveal_in_file_manager,
 };
 
 const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
@@ -192,6 +192,7 @@ enum Message {
     ToggleEntry(PathBuf, bool),
     ToggleDirectory(PathBuf, bool),
     SelectAll(bool),
+    InvertSelection,
     NavigateArchiveDirectory(PathBuf),
     EntryFilterChanged(String),
     ClearArchiveFilter,
@@ -236,6 +237,7 @@ enum Shortcut {
     Close,
     About,
     SelectAll,
+    InvertSelection,
     Cancel,
 }
 
@@ -539,6 +541,27 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                         .iter()
                         .filter(|entry| !entry.is_directory)
                         .map(|entry| entry.path.clone()),
+                );
+            }
+            let status = if selected {
+                match state.locale {
+                    Locale::En => format!("Selected all {} archive files", state.selected.len()),
+                    Locale::ZhCn => format!("已选择全部 {} 个归档文件", state.selected.len()),
+                }
+            } else {
+                choose(state.locale, "Selection cleared", "已清除选择").to_owned()
+            };
+            set_status(state, status);
+        }
+        Message::InvertSelection => {
+            if let Some(archive) = &state.archive {
+                let selected = invert_archive_file_selection(archive, &mut state.selected);
+                set_status(
+                    state,
+                    match state.locale {
+                        Locale::En => format!("Selection inverted; {selected} files selected"),
+                        Locale::ZhCn => format!("已反选；当前选择 {selected} 个文件"),
+                    },
                 );
             }
         }
@@ -931,6 +954,9 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             Shortcut::SelectAll if state.page == Page::Archive => {
                 return update(state, Message::SelectAll(true));
             }
+            Shortcut::InvertSelection if state.page == Page::Archive && state.archive.is_some() => {
+                return update(state, Message::InvertSelection);
+            }
             Shortcut::Cancel if state.cancellation.is_some() => {
                 return update(state, Message::Cancel);
             }
@@ -1006,6 +1032,7 @@ fn default_shortcut(
         Some('f') => Some(Shortcut::Search),
         Some('w') => Some(Shortcut::Close),
         Some('a') => Some(Shortcut::SelectAll),
+        Some('i') => Some(Shortcut::InvertSelection),
         _ => None,
     }
 }
@@ -1552,6 +1579,7 @@ fn about_view(state: &ZiFile) -> Element<'_, Message> {
                 shortcut("Ctrl+F", locale.text(Text::ShortcutSearch)),
                 shortcut("Ctrl+W", locale.text(Text::ShortcutClose)),
                 shortcut("Ctrl+A", locale.text(Text::ShortcutSelectAll)),
+                shortcut("Ctrl+I", locale.text(Text::ShortcutInvertSelection)),
                 shortcut("F1", locale.text(Text::ShortcutAbout)),
                 shortcut("Esc", locale.text(Text::ShortcutCancel)),
             ]
@@ -1742,6 +1770,15 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                 state.locale.text(Text::Selected)
             ))
             .on_toggle(Message::SelectAll),
+        button(state.locale.text(Text::SelectAll))
+            .style(button::secondary)
+            .on_press(Message::SelectAll(true)),
+        button(state.locale.text(Text::SelectNone))
+            .style(button::secondary)
+            .on_press_maybe((!state.selected.is_empty()).then_some(Message::SelectAll(false))),
+        button(state.locale.text(Text::InvertSelection))
+            .style(button::secondary)
+            .on_press(Message::InvertSelection),
         space().width(Fill),
         text_input(state.locale.text(Text::PasswordEncrypted), &state.password)
             .secure(true)
@@ -2436,6 +2473,22 @@ mod tests {
         );
         assert_eq!(
             default_shortcut(
+                &Key::Character("I".into()),
+                Physical::Code(Code::KeyI),
+                Modifiers::CTRL
+            ),
+            Some(Shortcut::InvertSelection)
+        );
+        assert_eq!(
+            default_shortcut(
+                &Key::Character("i".into()),
+                Physical::Code(Code::KeyI),
+                Modifiers::CTRL | Modifiers::SHIFT
+            ),
+            None
+        );
+        assert_eq!(
+            default_shortcut(
                 &Key::Named(Named::F1),
                 Physical::Unidentified(NativeCode::Unidentified),
                 Modifiers::ALT
@@ -2462,6 +2515,7 @@ mod tests {
             ("Ctrl+F", "Text::ShortcutSearch"),
             ("Ctrl+W", "Text::ShortcutClose"),
             ("Ctrl+A", "Text::ShortcutSelectAll"),
+            ("Ctrl+I", "Text::ShortcutInvertSelection"),
             ("F1", "Text::ShortcutAbout"),
             ("Esc", "Text::ShortcutCancel"),
         ] {
