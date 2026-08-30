@@ -17,7 +17,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、15 个创建格式、17 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4` 和 `v0.1.5` 均通过匹配 tag 自动生成公开 GitHub Release。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5` 和 `v0.1.6` 均通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -27,7 +27,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.5` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.6` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
 
 ## 2026-08-29 正式公开版本结果
 
@@ -160,3 +160,10 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `v0.1.5` 后新增归档重载与搜索快捷键、显式关闭会话和一键解压到同名目录，形成新的可用补丁发布节点。
 - workspace、三个内部依赖约束、六个 workspace lock 条目和 Astro 文档包统一升级到 `0.1.6`；MSIX 版本映射为 `0.1.6.0`。
 - `CHANGELOG.md` 已保留空的顶部 `[Unreleased]`，并把四条用户可见改进整理到 `0.1.6` 发布章节。下载文档在 Release 真正成功前继续指向已验证的 v0.1.5。
+
+## 2026-08-31 — 0.1.6 正式发布结果
+
+- PR [#63](https://github.com/ax2/zifile/pull/63) 在 7 项常规质量门禁全部通过后合并；注释 tag `v0.1.6` 精确指向 merge commit `b19e8be2d3b5ae54a7659480ad8a9c90a617c646`。
+- [Release workflow #33334902669](https://github.com/ax2/zifile/actions/runs/33334902669) 成功完成 SBOM、x64/ARM64 构建、x64 独立 EXE 启动冒烟、ARM64 架构审计、产物证明、一体化 MSIX Bundle 和公开发布；签名分支按本次未签名常规发布策略跳过。
+- 非草稿、非预发布的 [v0.1.6 Release](https://github.com/ax2/zifile/releases/tag/v0.1.6) 严格只公开 `ZiFile-0.1.6.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`，没有 DLL、JSON、YAML 或内部组件。
+- 独立下载后重算 SHA-256：MSIX Bundle 为 `76ac635432d58325c1f1d48c721cf198e68a33734ac8e35ce173e4ddc7edd842`，x64 EXE 为 `2beae4ced17689689973485f3ac9b015c38befc1faebdadb1145025f8a8b738b`，ARM64 EXE 为 `71f6854d15b85f0124bd2442f8f82239abddba3b9ab4930753dc9c982e6d3fb4`；三者均与 `SHA256SUMS.txt` 和 GitHub asset digest 一致。
