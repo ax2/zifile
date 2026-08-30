@@ -75,6 +75,12 @@ impl Locale {
             Text::License => ("License", "许可证"),
             Text::SupportedFormatFamilies => ("Supported format families", "支持的格式系列"),
             Text::ProjectWebsite => ("Project website", "项目网站"),
+            Text::KeyboardShortcuts => ("Keyboard shortcuts", "键盘快捷键"),
+            Text::ShortcutOpen => ("Open an archive", "打开压缩文件"),
+            Text::ShortcutCreate => ("Create an archive", "创建压缩文件"),
+            Text::ShortcutSelectAll => ("Select all archive entries", "选择全部压缩项目"),
+            Text::ShortcutAbout => ("Open About and shortcut help", "打开关于与快捷键帮助"),
+            Text::ShortcutCancel => ("Cancel the current operation", "取消当前操作"),
             Text::NoArchive => ("No archive open", "尚未打开压缩文件"),
             Text::NoArchiveDescription => (
                 "Open an archive to inspect its contents and extract files.",
@@ -360,6 +366,12 @@ pub enum Text {
     License,
     SupportedFormatFamilies,
     ProjectWebsite,
+    KeyboardShortcuts,
+    ShortcutOpen,
+    ShortcutCreate,
+    ShortcutSelectAll,
+    ShortcutAbout,
+    ShortcutCancel,
     NoArchive,
     NoArchiveDescription,
     OpeningArchiveDescription,
@@ -495,6 +507,11 @@ mod tests {
         assert_eq!(Locale::En.text(Text::About), "About");
         assert_eq!(Locale::ZhCn.text(Text::AboutHeading), "关于 ZiFile");
         assert_eq!(Locale::ZhCn.text(Text::License), "许可证");
+        assert_eq!(
+            Locale::En.text(Text::KeyboardShortcuts),
+            "Keyboard shortcuts"
+        );
+        assert_eq!(Locale::ZhCn.text(Text::ShortcutCancel), "取消当前操作");
         assert_eq!(Locale::En.text(Text::Checksum), "SHA-256");
         assert_eq!(Locale::ZhCn.text(Text::Checksum), "SHA-256 校验和");
         assert_eq!(Locale::En.text(Text::CopyChecksum), "Copy checksum");

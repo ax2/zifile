@@ -401,6 +401,16 @@ fn AboutPage(state: Signal<UiState>) -> Element {
             div { dt { {locale.text(Text::SupportedFormatFamilies)} } dd { {ArchiveFormat::ALL.len().to_string()} } }
             div { dt { {locale.text(Text::ProjectWebsite)} } dd { "https://github.com/ax2/zifile" } }
         }
+        section { class: "shortcut-help", "aria-labelledby": "shortcut-help-title",
+            h3 { id: "shortcut-help-title", {locale.text(Text::KeyboardShortcuts)} }
+            dl {
+                div { dt { kbd { "Ctrl+O" } } dd { {locale.text(Text::ShortcutOpen)} } }
+                div { dt { kbd { "Ctrl+N" } } dd { {locale.text(Text::ShortcutCreate)} } }
+                div { dt { kbd { "Ctrl+A" } } dd { {locale.text(Text::ShortcutSelectAll)} } }
+                div { dt { kbd { "F1" } } dd { {locale.text(Text::ShortcutAbout)} } }
+                div { dt { kbd { "Esc" } } dd { {locale.text(Text::ShortcutCancel)} } }
+            }
+        }
         section { class: "privacy", "aria-labelledby": "about-privacy-title",
             h3 { id: "about-privacy-title", {locale.text(Text::Privacy)} }
             p { {locale.text(Text::PrivacyDescription)} }
@@ -1905,6 +1915,19 @@ mod tests {
         assert!(source.contains("https://github.com/ax2/zifile"));
         assert!(source.contains("\"aria-keyshortcuts\": ARIA_SHORTCUT_ABOUT"));
         assert!(STYLES.contains(".about-details"));
+        assert!(source.contains("class: \"shortcut-help\""));
+        for (keys, text_key) in [
+            ("Ctrl+O", "Text::ShortcutOpen"),
+            ("Ctrl+N", "Text::ShortcutCreate"),
+            ("Ctrl+A", "Text::ShortcutSelectAll"),
+            ("F1", "Text::ShortcutAbout"),
+            ("Esc", "Text::ShortcutCancel"),
+        ] {
+            assert!(source.contains(&format!(
+                "dt {{ kbd {{ \"{keys}\" }} }} dd {{ {{locale.text({text_key})}} }}"
+            )));
+        }
+        assert!(STYLES.contains(".shortcut-help kbd"));
     }
 
     #[test]
