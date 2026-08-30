@@ -74,16 +74,16 @@ Implemented packaging features:
   PE architecture, required executables, file associations, CLI alias, forbidden sensitive files,
   and required signature status;
 - a machine-readable `.audit.json` beside every MSIX, included in release checksums and provenance;
-- complete runnable directories and standalone EXEs without ZIP output;
+- complete runnable directories and standalone EXEs without ZIP output; the desktop EXE embeds the Worker protocol runtime;
 - the architecture-matched `zifile-worker.exe` beside the desktop executable and inside MSIX.
 - an architecture-matched Rust `IExplorerCommand` COM DLL registered for the Windows 11 modern
   File Explorer menu, with its CLSID, item types and PE machine covered by the package audit.
 
-The desktop executable requires its matching Worker. GitHub Release therefore publishes both
-architecture-suffixed desktop/Worker pairs as portable executable assets, alongside the single
-all-in-one MSIX bundle. Keep each pair in the same directory; the desktop executable resolves its
-matching Worker by filename. The MSIX contains both files internally and does not require a
-separate portable download.
+The desktop executable embeds the Worker protocol runtime and launches itself in an internal
+worker mode for archive operations. GitHub Release therefore publishes one standalone
+architecture-suffixed portable EXE for x64 and one for ARM64, alongside the single all-in-one
+MSIX bundle. The legacy `zifile-worker.exe` remains in build and MSIX evidence for compatibility,
+but is not required by the portable EXE.
 
 Stable tagged GitHub releases build with formal `ZIFILE_MSIX_IDENTITY` and
 `ZIFILE_MSIX_PUBLISHER` plus `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME` environment

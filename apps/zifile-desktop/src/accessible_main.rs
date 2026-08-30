@@ -64,6 +64,10 @@ const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" conten
 const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
 
 fn main() {
+    if std::env::args_os().any(|argument| argument == zifile_worker::WORKER_MODE_ARGUMENT) {
+        zifile_worker::run_process();
+        return;
+    }
     use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
     let window = WindowBuilder::new()
         .with_title("ZiFile")

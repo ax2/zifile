@@ -55,6 +55,10 @@ use zifile_desktop::{
 const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
 
 pub fn main() -> iced::Result {
+    if std::env::args_os().any(|argument| argument == zifile_worker::WORKER_MODE_ARGUMENT) {
+        zifile_worker::run_process();
+        return Ok(());
+    }
     iced::application(initialize, update, view)
         .title(title)
         .theme(theme)

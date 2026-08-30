@@ -566,7 +566,7 @@ if (-not $signedFixture.StartsWith($temporaryBase, [System.StringComparison]::Or
 try {
     New-Item -ItemType Directory -Path $signedFixture -Force | Out-Null
     foreach ($fixtureName in @(
-        'zifile-desktop-windows-x64.exe',
+        'zifile-windows-x64.exe',
         'zifile-cli-windows-x64.exe',
         'zifile-worker-windows-x64.exe',
         'zifile-shell-windows-x64.dll',
@@ -676,10 +676,8 @@ foreach ($requiredStageReleaseToken in @(
     'prerelease: true',
     'Prepare user-facing stage release assets',
     '*.msixbundle',
-    'zifile-desktop-windows-x64.exe',
-    'zifile-worker-windows-x64.exe',
-    'zifile-desktop-windows-arm64.exe',
-    'zifile-worker-windows-arm64.exe',
+    'zifile-windows-x64.exe',
+    'zifile-windows-arm64.exe',
     'sha256sum ./*.msixbundle ./*.exe',
     'public-release/*'
 )) {
@@ -715,11 +713,9 @@ foreach ($requiredPublicReleaseToken in @(
     'pattern: windows-*',
     'prerelease: false',
     'No all-in-one MSIX bundle was staged for the public release.',
-    'Expected x64 and ARM64 desktop/worker portable executables for the public release.',
-    'zifile-desktop-windows-x64.exe',
-    'zifile-worker-windows-x64.exe',
-    'zifile-desktop-windows-arm64.exe',
-    'zifile-worker-windows-arm64.exe',
+    'Expected one standalone x64 and one standalone ARM64 portable executable for the public release.',
+    'zifile-windows-x64.exe',
+    'zifile-windows-arm64.exe',
     'public-release',
     'files: public-release/*',
     'public unsigned Windows build',

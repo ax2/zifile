@@ -4,6 +4,21 @@ All notable changes to ZiFile are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-08-30
+
+### Added
+
+- Publish a genuinely standalone Windows desktop EXE for x64 and ARM64. The
+  desktop binary embeds the Worker runtime and relaunches itself in protocol
+  mode, so portable users no longer need a second Worker file.
+
+### Changed
+
+- Restrict public GitHub Release assets to one all-in-one MSIX bundle, one
+  standalone EXE per architecture, and `SHA256SUMS.txt`.
+- Keep CLI, Worker, Shell DLL, audits, SBOMs, provenance, and WinGet YAML as
+  build or signing evidence instead of user-facing Release assets.
+
 ## [0.1.2] - 2026-08-30
 
 ### Added

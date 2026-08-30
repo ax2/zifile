@@ -117,7 +117,7 @@ jobs:
           $source = "dist/ZiFile-$version-windows-$arch"
           $output = "artifacts-$arch"
           New-Item -ItemType Directory -Path $output -Force | Out-Null
-          Copy-Item -LiteralPath "$source/zifile-desktop.exe" -Destination "$output/zifile-desktop-windows-$arch.exe"
+          Copy-Item -LiteralPath "$source/zifile-desktop.exe" -Destination "$output/zifile-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile.exe" -Destination "$output/zifile-cli-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile-worker.exe" -Destination "$output/zifile-worker-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile-shell.dll" -Destination "$output/zifile-shell-windows-$arch.dll"
@@ -249,7 +249,7 @@ jobs:
           $source = "artifacts-$arch"
           $input = "signing-input-$arch"
           New-Item -ItemType Directory -Path $input -Force | Out-Null
-          Copy-Item -LiteralPath "$source/zifile-desktop-windows-$arch.exe" -Destination $input
+          Copy-Item -LiteralPath "$source/zifile-windows-$arch.exe" -Destination $input
           Copy-Item -LiteralPath "$source/zifile-cli-windows-$arch.exe" -Destination $input
           Copy-Item -LiteralPath "$source/zifile-worker-windows-$arch.exe" -Destination $input
           Copy-Item -LiteralPath "$source/zifile-shell-windows-$arch.dll" -Destination $input
@@ -414,14 +414,12 @@ jobs:
           $installers | Copy-Item -Destination $public -Force
           $portableExecutables = @(Get-ChildItem -LiteralPath release -File | Where-Object {
             $_.Name -in @(
-              'zifile-desktop-windows-x64.exe',
-              'zifile-worker-windows-x64.exe',
-              'zifile-desktop-windows-arm64.exe',
-              'zifile-worker-windows-arm64.exe'
+              'zifile-windows-x64.exe',
+              'zifile-windows-arm64.exe'
             )
           })
-          if ($portableExecutables.Count -ne 4) {
-            throw 'Expected x64 and ARM64 desktop/worker portable executables for the public release.'
+          if ($portableExecutables.Count -ne 2) {
+            throw 'Expected one standalone x64 and one standalone ARM64 portable executable for the public release.'
           }
           $portableExecutables | Copy-Item -Destination $public -Force
           Get-FileHash -LiteralPath @(
@@ -472,10 +470,8 @@ jobs:
           find release -maxdepth 1 -type f -iname '*.msixbundle' -exec cp -f {} public-release/ \;
           test -n "$(find public-release -maxdepth 1 -type f -iname '*.msixbundle' -print -quit)"
           for executable in \
-            zifile-desktop-windows-x64.exe \
-            zifile-worker-windows-x64.exe \
-            zifile-desktop-windows-arm64.exe \
-            zifile-worker-windows-arm64.exe; do
+            zifile-windows-x64.exe \
+            zifile-windows-arm64.exe; do
             test -f "release/$executable"
             cp -f "release/$executable" public-release/
           done
