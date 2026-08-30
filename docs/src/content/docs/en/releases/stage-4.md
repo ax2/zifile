@@ -86,3 +86,9 @@ Stable 1.0 has not been published; `v0.1.4` is the current usable public GitHub 
 - The PR passed `cargo fmt --all -- --check` and `cargo test -p zifile-desktop --all-targets --locked` before merge commit [`1487bf6`](https://github.com/ax2/zifile/commit/1487bf6758d8a69b4844a0a4709e146a13ee0c0a).
 - PR [#49](https://github.com/ax2/zifile/pull/49) makes the pinned WinGet validation-client repair retry up to three times with bounded backoff after transient CDN connection failures, and records the attempt limit in the validation evidence.
 - All PR #49 checks passed, including official WinGet manifest validation, Rust quality, foundation smoke, performance, fuzz-target compilation, and reference-tool interoperability; merge commit [`cbb6505`](https://github.com/ax2/zifile/commit/cbb6505be639f27b064b98de52c766ebea0ec14d) is now on `main`.
+
+## 2026-08-30 — WinGet all-in-one manifest alignment
+
+- The WinGet generator, verifier, and Release workflow no longer depend on unpublished x64/ARM64 per-architecture MSIX URLs, hashes, or local paths; they accept only the public all-in-one `.msixbundle`.
+- The installer manifest retains x64 and ARM64 selection nodes, but the verifier requires both to reference the same bundle URL and SHA-256 and verifies that hash against the local bundle. GitHub and WinGet therefore use the same public installer payload.
+- Official `winget validate` with WinGet 1.29.290 accepted the schema 1.12 four-file candidate; all 29 extensions, hash-tamper rejection, and the complete packaging policy passed. Community-repository acceptance and signing remain open gates.

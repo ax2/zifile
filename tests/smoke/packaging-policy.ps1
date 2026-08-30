@@ -266,18 +266,13 @@ if (-not $wingetFixture.StartsWith($temporaryBase, [System.StringComparison]::Or
 try {
     New-Item -ItemType Directory -Path $wingetFixture -Force | Out-Null
     $wingetVersion = '9.8.7'
-    $wingetX64 = Join-Path $wingetFixture 'ZiFile-9.8.7.0-windows-x64.msix'
-    $wingetArm64 = Join-Path $wingetFixture 'ZiFile-9.8.7.0-windows-arm64.msix'
-    Set-Content -LiteralPath $wingetX64 -Value 'deterministic x64 signed-package fixture' -Encoding utf8NoBOM
-    Set-Content -LiteralPath $wingetArm64 -Value 'deterministic arm64 signed-package fixture' -Encoding utf8NoBOM
-    $wingetX64Sha = (Get-FileHash -LiteralPath $wingetX64 -Algorithm SHA256).Hash
-    $wingetArm64Sha = (Get-FileHash -LiteralPath $wingetArm64 -Algorithm SHA256).Hash
+    $wingetBundle = Join-Path $wingetFixture 'ZiFile-9.8.7.0-windows.msixbundle'
+    Set-Content -LiteralPath $wingetBundle -Value 'deterministic all-in-one signed-package fixture' -Encoding utf8NoBOM
+    $wingetBundleSha = (Get-FileHash -LiteralPath $wingetBundle -Algorithm SHA256).Hash
     & $wingetGenerator `
         -Version $wingetVersion `
-        -X64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$wingetVersion/$(Split-Path $wingetX64 -Leaf)" `
-        -X64InstallerSha256 $wingetX64Sha `
-        -Arm64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$wingetVersion/$(Split-Path $wingetArm64 -Leaf)" `
-        -Arm64InstallerSha256 $wingetArm64Sha `
+        -BundleInstallerUrl "https://github.com/ax2/zifile/releases/download/v$wingetVersion/$(Split-Path $wingetBundle -Leaf)" `
+        -BundleInstallerSha256 $wingetBundleSha `
         -OutputRoot $wingetFixture | Out-Null
     $wingetManifestDirectory = Join-Path $wingetFixture 'manifests\z\ZiCode\ZiFile\9.8.7'
     foreach ($manifestPath in Get-ChildItem -LiteralPath $wingetManifestDirectory -File -Filter '*.yaml') {
@@ -287,32 +282,29 @@ try {
     $wingetResult = & $wingetVerifier `
         -ManifestDirectory $wingetManifestDirectory `
         -Version $wingetVersion `
-        -X64InstallerPath $wingetX64 `
-        -Arm64InstallerPath $wingetArm64 | ConvertFrom-Json
+        -BundleInstallerPath $wingetBundle | ConvertFrom-Json
     if (-not $wingetResult.ready_for_winget_validate -or
-        -not $wingetResult.local_installers_verified -or
+        -not $wingetResult.local_bundle_verified -or
+        $wingetResult.public_installer_model -cne 'all-in-one-msixbundle' -or
         $wingetResult.manifest_files -ne 4 -or
         $wingetResult.architectures.Count -ne 2) {
         throw 'The generated WinGet multi-file candidate did not pass the signed-package verifier.'
     }
     $installerManifest = Join-Path $wingetManifestDirectory 'ZiCode.ZiFile.installer.yaml'
     $originalInstallerManifest = Get-Content -Raw -LiteralPath $installerManifest
-    $tamperedInstallerManifest = $originalInstallerManifest.Replace($wingetX64Sha, ('0' * 64))
+    $tamperedInstallerManifest = $originalInstallerManifest.Replace($wingetBundleSha, ('0' * 64))
     Set-Content -LiteralPath $installerManifest -Value $tamperedInstallerManifest -Encoding utf8NoBOM -NoNewline
-    $null = Get-ExpectedFailure -Pattern 'does not match the signed local MSIX' -Action {
+    $null = Get-ExpectedFailure -Pattern 'does not match the local all-in-one MSIX bundle' -Action {
         & $wingetVerifier `
             -ManifestDirectory $wingetManifestDirectory `
             -Version $wingetVersion `
-            -X64InstallerPath $wingetX64 `
-            -Arm64InstallerPath $wingetArm64
+            -BundleInstallerPath $wingetBundle
     }
     $null = Get-ExpectedFailure -Pattern 'versioned ZiFile GitHub Release path' -Action {
         & $wingetGenerator `
             -Version $wingetVersion `
-            -X64InstallerUrl "https://example.com/$(Split-Path $wingetX64 -Leaf)" `
-            -X64InstallerSha256 $wingetX64Sha `
-            -Arm64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$wingetVersion/$(Split-Path $wingetArm64 -Leaf)" `
-            -Arm64InstallerSha256 $wingetArm64Sha `
+            -BundleInstallerUrl "https://example.com/$(Split-Path $wingetBundle -Leaf)" `
+            -BundleInstallerSha256 $wingetBundleSha `
             -OutputRoot $wingetFixture
     }
 }
@@ -1235,8 +1227,8 @@ foreach ($requiredWingetToken in @(
     './packaging/winget/Generate-Manifests.ps1',
     './packaging/winget/Test-Manifests.ps1',
     'target/winget/manifests/z/ZiCode/ZiFile/$version',
-    '-X64InstallerPath $x64.FullName',
-    '-Arm64InstallerPath $arm64.FullName'
+    '-BundleInstallerPath $bundle.FullName',
+    'all-in-one MSIX bundle artifact'
 )) {
     if ($releaseWorkflowSource -notmatch [Regex]::Escape($requiredWingetToken)) {
         throw "Release does not enforce the verified WinGet candidate token: $requiredWingetToken"
