@@ -444,6 +444,11 @@ jobs:
             Sort-Object Path |
             ForEach-Object { "{0}  {1}" -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf) } |
             Set-Content -LiteralPath "$public/SHA256SUMS.txt"
+      - name: Audit user-facing release assets
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          ./tests/smoke/public-release-assets.ps1 -Directory public-release -Version $version
       - name: Attest SBOM
         uses: actions/attest-build-provenance@v4
         with:
@@ -491,6 +496,11 @@ jobs:
             cp -f "release/$executable" public-release/
           done
           (cd public-release && sha256sum ./*.msixbundle ./*.exe) > public-release/SHA256SUMS.txt
+      - name: Audit user-facing stage assets
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          ./tests/smoke/public-release-assets.ps1 -Directory public-release -Version $version
       - name: Attest stage build assets
         uses: actions/attest-build-provenance@v4
         with:
