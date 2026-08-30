@@ -17,6 +17,8 @@ description: GitHub、WinGet 与 Microsoft Store 的统一版本发布流程。
 
 GitHub Release 面向用户只保留一个 all-in-one MSIX、一个 x64 独立便携 EXE、一个 ARM64 独立便携 EXE，以及一个 SHA-256 校验文件。审计 JSON、SBOM、来源证明和 WinGet YAML 作为 workflow artifact 保留，不混入 Release assets。GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID `ZiCode.ZiFile` 并引用发行方控制的版本化下载地址。Microsoft Store 以 MSIX 为主。
 
+Release Job 会运行 `tests/smoke/portable-exe.ps1`：x64 桌面 EXE 被复制到不含独立 Worker 的目录中，启动内置的 `--zifile-worker` 模式，读取真实 ZIP 并校验返回项目。ARM64 EXE 在 x64 runner 上执行相同的 PE 头与“无旁置 Worker”审计，但跳过运行；真正的 ARM64 执行仍属于实机门禁。
+
 文档当前发布到 `ax2.github.io/zifile`；完成 DNS 配置后迁移到计划域名 `zifile.zicode.com`。
 
 Partner Center 需要先手动预留名称并完成首个提交；之后可以接入 Store Submission API。签名策略见 [ADR-0006](/zifile/architecture/adr-0006-release-signing/)：Store 完成商店通道最终签名，GitHub/WinGet 使用云 HSM 托管的公开受信任签名，生产私钥不得导出到 GitHub Secret。Release workflow 已移除 PFX，并接入 DigiCert Binary Signing 的受保护 simple-signing 路径；没有真实证书证据前，1.0 签名门禁仍保持 `pending`。

@@ -1,5 +1,8 @@
 param(
     [Parameter(Mandatory)][string]$ExecutablePath,
+    [ValidateSet('x64', 'arm64')]
+    [string]$Architecture = 'x64',
+    [switch]$SkipExecution,
     [ValidateRange(5, 120)][int]$TimeoutSeconds = 15
 )
 
@@ -9,6 +12,43 @@ Set-StrictMode -Version Latest
 $executable = [IO.Path]::GetFullPath($ExecutablePath)
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "Portable executable does not exist: $executable"
+}
+
+function Get-PeMachine {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        $reader = [IO.BinaryReader]::new($stream)
+        try {
+            if ($reader.ReadUInt16() -ne 0x5A4D) {
+                throw "Not a PE executable: $Path"
+            }
+            $stream.Position = 0x3C
+            $peOffset = $reader.ReadUInt32()
+            if ($peOffset -gt ($stream.Length - 6)) {
+                throw "Invalid PE header offset: $Path"
+            }
+            $stream.Position = $peOffset
+            if ($reader.ReadUInt32() -ne 0x00004550) {
+                throw "Invalid PE signature: $Path"
+            }
+            return $reader.ReadUInt16()
+        }
+        finally {
+            $reader.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+$expectedMachine = if ($Architecture -eq 'x64') { 0x8664 } else { 0xAA64 }
+$machine = Get-PeMachine -Path $executable
+if ($machine -ne $expectedMachine) {
+    throw ('Portable executable architecture mismatch: expected {0} for {1}, found 0x{2:X4}.' -f
+        $Architecture, $executable, $machine)
 }
 
 $temporaryBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd(
@@ -28,13 +68,28 @@ if (-not $temporaryRoot.StartsWith($temporaryBase + [IO.Path]::DirectorySeparato
 
 try {
     New-Item -ItemType Directory -Path $sourceRoot -Force | Out-Null
-    Set-Content -LiteralPath $sourceFile -Value 'ZiFile standalone smoke test' -Encoding utf8NoBOM
-    Compress-Archive -LiteralPath $sourceFile -DestinationPath $archivePath
     Copy-Item -LiteralPath $executable -Destination $portableExecutable
 
     if (Test-Path -LiteralPath $workerExecutable) {
         throw 'The standalone portable smoke directory unexpectedly contains a separate Worker executable.'
     }
+
+    if ($SkipExecution) {
+        [ordered]@{
+            schema_version = 1
+            executable = [IO.Path]::GetFileName($executable)
+            architecture = $Architecture
+            pe_machine = ('0x{0:X4}' -f $machine)
+            worker_mode = '--zifile-worker'
+            separate_worker_present = $false
+            execution_skipped = $true
+            passed = $true
+        } | ConvertTo-Json -Compress
+        return
+    }
+
+    Set-Content -LiteralPath $sourceFile -Value 'ZiFile standalone smoke test' -Encoding utf8NoBOM
+    Compress-Archive -LiteralPath $sourceFile -DestinationPath $archivePath
 
     $request = [ordered]@{
         version = 1
@@ -101,6 +156,8 @@ try {
     [ordered]@{
         schema_version = 1
         executable = [IO.Path]::GetFileName($executable)
+        architecture = $Architecture
+        pe_machine = ('0x{0:X4}' -f $machine)
         worker_mode = '--zifile-worker'
         separate_worker_present = $false
         archive_entry = 'hello.txt'

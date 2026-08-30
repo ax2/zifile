@@ -633,8 +633,12 @@ foreach ($requiredBundleWorkflowToken in @(
     }
 }
 foreach ($requiredPortableSmokeToken in @(
-    'Smoke test standalone desktop executable',
-    'tests/smoke/portable-exe.ps1'
+    'Smoke test standalone x64 executable',
+    'Audit standalone ARM64 executable',
+    'tests/smoke/portable-exe.ps1',
+    '-Architecture x64',
+    '-Architecture arm64',
+    '-SkipExecution'
 )) {
     if ($releaseSource -notmatch [Regex]::Escape($requiredPortableSmokeToken)) {
         throw "The release workflow omits standalone portable EXE smoke coverage: $requiredPortableSmokeToken"
@@ -644,7 +648,10 @@ $portableSmokeSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'tests
 foreach ($requiredPortableSmokeSourceToken in @(
     '--zifile-worker',
     'separate_worker_present',
-    'archive_entry'
+    'archive_entry',
+    'Get-PeMachine',
+    '0xAA64',
+    'execution_skipped'
 )) {
     if ($portableSmokeSource -notmatch [Regex]::Escape($requiredPortableSmokeSourceToken)) {
         throw "The standalone portable EXE smoke test omits required behavior: $requiredPortableSmokeSourceToken"
