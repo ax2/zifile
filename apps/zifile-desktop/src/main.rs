@@ -1982,7 +1982,9 @@ mod tests {
 
     #[test]
     fn archive_layout_keeps_dense_columns_scrollable_at_the_minimum_width() {
-        assert!(ARCHIVE_TABLE_MIN_WIDTH >= 1_000.0);
+        const {
+            assert!(ARCHIVE_TABLE_MIN_WIDTH >= 1_000.0);
+        }
         let source = include_str!("main.rs");
         assert!(source.contains("let selection_controls ="));
         assert!(source.contains("let pagination_controls ="));
