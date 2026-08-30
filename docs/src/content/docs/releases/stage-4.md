@@ -167,6 +167,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - [Release workflow #33334902669](https://github.com/ax2/zifile/actions/runs/33334902669) 成功完成 SBOM、x64/ARM64 构建、x64 独立 EXE 启动冒烟、ARM64 架构审计、产物证明、一体化 MSIX Bundle 和公开发布；签名分支按本次未签名常规发布策略跳过。
 - 非草稿、非预发布的 [v0.1.6 Release](https://github.com/ax2/zifile/releases/tag/v0.1.6) 严格只公开 `ZiFile-0.1.6.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`，没有 DLL、JSON、YAML 或内部组件。
 - 独立下载后重算 SHA-256：MSIX Bundle 为 `76ac635432d58325c1f1d48c721cf198e68a33734ac8e35ce173e4ddc7edd842`，x64 EXE 为 `2beae4ced17689689973485f3ac9b015c38befc1faebdadb1145025f8a8b738b`，ARM64 EXE 为 `71f6854d15b85f0124bd2442f8f82239abddba3b9ab4930753dc9c982e6d3fb4`；三者均与 `SHA256SUMS.txt` 和 GitHub asset digest 一致。
+- PR [#68](https://github.com/ax2/zifile/pull/68) 合并后，用升级后的单文件门禁重新下载并验证同一个公开 `zifile-windows-x64.exe`：临时运行目录没有旁置 Worker，仅靠该 EXE 完成 ZIP 创建、列出 `hello.txt`、解压和逐字节核对，结果为 `round_trip_verified=true`。这补强现有 Release 的功能证据，不改变其未签名状态。
 
 ## 2026-08-31 — 最近打开的压缩文件
 
