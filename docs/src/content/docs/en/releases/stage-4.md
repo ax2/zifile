@@ -51,7 +51,7 @@ Stable 1.0 has not been published; `v0.1.0` is the current usable public GitHub 
 - The Astro static build generated 63 pages with 0 errors/warnings/hints; user documentation, Node/PowerShell syntax, packaging policy, and worktree hygiene checks passed.
 - This is local code and documentation evidence. It does not change the 11 external release gates from `pending` and does not replace trusted signing, Store/WinGet, physical ARM64, WACK, or real assistive-technology validation.
 
-## 2026-08-30 — 0.1.1 release preparation
+## 2026-08-30 — 0.1.2 release preparation
 
-- Workspace, internal crate pins, the documentation package, and `Cargo.lock` are being advanced together to `0.1.1` for a stable patch release containing the merged professional UI improvements.
+- Workspace, internal crate pins, the documentation package, and `Cargo.lock` are being advanced together to `0.1.2` for a stable patch release containing the all-in-one MSIX and portable executable release assets.
 - The ordinary public Release path still produces unsigned GitHub Windows artifacts; SignPath, WinGet community acceptance, Microsoft Store, WACK, physical ARM64, and full assistive-technology gates remain tracked independently.

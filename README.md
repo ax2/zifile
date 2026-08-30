@@ -12,7 +12,7 @@ read-only beta providers.
 
 The current build is feature-complete for the currently supported archive contract:
 the source, x64/ARM64 builds, package audits, reproducibility checks and release
-rehearsals are automated. The public [`v0.1.0` GitHub release](https://github.com/ax2/zifile/releases/tag/v0.1.0)
+rehearsals are automated. The public [`v0.1.1` GitHub release](https://github.com/ax2/zifile/releases/tag/v0.1.1)
 uses unsigned artifacts; a stable 1.0 release is still gated on
 trusted signing, real foreground Windows validation, physical ARM64, WACK,
 Partner Center/Microsoft Store certification and WinGet acceptance.
@@ -98,7 +98,7 @@ pnpm --dir docs build
 | CLI | `formats`, `detect`, `list`, `test`, `extract`, and `create` |
 | Archive providers | ZIP/ZIP64/AES, 7z/AES, read-only RAR 1.3 through RAR 7 with encryption, read-only Windows CAB, TAR compositions including TAR + LZMA, standalone LZMA, and common streams |
 | Packaging | Real x64/ARM64 build outputs combined into one all-in-one MSIX bundle for users |
-| Distribution | Tag workflow publishes one MSIX bundle and checksum; SBOM, provenance, audits and WinGet candidates remain build evidence |
+| Distribution | Tag workflow publishes one MSIX bundle, architecture-matched portable desktop/Worker EXEs and one checksum; SBOM, provenance, audits and WinGet candidates remain build evidence |
 
 Encrypted CLI operations read one password line from standard input. ZiFile does
 not accept a plaintext password argument, keeping it out of the process command

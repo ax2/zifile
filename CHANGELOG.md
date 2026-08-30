@@ -4,6 +4,16 @@ All notable changes to ZiFile are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-08-30
+
+### Added
+
+- Publish one all-in-one Windows MSIX bundle plus architecture-matched portable
+  desktop and Worker executables for users who do not want to install MSIX.
+- Keep GitHub Release assets focused on the bundle, portable executables, and a
+  single SHA-256 manifest; build audits, SBOMs, provenance, and WinGet YAML stay
+  in workflow evidence artifacts.
+
 ## [0.1.0] - 2026-08-29
 
 ### Added

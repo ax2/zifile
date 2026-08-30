@@ -51,7 +51,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - Astro 静态构建生成 63 个页面，0 errors/warnings/hints；用户文档、Node/PowerShell 语法、打包策略和工作树卫生检查通过。
 - 这些是本地代码与文档证据，不改变 11 项外部发布门禁的 `pending` 状态，也不替代可信签名、Store/WinGet、ARM64 实机、WACK 或真实辅助技术验证。
 
-## 2026-08-30 — 0.1.1 发布准备
+## 2026-08-30 — 0.1.2 发布准备
 
-- 将 workspace、内部 crate 依赖、文档包和 Cargo.lock 版本统一推进到 `0.1.1`，为已合并的专业 UI 改进创建稳定补丁版本。
+- 将 workspace、内部 crate 依赖、文档包和 Cargo.lock 版本统一推进到 `0.1.2`，为 all-in-one MSIX 与便携 EXE 发布资产创建稳定补丁版本。
 - 版本仍通过普通公开 Release 流程生成未签名的 GitHub Windows 产物；SignPath、WinGet 社区接纳、Microsoft Store、WACK、物理 ARM64 和完整辅助技术门禁继续保持独立状态。
