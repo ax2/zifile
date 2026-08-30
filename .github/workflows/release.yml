@@ -109,12 +109,21 @@ jobs:
             -Version '${{ steps.version.outputs.msix }}' `
             -Architecture '${{ matrix.architecture }}' `
             -AccessibleUi
-      - name: Smoke test standalone desktop executable
+      - name: Smoke test standalone x64 executable
         if: matrix.architecture == 'x64'
         shell: pwsh
         run: |
           ./tests/smoke/portable-exe.ps1 `
-            -ExecutablePath "dist/ZiFile-${{ steps.version.outputs.msix }}-windows-x64/zifile-desktop.exe"
+            -ExecutablePath "dist/ZiFile-${{ steps.version.outputs.msix }}-windows-x64/zifile-desktop.exe" `
+            -Architecture x64
+      - name: Audit standalone ARM64 executable
+        if: matrix.architecture == 'arm64'
+        shell: pwsh
+        run: |
+          ./tests/smoke/portable-exe.ps1 `
+            -ExecutablePath "dist/ZiFile-${{ steps.version.outputs.msix }}-windows-arm64/zifile-desktop.exe" `
+            -Architecture arm64 `
+            -SkipExecution
       - name: Stage release files
         shell: pwsh
         run: |
