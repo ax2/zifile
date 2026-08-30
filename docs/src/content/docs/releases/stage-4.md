@@ -74,3 +74,10 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - PR [#45](https://github.com/ax2/zifile/pull/45) 在 `publish-stage` 的第一步加入仓库 checkout，并增加作用域检查，确保该 Job 在执行公开资产审计前始终拥有当前版本的脚本。
 - 合并提交为 [`4d65881`](https://github.com/ax2/zifile/commit/4d65881c5c20d3a6cb8221d6d98aa94c90d7775a)；合并后的主分支 CI [33305272788](https://github.com/ax2/zifile/actions/runs/33305272788) 全部通过。
 - 该修复不改变公开资产集合：Release 仍只发布 all-in-one MSIX、x64 独立 EXE、ARM64 独立 EXE 和 `SHA256SUMS.txt`；审计、SBOM、来源证明和 WinGet YAML 继续作为 workflow artifact 保留。
+
+## 2026-08-30 — UI 校验与 WinGet 门禁稳定性
+
+- PR [#48](https://github.com/ax2/zifile/pull/48) 在 Iced 创建页面直接显示非空来源列表的校验失败提示，并保持“创建”按钮禁用；新增回归守卫确认双语危险提示会进入视图。
+- PR 在合并提交 [`1487bf6`](https://github.com/ax2/zifile/commit/1487bf6758d8a69b4844a0a4709e146a13ee0c0a) 前通过 `cargo fmt --all -- --check` 和 `cargo test -p zifile-desktop --all-targets --locked`。
+- PR [#49](https://github.com/ax2/zifile/pull/49) 为固定版本的 WinGet validation client 增加最多 3 次有界退避重试，用于处理 CDN 瞬时连接失败，并将尝试次数写入验证证据。
+- PR #49 的全部检查通过，包括官方 WinGet manifest validation、Rust quality、Foundation smoke、性能、模糊目标编译和参考工具互操作性；合并提交 [`cbb6505`](https://github.com/ax2/zifile/commit/cbb6505be639f27b064b98de52c766ebea0ec14d) 已进入 `main`。
