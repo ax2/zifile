@@ -67,3 +67,10 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - [`v0.1.3 Release`](https://github.com/ax2/zifile/releases/tag/v0.1.3) 已由工作流 [33296532873](https://github.com/ax2/zifile/actions/runs/33296532873) 自动发布；PR #39 的 9 项 CI 均通过，其中包括 x64 和 ARM64 可复现双构建。
 - 最终公开资产严格为 `ZiFile-0.1.3.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`。桌面 EXE 内置 Worker runtime，并使用 `--zifile-worker` 参数启动自身，因此便携版不需要额外的 Worker 文件。
 - x64 便携 EXE 已从 Release 下载并与 `SHA256SUMS.txt` 匹配；ARM64 哈希保留在工作流生成的校验清单中。该 Release 仍明确标记为未签名，也不是 Microsoft Store 认证包。
+
+## 2026-08-30 — 公开 Release 资产审计修复
+
+- 发现阶段预发布 Job 会直接调用仓库内的 `tests/smoke/public-release-assets.ps1`，但 Job 未 checkout 当前提交；在干净的 Ubuntu runner 上会因脚本不存在而失败。
+- PR [#45](https://github.com/ax2/zifile/pull/45) 在 `publish-stage` 的第一步加入仓库 checkout，并增加作用域检查，确保该 Job 在执行公开资产审计前始终拥有当前版本的脚本。
+- 合并提交为 [`4d65881`](https://github.com/ax2/zifile/commit/4d65881c5c20d3a6cb8221d6d98aa94c90d7775a)；合并后的主分支 CI [33305272788](https://github.com/ax2/zifile/actions/runs/33305272788) 全部通过。
+- 该修复不改变公开资产集合：Release 仍只发布 all-in-one MSIX、x64 独立 EXE、ARM64 独立 EXE 和 `SHA256SUMS.txt`；审计、SBOM、来源证明和 WinGet YAML 继续作为 workflow artifact 保留。
