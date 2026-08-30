@@ -15,7 +15,7 @@ description: GitHub、WinGet 与 Microsoft Store 的统一版本发布流程。
 
 ## 渠道
 
-GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID `ZiCode.ZiFile` 并引用发行方控制的版本化下载地址。Microsoft Store 以 MSIX 为主。
+GitHub Release 面向用户只保留一个 all-in-one MSIX、x64/ARM64 桌面端与 Worker 独立运行文件对，以及一个 SHA-256 校验文件。审计 JSON、SBOM、来源证明和 WinGet YAML 作为 workflow artifact 保留，不混入 Release assets。GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID `ZiCode.ZiFile` 并引用发行方控制的版本化下载地址。Microsoft Store 以 MSIX 为主。
 
 文档当前发布到 `ax2.github.io/zifile`；完成 DNS 配置后迁移到计划域名 `zifile.zicode.com`。
 

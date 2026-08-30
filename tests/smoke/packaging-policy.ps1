@@ -3,6 +3,7 @@ $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $publishingPolicy = Join-Path $repoRoot 'packaging\msix\Test-PublishingInputs.ps1'
 $packageAudit = Join-Path $repoRoot 'packaging\msix\Test-Package.ps1'
 $packageBuild = Join-Path $repoRoot 'packaging\msix\Build-Package.ps1'
+$packageBundle = Join-Path $repoRoot 'packaging\msix\Build-Bundle.ps1'
 $packageLifecycle = Join-Path $repoRoot 'tests\smoke\msix-lifecycle.ps1'
 $repairHelper = Join-Path $repoRoot 'tests\helpers\msix-repair\Program.cs'
 $repairProject = Join-Path $repoRoot 'tests\helpers\msix-repair\MsixRepair.csproj'
@@ -37,7 +38,7 @@ $embeddedIconAudit = Join-Path $repoRoot 'packaging\msix\Test-EmbeddedIcon.ps1'
 $storeListingAssets = Join-Path $repoRoot 'packaging\store\Test-ListingAssets.ps1'
 $storeListingAssetSmoke = Join-Path $repoRoot 'tests\smoke\store-listing-assets.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $windowsTools, $contractPolicy, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground, $msixAssets, $embeddedIconAudit, $storeListingAssets, $storeListingAssetSmoke)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageBundle, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $windowsTools, $contractPolicy, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground, $msixAssets, $embeddedIconAudit, $storeListingAssets, $storeListingAssetSmoke)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -620,6 +621,17 @@ foreach ($requiredSigningWorkflowToken in @(
         throw "The release workflow omits cloud-signing token: $requiredSigningWorkflowToken"
     }
 }
+foreach ($requiredBundleWorkflowToken in @(
+    'Build-Bundle.ps1',
+    'Windows all-in-one MSIX bundle',
+    'windows-all-in-one',
+    '.msixbundle',
+    'public-release/*'
+)) {
+    if ($releaseSource -notmatch [Regex]::Escape($requiredBundleWorkflowToken)) {
+        throw "The release workflow omits all-in-one installer token: $requiredBundleWorkflowToken"
+    }
+}
 foreach ($retiredPfxToken in @('ZIFILE_PFX_BASE64', 'ZIFILE_PFX_PASSWORD')) {
     if ($releaseSource -match [Regex]::Escape($retiredPfxToken)) {
         throw "The release workflow still references retired PFX input: $retiredPfxToken"
@@ -659,13 +671,17 @@ if ($releaseSource -notmatch [Regex]::Escape('Test-Screenshots.ps1 -RequireCompl
 foreach ($requiredStageReleaseToken in @(
     "if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')",
     'publish-stage:',
-    'needs: [windows, sbom]',
+    'needs: [windows, bundle, sbom]',
     'pattern: windows-*',
     'prerelease: true',
-    'RELEASE-ASSETS.txt',
-    'SHA256SUMS-stage.txt',
-    "! -name 'SHA256SUMS-stage.txt'",
-    "while IFS= read -r -d '' asset"
+    'Prepare user-facing stage release assets',
+    '*.msixbundle',
+    'zifile-desktop-windows-x64.exe',
+    'zifile-worker-windows-x64.exe',
+    'zifile-desktop-windows-arm64.exe',
+    'zifile-worker-windows-arm64.exe',
+    'sha256sum ./*.msixbundle ./*.exe',
+    'public-release/*'
 )) {
     if ($releaseSource -notmatch [Regex]::Escape($requiredStageReleaseToken)) {
         throw "The release workflow omits stage-release token: $requiredStageReleaseToken"
@@ -695,9 +711,17 @@ foreach ($requiredIdentitySelectionToken in @(
     }
 }
 foreach ($requiredPublicReleaseToken in @(
-    'needs: [windows, sbom]',
+    'needs: [windows, bundle, sbom]',
     'pattern: windows-*',
     'prerelease: false',
+    'No all-in-one MSIX bundle was staged for the public release.',
+    'Expected x64 and ARM64 desktop/worker portable executables for the public release.',
+    'zifile-desktop-windows-x64.exe',
+    'zifile-worker-windows-x64.exe',
+    'zifile-desktop-windows-arm64.exe',
+    'zifile-worker-windows-arm64.exe',
+    'public-release',
+    'files: public-release/*',
     'public unsigned Windows build',
     'Verify the included SHA256SUMS file'
 )) {

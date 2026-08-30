@@ -32,6 +32,10 @@ archive. The builder is unsigned by default. Its local PFX parameters remain
 only for isolated developer experiments; GitHub Release never consumes a PFX
 and signs staged artifacts through a cloud-HSM provider.
 
+Release automation combines the x64 and ARM64 packages into one
+`ZiFile-<version>-windows.msixbundle`. Windows selects the matching package from
+the bundle, so users download one all-in-one installer.
+
 ```powershell
 ./packaging/msix/Build-Package.ps1 -Version 0.1.0.0 -Architecture x64
 ```
@@ -75,8 +79,11 @@ Implemented packaging features:
 - an architecture-matched Rust `IExplorerCommand` COM DLL registered for the Windows 11 modern
   File Explorer menu, with its CLSID, item types and PE machine covered by the package audit.
 
-The desktop executable requires its matching Worker. GitHub release staging therefore publishes
-both architecture-suffixed files; complete runnable directories retain the canonical sibling name.
+The desktop executable requires its matching Worker. GitHub Release therefore publishes both
+architecture-suffixed desktop/Worker pairs as portable executable assets, alongside the single
+all-in-one MSIX bundle. Keep each pair in the same directory; the desktop executable resolves its
+matching Worker by filename. The MSIX contains both files internally and does not require a
+separate portable download.
 
 Stable tagged GitHub releases build with formal `ZIFILE_MSIX_IDENTITY` and
 `ZIFILE_MSIX_PUBLISHER` plus `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME` environment

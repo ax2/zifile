@@ -11,6 +11,9 @@ param(
     [Parameter(Mandatory)]
     [ValidatePattern('^[A-Fa-f0-9]{64}$')]
     [string]$Arm64InstallerSha256,
+    [uri]$BundleInstallerUrl,
+    [ValidatePattern('^[A-Fa-f0-9]{64}$')]
+    [string]$BundleInstallerSha256,
     [string]$OutputRoot = (Join-Path $PSScriptRoot '..\..\target\winget')
 )
 
@@ -33,6 +36,18 @@ $versionPattern = '^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$'
 if ($Version -notmatch $versionPattern) {
     throw "Version '$Version' is not a supported ZiFile release version."
 }
+$useBundle = $null -ne $BundleInstallerUrl -or -not [string]::IsNullOrWhiteSpace($BundleInstallerSha256)
+if ($useBundle -and ($null -eq $BundleInstallerUrl -or [string]::IsNullOrWhiteSpace($BundleInstallerSha256))) {
+    throw 'BundleInstallerUrl and BundleInstallerSha256 must be supplied together.'
+}
+if ($useBundle) {
+    $expectedPrefix = "https://github.com/ax2/zifile/releases/download/v$Version/"
+    if ($BundleInstallerUrl.Scheme -ne 'https' -or
+        -not $BundleInstallerUrl.AbsoluteUri.StartsWith($expectedPrefix, [StringComparison]::Ordinal) -or
+        -not $BundleInstallerUrl.AbsolutePath.EndsWith('.msixbundle', [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Bundle installer URL must use the versioned ZiFile GitHub Release path '$expectedPrefix' and name an MSIX bundle."
+    }
+}
 foreach ($installer in @(
     @{ Architecture = 'x64'; Url = $X64InstallerUrl },
     @{ Architecture = 'arm64'; Url = $Arm64InstallerUrl }
@@ -51,6 +66,10 @@ $output = [IO.Path]::GetFullPath([IO.Path]::Combine([string[]]@(
     $OutputRoot, 'manifests', 'z', 'ZiCode', 'ZiFile', $Version
 )))
 New-Item -ItemType Directory -Path $output -Force | Out-Null
+$manifestX64Url = if ($useBundle) { $BundleInstallerUrl.AbsoluteUri } else { $X64InstallerUrl.AbsoluteUri }
+$manifestArm64Url = if ($useBundle) { $BundleInstallerUrl.AbsoluteUri } else { $Arm64InstallerUrl.AbsoluteUri }
+$manifestX64Sha256 = if ($useBundle) { $BundleInstallerSha256 } else { $X64InstallerSha256 }
+$manifestArm64Sha256 = if ($useBundle) { $BundleInstallerSha256 } else { $Arm64InstallerSha256 }
 
 @"
 # yaml-language-server: `$schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
@@ -75,11 +94,11 @@ FileExtensions:
 $fileExtensionYaml
 Installers:
 - Architecture: x64
-  InstallerUrl: $($X64InstallerUrl.AbsoluteUri)
-  InstallerSha256: $($X64InstallerSha256.ToUpperInvariant())
+  InstallerUrl: $manifestX64Url
+  InstallerSha256: $($manifestX64Sha256.ToUpperInvariant())
 - Architecture: arm64
-  InstallerUrl: $($Arm64InstallerUrl.AbsoluteUri)
-  InstallerSha256: $($Arm64InstallerSha256.ToUpperInvariant())
+  InstallerUrl: $manifestArm64Url
+  InstallerSha256: $($manifestArm64Sha256.ToUpperInvariant())
 ManifestType: installer
 ManifestVersion: 1.12.0
 "@ | Set-Content -LiteralPath (Join-Path $output "$identifier.installer.yaml") -Encoding utf8NoBOM

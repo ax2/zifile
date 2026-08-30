@@ -20,14 +20,18 @@ try {
     $version = '9.8.7'
     $x64 = Join-Path $fixture 'ZiFile-9.8.7.0-windows-x64.msix'
     $arm64 = Join-Path $fixture 'ZiFile-9.8.7.0-windows-arm64.msix'
+    $bundle = Join-Path $fixture 'ZiFile-9.8.7.0-windows.msixbundle'
     [IO.File]::WriteAllText($x64, 'deterministic x64 official WinGet validation fixture')
     [IO.File]::WriteAllText($arm64, 'deterministic arm64 official WinGet validation fixture')
+    [IO.File]::WriteAllText($bundle, 'deterministic all-in-one official WinGet validation fixture')
     & $generator `
         -Version $version `
         -X64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$version/$(Split-Path $x64 -Leaf)" `
         -X64InstallerSha256 (Get-FileHash -LiteralPath $x64 -Algorithm SHA256).Hash `
         -Arm64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$version/$(Split-Path $arm64 -Leaf)" `
         -Arm64InstallerSha256 (Get-FileHash -LiteralPath $arm64 -Algorithm SHA256).Hash `
+        -BundleInstallerUrl "https://github.com/ax2/zifile/releases/download/v$version/$(Split-Path $bundle -Leaf)" `
+        -BundleInstallerSha256 (Get-FileHash -LiteralPath $bundle -Algorithm SHA256).Hash `
         -OutputRoot $fixture | Out-Null
     $manifestDirectory = [IO.Path]::Combine([string[]]@(
         $fixture, 'manifests', 'z', 'ZiCode', 'ZiFile', $version
@@ -36,7 +40,8 @@ try {
         -ManifestDirectory $manifestDirectory `
         -Version $version `
         -X64InstallerPath $x64 `
-        -Arm64InstallerPath $arm64 | ConvertFrom-Json
+        -Arm64InstallerPath $arm64 `
+        -BundleInstallerPath $bundle | ConvertFrom-Json
     if (-not $preflight.ready_for_winget_validate -or -not $preflight.local_installers_verified) {
         throw 'ZiFile preflight did not accept the deterministic WinGet candidate.'
     }
@@ -69,7 +74,8 @@ try {
             -ManifestDirectory $manifestDirectory `
             -Version $version `
             -X64InstallerPath $x64 `
-            -Arm64InstallerPath $arm64
+            -Arm64InstallerPath $arm64 `
+            -BundleInstallerPath $bundle
     }
     catch {
         if ($_.Exception.Message -notmatch 'file extensions do not match') { throw }
