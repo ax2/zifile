@@ -116,3 +116,9 @@ Stable 1.0 has not been published; `v0.1.4` is the current usable public GitHub 
 - PR #55 exposed an unprotected `main`: requesting auto-merge caused GitHub to merge immediately without waiting for the running CI. The code already had complete local validation and remote checks continued afterward, but the process itself was not release-grade governance.
 - `main` now requires a pull request, all seven CI checks against the latest branch, resolved conversations, and linear history. Administrators are also bound; force-pushes and branch deletion are disabled. Required approvals remain zero so a single-maintainer project cannot deadlock on a second account.
 - GitHub API readback confirms `strict=true`, `enforce_admins=true`, all seven contexts, `required_approving_review_count=0`, enabled linear history and conversation resolution, and disabled force-pushes/deletion. PR #56 is the first live merge validation under the policy.
+
+## 2026-08-31 — 0.1.5 release preparation
+
+- Create-source validation, all-in-one WinGet manifests, shortcut help, create-password lifecycle handling, and post-completion output discovery accumulated after 0.1.4 now form a useful patch-release boundary.
+- The workspace, three internal dependency constraints, six workspace lock entries, and Astro documentation package are aligned at `0.1.5`; the version gate confirms tag `v0.1.5` maps to MSIX `0.1.5.0`.
+- `CHANGELOG.md` now follows the standard reverse order with an empty top `[Unreleased]`, then 0.1.5 and older releases. Six 0.1.5 entries pass the tag-ready gate. Download documentation continues to name v0.1.4 until the new Release actually succeeds.
