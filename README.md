@@ -97,8 +97,8 @@ pnpm --dir docs build
 | Desktop | Bilingual modern browser/creator, isolated archive worker and Windows taskbar progress |
 | CLI | `formats`, `detect`, `list`, `test`, `extract`, and `create` |
 | Archive providers | ZIP/ZIP64/AES, 7z/AES, read-only RAR 1.3 through RAR 7 with encryption, read-only Windows CAB, TAR compositions including TAR + LZMA, standalone LZMA, and common streams |
-| Packaging | Real x64/ARM64 runnable directory, EXE, MSIX, CLI alias and audited Rust shell DLL |
-| Distribution | Tag workflow produces checksums, SBOM, provenance and WinGet manifest candidates |
+| Packaging | Real x64/ARM64 build outputs combined into one all-in-one MSIX bundle for users |
+| Distribution | Tag workflow publishes one MSIX bundle and checksum; SBOM, provenance, audits and WinGet candidates remain build evidence |
 
 Encrypted CLI operations read one password line from standard input. ZiFile does
 not accept a plaintext password argument, keeping it out of the process command

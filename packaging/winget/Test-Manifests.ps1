@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory)]
     [string]$Version,
     [string]$X64InstallerPath,
-    [string]$Arm64InstallerPath
+    [string]$Arm64InstallerPath,
+    [string]$BundleInstallerPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -133,15 +134,20 @@ foreach ($match in $installerMatches) {
     $url = [uri]$match.Groups['url'].Value
     $sha = $match.Groups['sha'].Value
     $expectedPrefix = "https://github.com/ax2/zifile/releases/download/v$Version/"
+    $isBundle = $url.AbsolutePath.EndsWith('.msixbundle', [StringComparison]::OrdinalIgnoreCase)
     if ($url.Scheme -ne 'https' -or
         -not $url.AbsoluteUri.StartsWith($expectedPrefix, [StringComparison]::Ordinal) -or
-        -not $url.AbsolutePath.EndsWith("windows-$architecture.msix", [StringComparison]::OrdinalIgnoreCase)) {
-        throw "$architecture installer URL is not the matching versioned ZiFile GitHub Release asset."
+        (-not $isBundle -and -not $url.AbsolutePath.EndsWith("windows-$architecture.msix", [StringComparison]::OrdinalIgnoreCase))) {
+        throw "$architecture installer URL is not a matching versioned ZiFile GitHub Release asset."
     }
-    $localPath = $localPaths[$architecture]
+    $localPath = if ($isBundle) { $BundleInstallerPath } else { $localPaths[$architecture] }
     if ($localPath) {
         $resolved = (Resolve-Path -LiteralPath $localPath -ErrorAction Stop).Path
-        if (-not $resolved.EndsWith("windows-$architecture.msix", [StringComparison]::OrdinalIgnoreCase)) {
+        if ($isBundle) {
+            if (-not $resolved.EndsWith('.msixbundle', [StringComparison]::OrdinalIgnoreCase)) {
+                throw 'Local bundle installer name does not match the manifest URL.'
+            }
+        } elseif (-not $resolved.EndsWith("windows-$architecture.msix", [StringComparison]::OrdinalIgnoreCase)) {
             throw "$architecture local installer name does not match its architecture."
         }
         $actualSha = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash

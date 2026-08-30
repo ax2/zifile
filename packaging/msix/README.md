@@ -32,6 +32,10 @@ archive. The builder is unsigned by default. Its local PFX parameters remain
 only for isolated developer experiments; GitHub Release never consumes a PFX
 and signs staged artifacts through a cloud-HSM provider.
 
+Release automation combines the x64 and ARM64 packages into one
+`ZiFile-<version>-windows.msixbundle`. Windows selects the matching package from
+the bundle, so users download one all-in-one installer.
+
 ```powershell
 ./packaging/msix/Build-Package.ps1 -Version 0.1.0.0 -Architecture x64
 ```
