@@ -53,6 +53,8 @@ Windows Release 使用仓库固定的 Rust 1.93.0、锁文件、单作业 Cargo 
 
 在打标签前可从 Actions 手动运行 Release 工作流。该模式不接收第二个版本输入，而是使用 `Cargo.toml` 的工作区版本；推送 tag 会自动公开发布，`none` 构建未签名双架构产物，`digicert-stm` 才进入受保护环境并保存签后产物。推荐每个阶段使用精确递增的带连字符标签，例如 `v0.1.0-alpha.1`、`v0.1.0-beta.1` 和 `v1.0.0-rc.1`；稳定版本使用无连字符的 `v1.0.0`，默认也可发布公开 GitHub 构建，需要正式渠道时再显式启用 `require_release_ready`。普通 CI 与 Release 都运行版本一致性门禁；标签必须精确匹配 `v<workspace-version>`。CLI、核心 Provider 和 IPC 的兼容边界见[公开契约与版本策略](/zifile/development/contracts/)。
 
+公开 Release 成功并核对四个用户资产后，应在后续文档提交中更新 `release/public-release.json`。该文件记录已经真实发布的版本、标签、URL、时间和严格资产集合，而不是下一次构建中的 workspace 版本。文档 claim 检查会要求 README、双语快速上手、Stage 4 当前状态和路线图与它一致；因此版本准备期间可以继续安全指向上一版，发布完成后也不能遗漏下载指引更新。
+
 普通 CI 还会检查 `CHANGELOG.md` 只有一个 `[Unreleased]` 章节。标签发布必须先把本次内容整理为 `## [<workspace-version>] - YYYY-MM-DD`，至少包含一个 Keep a Changelog 分类和一条非占位更新；版本标题缺失、日期无效、空章节或残留 `TODO`/`TBD` 都会在构建前失败。手动 Release 只验证 `[Unreleased]` 结构，便于发布前演练。
 
 仓库以 [`release/readiness.json`](https://github.com/ax2/zifile/blob/main/release/readiness.json) 跟踪 1.0 的 11 项正式渠道门禁。普通 CI 与公开发布检查结构和证据格式；只有显式启用 `require_release_ready` 时，才会运行 `Test-ReleaseReadiness.ps1 -RequireReleaseReady` 并在任一 `pending` 项时拒绝构建。当前状态为 `candidate`，详见 [1.0 发布就绪状态](/zifile/releases/release-readiness/)。
