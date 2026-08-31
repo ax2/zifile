@@ -1159,6 +1159,19 @@ try {
         }
         throw "The password field did not accept keyboard input. Focused: $focusedDescription"
     }
+    $passwordConfirmationFocus = Move-FocusForward `
+        -ProcessId $process.Id `
+        -Names @('Confirm password', '确认密码') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -MaximumTabs 2
+    if (-not $passwordConfirmationFocus.Element.Current.IsPassword) {
+        throw 'The create password confirmation is not exposed as a protected password control.'
+    }
+    Send-AppKey -Keys 'keyboard-test' -ProcessId $process.Id
+    Start-Sleep -Milliseconds 100
+    if ((Get-Value -Element $passwordConfirmationFocus.Element).Length -ne $passwordLength) {
+        throw 'The create password confirmation did not accept the matching keyboard input.'
+    }
     $showCreatePassword = Move-FocusForward `
         -ProcessId $process.Id `
         -Names @('Show password', '显示密码') `
@@ -1178,6 +1191,14 @@ try {
         -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
     if ($password.Current.IsPassword) {
         throw 'Create password remained protected after Show password was checked.'
+    }
+    $passwordConfirmation = Wait-NamedControl `
+        -Root $window `
+        -Names @('Confirm password', '确认密码') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+    if ($passwordConfirmation.Current.IsPassword) {
+        throw 'Create password confirmation remained protected after Show password was checked.'
     }
     $password.SetFocus()
     $null = Wait-Focus `
@@ -1208,6 +1229,21 @@ try {
     if ((Get-ToggleState -Element $showCreatePasswordElement) -ne
         [System.Windows.Automation.ToggleState]::Off) {
         throw 'Clearing the create password did not reset Show password.'
+    }
+    $passwordConfirmation = Wait-NamedControl `
+        -Root $window `
+        -Names @('Confirm password', '确认密码') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+    if (-not $passwordConfirmation.Current.IsPassword) {
+        throw 'Clearing the create password did not re-protect its confirmation.'
+    }
+    $passwordConfirmation.SetFocus()
+    Send-AppKey -Keys '^a' -ProcessId $process.Id
+    Send-AppKey -Keys '{BACKSPACE}' -ProcessId $process.Id
+    Start-Sleep -Milliseconds 100
+    if ((Get-Value -Element $passwordConfirmation).Length -ne 0) {
+        throw 'Ctrl+A and Backspace did not clear the password confirmation.'
     }
 
     $null = Move-FocusBackward `
@@ -1283,6 +1319,7 @@ try {
             selected_format = $selectedFormat
             compression_level = '6 -> 7 -> 6'
             password_keyboard_entry_and_clear = $true
+            password_confirmation_exact_match = $true
             password_visibility_toggle = $true
             password_value_recorded = $false
             reverse_combo_slider_password = $true
