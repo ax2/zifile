@@ -175,6 +175,7 @@ struct UiState {
     cancellation: Option<CancellationToken>,
     progress: Option<OperationProgress>,
     operations: SharedOperationQueue,
+    confirm_remove: bool,
     recent_archives: Vec<PathBuf>,
     dark: bool,
     locale: Locale,
@@ -214,6 +215,7 @@ impl Default for UiState {
             cancellation: None,
             progress: None,
             operations: Arc::new(Mutex::new(OperationQueue::default())),
+            confirm_remove: false,
             recent_archives: settings.recent_archives,
             dark: settings.dark,
             locale: settings.locale,
@@ -707,6 +709,12 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                         for policy in [ConflictPolicy::Rename, ConflictPolicy::Overwrite, ConflictPolicy::Skip, ConflictPolicy::Error] { option { value: conflict_value(policy), {conflict_label(locale, policy)} } } }
                 }
                 button { disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
+                if view.confirm_remove {
+                    button { class: "danger", "aria-describedby": "archive-selection-summary", onclick: move |_| confirm_remove_selected(state), {locale.text(Text::ConfirmRemoveSelected)} }
+                    button { "aria-describedby": "archive-selection-summary", onclick: move |_| cancel_remove_selected(state), {locale.text(Text::Cancel)} }
+                } else {
+                    button { class: "danger", disabled: selected_count == 0 || view.busy || !archive.format.supports_update(), "aria-describedby": "archive-selection-summary", onclick: move |_| request_remove_selected(state), {locale.text(Text::RemoveSelected)} }
+                }
                 button { "aria-describedby": "archive-selection-summary", onclick: move |_| extract_to_named_folder(state), {locale.text(Text::ExtractToNamedFolder)} }
                 button { class: "primary", "aria-describedby": "archive-selection-summary", onclick: move |_| extract_all(state), {locale.text(Text::ExtractAll)} }
             }
@@ -767,6 +775,7 @@ fn set_entry_sort(mut state: Signal<UiState>, sort: EntrySort) {
 
 fn navigate_archive_directory(mut state: Signal<UiState>, directory: PathBuf) {
     let mut value = state.write();
+    value.confirm_remove = false;
     value.entry_directory = directory;
     value.entry_filter.clear();
     value.entry_page = 0;
@@ -1232,7 +1241,7 @@ fn add_to_archive_files(mut state: Signal<UiState>) {
         });
         state.write().dialog_open = false;
         if let Some(paths) = paths {
-            submit_archive_update(state, paths);
+            submit_archive_update(state, paths, Vec::new());
         }
     });
 }
@@ -1271,13 +1280,58 @@ fn add_to_archive_folder(mut state: Signal<UiState>) {
             .map(|folder| folder.path().to_path_buf());
         state.write().dialog_open = false;
         if let Some(path) = path {
-            submit_archive_update(state, vec![path]);
+            submit_archive_update(state, vec![path], Vec::new());
         }
     });
 }
 
-fn submit_archive_update(mut state: Signal<UiState>, additions: Vec<PathBuf>) {
-    if additions.is_empty() {
+fn request_remove_selected(mut state: Signal<UiState>) {
+    let mut value = state.write();
+    let locale = value.locale;
+    if value.busy || value.selected.is_empty() {
+        return;
+    }
+    let can_update = value
+        .archive
+        .as_ref()
+        .is_some_and(|archive| archive.format.supports_update());
+    if !can_update {
+        value.set_error(
+            choose(
+                locale,
+                "This archive format cannot be updated",
+                "此压缩格式不支持更新",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    value.confirm_remove = true;
+    value.set_status(locale.text(Text::RemoveSelectedPrompt).to_owned());
+}
+
+fn cancel_remove_selected(mut state: Signal<UiState>) {
+    let mut value = state.write();
+    let locale = value.locale;
+    value.confirm_remove = false;
+    value.set_status(locale.text(Text::Ready).to_owned());
+}
+
+fn confirm_remove_selected(mut state: Signal<UiState>) {
+    let paths = state.read().selected.iter().cloned().collect::<Vec<_>>();
+    if paths.is_empty() || state.read().busy {
+        return;
+    }
+    state.write().confirm_remove = false;
+    submit_archive_update(state, Vec::new(), paths);
+}
+
+fn submit_archive_update(
+    mut state: Signal<UiState>,
+    additions: Vec<PathBuf>,
+    remove_paths: Vec<PathBuf>,
+) {
+    if additions.is_empty() && remove_paths.is_empty() {
         return;
     }
     let value = state.read();
@@ -1308,7 +1362,7 @@ fn submit_archive_update(mut state: Signal<UiState>, additions: Vec<PathBuf>) {
             compression_level: format.clamp_compression_level(6),
             password,
             limits: SafetyLimits::default(),
-            remove_paths: Vec::new(),
+            remove_paths,
         },
         OperationKind::Update,
         format!(
@@ -1880,6 +1934,7 @@ fn cancel_operation(mut state: Signal<UiState>) {
 }
 
 fn select_all(mut state: Signal<UiState>, selected: bool) {
+    state.write().confirm_remove = false;
     let paths = state
         .read()
         .archive
@@ -1909,6 +1964,7 @@ fn select_all(mut state: Signal<UiState>, selected: bool) {
 
 fn invert_selection(mut state: Signal<UiState>) {
     let mut value = state.write();
+    value.confirm_remove = false;
     let UiState {
         archive, selected, ..
     } = &mut *value;
@@ -1925,6 +1981,7 @@ fn invert_selection(mut state: Signal<UiState>) {
 
 fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected: bool) {
     let mut value = state.write();
+    value.confirm_remove = false;
     if selected {
         value.selected.insert(path.clone());
     } else {
@@ -1941,6 +1998,7 @@ fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected:
 }
 
 fn toggle_archive_directory(mut state: Signal<UiState>, directory: PathBuf, selected: bool) {
+    state.write().confirm_remove = false;
     let descendants = state
         .read()
         .archive
