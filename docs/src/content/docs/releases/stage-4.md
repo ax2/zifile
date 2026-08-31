@@ -17,7 +17,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、15 个创建格式、17 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7`、`v0.1.8`、`v0.1.9`、`v0.1.10` 和 `v0.1.11` 均通过匹配 tag 自动生成公开 GitHub Release。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7`、`v0.1.8`、`v0.1.9`、`v0.1.10`、`v0.1.11` 和 `v0.1.12` 均通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -27,7 +27,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.11` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.12` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
 
 ## 2026-09-01 归档内重命名
 
@@ -35,6 +35,15 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - 重命名映射在 staging 内容变更前统一校验：归档相对路径策略、大小写冲突、重复/重叠源与目标、类型冲突、目标存在、符号链接/重解析点和取消状态均受保护；临时搬移阶段支持批量交换，失败不会提交原归档。
 - Worker IPC 升级到 `PROTOCOL_VERSION = 3`，CLI 新增可重复的 `rename <archive> --rename <FROM=TO>`；默认 Iced UI 和 Dioxus/WebView2 无障碍候选均提供单选项目的双语重命名编辑器，并在完成后重新加载归档。
 - 验证：核心集成测试 55/55、CLI 单测 10/10、Worker 协议单测 4/4，桌面 `cargo check --all-targets --all-features` 通过；真实前台 UI、签名和 Store/WACK 等外部门禁仍未声称完成。
+
+## 2026-09-01 v0.1.12 批量重命名与正式公开版本结果
+
+- 默认 Iced UI 与 Dioxus/WebView2 无障碍候选均增加批量重命名编辑器，支持查找/替换、前缀和后缀规则；规则生成的映射继续交给核心原子 staging、冲突检测和取消保护处理，选择变化或关闭归档时会清空未提交规则。
+- 验证：桌面端三组 UI 单测共 149 项、7 个入口浏览 Criterion 基准、workspace 全量测试、严格 Clippy、32 对双语页面校验、Astro 65 页静态构建和版本/Release Notes 门禁均通过。
+- PR [#97](https://github.com/ax2/zifile/pull/97) 合并批量重命名功能；版本准备 PR [#98](https://github.com/ax2/zifile/pull/98) 合并提交为 `36f69018934880ca46098f08d248eb0d2aad7c2e`，tag `v0.1.12` 精确指向该提交。
+- [Release workflow 33440085168](https://github.com/ax2/zifile/actions/runs/33440085168) 成功完成 x64/ARM64 构建、独立 EXE 冒烟/审计、all-in-one MSIX bundle、SBOM、资产审计和公开发布。
+- [v0.1.12 Release](https://github.com/ax2/zifile/releases/tag/v0.1.12) 为非草稿、非预发布版本，公开资产严格为 `ZiFile-0.1.12.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`；没有 DLL、JSON、YAML 或 ZIP。两个 EXE 均为自包含、可独立运行的 Windows 下载项，三项二进制资产与校验文件均已下载后复核 SHA-256。
+- 该版本仍是未签名 GitHub 构建；SignPath、可信安装、真实前台 UI、物理 ARM64、WACK、WinGet 社区接纳和 Microsoft Store/Partner Center 门禁继续独立保持 pending。
 
 ## 2026-09-01 v0.1.11 正式公开版本结果
 

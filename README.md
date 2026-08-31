@@ -12,7 +12,7 @@ read-only beta providers.
 
 The current build is feature-complete for the currently supported archive contract:
 the source, x64/ARM64 builds, package audits, reproducibility checks and release
-rehearsals are automated. The public [`v0.1.11` GitHub release](https://github.com/ax2/zifile/releases/tag/v0.1.11)
+rehearsals are automated. The public [`v0.1.12` GitHub release](https://github.com/ax2/zifile/releases/tag/v0.1.12)
 uses unsigned artifacts; a stable 1.0 release is still gated on
 trusted signing, real foreground Windows validation, physical ARM64, WACK,
 Partner Center/Microsoft Store certification and WinGet acceptance.
@@ -26,7 +26,7 @@ large listings do not create an unbounded widget tree.
 
 For ZIP, 7z, and TAR-family archives, entries can be added, removed, or renamed
 through an atomic sibling-staging rebuild. The desktop surfaces expose a
-single-entry rename editor, while the CLI supports repeated mappings such as
+single-entry and batch rename editors, while the CLI supports repeated mappings such as
 `zifile rename archive.zip --rename old.txt=new.txt`.
 
 The packaged Windows 11 Explorer integration adds a create command for selected
