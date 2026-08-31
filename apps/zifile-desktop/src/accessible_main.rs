@@ -163,6 +163,7 @@ struct UiState {
     create_format: ArchiveFormat,
     create_password: String,
     create_password_confirmation: String,
+    create_password_confirmation_touched: bool,
     create_password_visible: bool,
     compression_level: u8,
     status: String,
@@ -201,6 +202,7 @@ impl Default for UiState {
             create_format: ArchiveFormat::Zip,
             create_password: String::new(),
             create_password_confirmation: String::new(),
+            create_password_confirmation_touched: false,
             create_password_visible: false,
             compression_level: 6,
             status: settings.locale.text(Text::Ready).to_owned(),
@@ -227,6 +229,7 @@ impl UiState {
     fn clear_create_password(&mut self) {
         self.create_password.clear();
         self.create_password_confirmation.clear();
+        self.create_password_confirmation_touched = false;
         self.create_password_visible = false;
     }
 
@@ -246,6 +249,7 @@ impl UiState {
 
     fn set_create_password_confirmation(&mut self, password: String) {
         self.create_password_confirmation = password;
+        self.create_password_confirmation_touched = true;
     }
 
     fn set_status(&mut self, status: String) {
@@ -853,6 +857,7 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
     let compression_range = view.create_format.compression_level_range();
     let password_mismatch =
         !create_passwords_match(&view.create_password, &view.create_password_confirmation);
+    let show_password_mismatch = view.create_password_confirmation_touched && password_mismatch;
     rsx! { section { class: "create-page", "aria-labelledby": "create-title",
         div { class: "page-heading", div { h2 { id: "create-title", {locale.text(Text::CreateHeading)} } p { {locale.text(Text::CreateHelp)} } }
             div { class: "button-row", button { onclick: move |_| add_files(state), {locale.text(Text::AddFiles)} }
@@ -879,9 +884,9 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
                     input { id: "create-password", r#type: if view.create_password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: !encrypted, oninput: move |event| state.write().set_create_password(event.value()) }
                 }
                 label { r#for: "create-password-confirmation", span { {locale.text(Text::ConfirmPassword)} }
-                    input { id: "create-password-confirmation", r#type: if view.create_password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", value: view.create_password_confirmation.clone(), disabled: !encrypted, "aria-invalid": password_mismatch, "aria-describedby": if password_mismatch { "create-password-mismatch" } else { "" }, oninput: move |event| state.write().set_create_password_confirmation(event.value()) }
+                    input { id: "create-password-confirmation", r#type: if view.create_password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", value: view.create_password_confirmation.clone(), disabled: !encrypted, "aria-invalid": show_password_mismatch, "aria-describedby": if show_password_mismatch { "create-password-mismatch" } else { "" }, oninput: move |event| state.write().set_create_password_confirmation(event.value()) }
                 }
-                if password_mismatch { p { id: "create-password-mismatch", class: "field-error", role: "alert", {locale.text(Text::PasswordMismatch)} } }
+                if show_password_mismatch { p { id: "create-password-mismatch", class: "field-error", role: "alert", {locale.text(Text::PasswordMismatch)} } }
                 label { class: "password-toggle",
                     input { r#type: "checkbox", checked: view.create_password_visible, disabled: !encrypted, "aria-controls": "create-password create-password-confirmation", onchange: move |event| state.write().create_password_visible = event.checked() }
                     span { {locale.text(Text::ShowPassword)} }
@@ -2328,26 +2333,47 @@ mod tests {
         let mut state = UiState {
             create_password: "not-for-retention".to_owned(),
             create_password_confirmation: "not-for-retention".to_owned(),
+            create_password_confirmation_touched: true,
             create_password_visible: true,
             ..UiState::default()
         };
         clear_submitted_create_password(&mut state, OperationKind::Create, true);
         assert!(state.create_password.is_empty());
         assert!(state.create_password_confirmation.is_empty());
+        assert!(!state.create_password_confirmation_touched);
         assert!(!state.create_password_visible);
 
         state.create_password.push_str("retry-secret");
         state.create_password_confirmation.push_str("retry-secret");
+        state.create_password_confirmation_touched = true;
         state.create_password_visible = true;
         clear_submitted_create_password(&mut state, OperationKind::Create, false);
         assert_eq!(state.create_password, "retry-secret");
         assert_eq!(state.create_password_confirmation, "retry-secret");
+        assert!(state.create_password_confirmation_touched);
         assert!(state.create_password_visible);
 
         clear_submitted_create_password(&mut state, OperationKind::Extract, true);
         assert_eq!(state.create_password, "retry-secret");
         assert_eq!(state.create_password_confirmation, "retry-secret");
+        assert!(state.create_password_confirmation_touched);
         assert!(state.create_password_visible);
+    }
+
+    #[test]
+    fn password_confirmation_error_waits_until_the_field_is_touched() {
+        let mut state = UiState::default();
+        state.set_create_password("secret".to_owned());
+        assert!(!state.create_password_confirmation_touched);
+        assert!(!create_passwords_match(
+            &state.create_password,
+            &state.create_password_confirmation
+        ));
+
+        state.set_create_password_confirmation(String::new());
+        assert!(state.create_password_confirmation_touched);
+        let source = include_str!("accessible_main.rs");
+        assert!(source.contains("view.create_password_confirmation_touched && password_mismatch"));
     }
 
     #[test]

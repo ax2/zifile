@@ -126,6 +126,7 @@ struct ZiFile {
     create_format: ArchiveFormat,
     create_password: String,
     create_password_confirmation: String,
+    create_password_confirmation_touched: bool,
     create_password_visible: bool,
     compression_level: u8,
     status: String,
@@ -163,6 +164,7 @@ impl Default for ZiFile {
             create_format: ArchiveFormat::Zip,
             create_password: String::new(),
             create_password_confirmation: String::new(),
+            create_password_confirmation_touched: false,
             create_password_visible: false,
             compression_level: 6,
             status: settings.locale.text(Text::Ready).to_owned(),
@@ -829,6 +831,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::CreatePasswordConfirmationChanged(password) => {
             state.create_password_confirmation = password;
+            state.create_password_confirmation_touched = true;
         }
         Message::CreatePasswordVisibilityChanged(visible) => {
             state.create_password_visible = visible;
@@ -1210,6 +1213,7 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
             clear_submitted_create_password(
                 &mut state.create_password,
                 &mut state.create_password_confirmation,
+                &mut state.create_password_confirmation_touched,
                 &mut state.create_password_visible,
                 kind,
                 true,
@@ -1220,6 +1224,7 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
             clear_submitted_create_password(
                 &mut state.create_password,
                 &mut state.create_password_confirmation,
+                &mut state.create_password_confirmation_touched,
                 &mut state.create_password_visible,
                 kind,
                 true,
@@ -1239,6 +1244,7 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
             clear_submitted_create_password(
                 &mut state.create_password,
                 &mut state.create_password_confirmation,
+                &mut state.create_password_confirmation_touched,
                 &mut state.create_password_visible,
                 kind,
                 false,
@@ -1258,6 +1264,7 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
 fn clear_submitted_create_password(
     password: &mut String,
     confirmation: &mut String,
+    confirmation_touched: &mut bool,
     visible: &mut bool,
     kind: OperationKind,
     accepted: bool,
@@ -1265,6 +1272,7 @@ fn clear_submitted_create_password(
     if accepted && kind == OperationKind::Create {
         password.clear();
         confirmation.clear();
+        *confirmation_touched = false;
         *visible = false;
     }
 }
@@ -2128,6 +2136,7 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
     let source_issue = create_source_issue(state.create_format, &state.create_sources);
     let password_mismatch =
         !create_passwords_match(&state.create_password, &state.create_password_confirmation);
+    let show_password_mismatch = state.create_password_confirmation_touched && password_mismatch;
     let single_file_format =
         state.create_format.create_input() == Some(CreateInputKind::SingleFile);
     let validation_notice: Element<'_, Message> = match source_issue {
@@ -2228,7 +2237,7 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
                     .on_input_maybe(
                         encryption_supported.then_some(Message::CreatePasswordConfirmationChanged),
                     ),
-                    if password_mismatch {
+                    if show_password_mismatch {
                         text(state.locale.text(Text::PasswordMismatch))
                     } else {
                         text("")
@@ -2275,6 +2284,7 @@ fn apply_create_format(state: &mut ZiFile, format: ArchiveFormat) {
     if !format.capabilities().encryption {
         state.create_password.clear();
         state.create_password_confirmation.clear();
+        state.create_password_confirmation_touched = false;
         state.create_password_visible = false;
     }
     set_status(state, create_input_help(state.locale, format));
@@ -2629,42 +2639,71 @@ mod tests {
     fn accepted_create_submission_releases_the_form_password() {
         let mut password = "not-for-retention".to_owned();
         let mut confirmation = "not-for-retention".to_owned();
+        let mut confirmation_touched = true;
         let mut visible = true;
         clear_submitted_create_password(
             &mut password,
             &mut confirmation,
+            &mut confirmation_touched,
             &mut visible,
             OperationKind::Create,
             true,
         );
         assert!(password.is_empty());
         assert!(confirmation.is_empty());
+        assert!(!confirmation_touched);
         assert!(!visible);
 
         password.push_str("retry-secret");
         confirmation.push_str("retry-secret");
+        confirmation_touched = true;
         visible = true;
         clear_submitted_create_password(
             &mut password,
             &mut confirmation,
+            &mut confirmation_touched,
             &mut visible,
             OperationKind::Create,
             false,
         );
         assert_eq!(password, "retry-secret");
         assert_eq!(confirmation, "retry-secret");
+        assert!(confirmation_touched);
         assert!(visible);
 
         clear_submitted_create_password(
             &mut password,
             &mut confirmation,
+            &mut confirmation_touched,
             &mut visible,
             OperationKind::Extract,
             true,
         );
         assert_eq!(password, "retry-secret");
         assert_eq!(confirmation, "retry-secret");
+        assert!(confirmation_touched);
         assert!(visible);
+    }
+
+    #[test]
+    fn mismatched_create_passwords_are_rejected_before_the_save_dialog() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let source = temporary.path().join("source.txt");
+        std::fs::write(&source, b"source").expect("source fixture");
+        let mut state = ZiFile {
+            locale: Locale::En,
+            create_sources: vec![source],
+            create_password: "secret".to_owned(),
+            create_password_confirmation: "different".to_owned(),
+            create_password_confirmation_touched: true,
+            ..ZiFile::default()
+        };
+
+        drop(update(&mut state, Message::Create));
+
+        assert!(!state.dialog_open);
+        assert_eq!(state.status_kind, StatusKind::Error);
+        assert_eq!(state.status, "The password confirmation does not match.");
     }
 
     #[test]
