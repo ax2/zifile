@@ -68,7 +68,7 @@ const FOCUS_MAIN_SCRIPT: &str =
 const FOCUS_ARCHIVE_SEARCH_SCRIPT: &str =
     "requestAnimationFrame(() => document.getElementById('archive-search')?.focus())";
 const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src dioxus: ws://127.0.0.1:* http://dioxus.index.html https://dioxus.index.html ipc:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
-const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
+const CREATE_FORMATS: [ArchiveFormat; 16] = ArchiveFormat::CREATABLE;
 
 fn main() {
     if std::env::args_os().any(|argument| argument == zifile_worker::WORKER_MODE_ARGUMENT) {

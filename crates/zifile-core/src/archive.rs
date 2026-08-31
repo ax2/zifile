@@ -345,7 +345,8 @@ pub fn list_archive_with_options(
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
         | ArchiveFormat::TarLzma
-        | ArchiveFormat::TarBzip2 => list_tar(path, format, options)?,
+        | ArchiveFormat::TarBzip2
+        | ArchiveFormat::TarLz4 => list_tar(path, format, options)?,
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
@@ -437,7 +438,8 @@ pub fn test_archive_with_options(
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
         | ArchiveFormat::TarLzma
-        | ArchiveFormat::TarBzip2 => test_tar(path, info.format, options)?,
+        | ArchiveFormat::TarBzip2
+        | ArchiveFormat::TarLz4 => test_tar(path, info.format, options)?,
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
@@ -516,7 +518,8 @@ pub fn extract_archive(
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
         | ArchiveFormat::TarLzma
-        | ArchiveFormat::TarBzip2 => extract_tar(archive, destination, info.format, options),
+        | ArchiveFormat::TarBzip2
+        | ArchiveFormat::TarLz4 => extract_tar(archive, destination, info.format, options),
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
@@ -585,7 +588,8 @@ fn create_archive_inner(
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
         | ArchiveFormat::TarLzma
-        | ArchiveFormat::TarBzip2 => create_tar(sources, destination, format, options),
+        | ArchiveFormat::TarBzip2
+        | ArchiveFormat::TarLz4 => create_tar(sources, destination, format, options),
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
@@ -2131,6 +2135,12 @@ fn create_tar(
             &options.cancellation,
             &options.progress,
         )?,
+        ArchiveFormat::TarLz4 => write_tar_lz4(
+            &entries,
+            BufWriter::new(temporary.as_file_mut()),
+            &options.cancellation,
+            &options.progress,
+        )?,
         _ => return Err(ZiFileError::UnsupportedOperation(format)),
     };
     persist_archive(temporary, destination)?;
@@ -2194,6 +2204,24 @@ fn write_tar_lzma(
     Ok(summary)
 }
 
+fn write_tar_lz4(
+    entries: &[SourceEntry],
+    output: BufWriter<&mut File>,
+    cancellation: &CancellationToken,
+    progress: &OperationProgress,
+) -> ZiFileResult<OperationSummary> {
+    let lz4 = FrameEncoder::new(output);
+    let mut archive = tar::Builder::new(lz4);
+    let summary = append_tar_entries(&mut archive, entries, cancellation, progress)?;
+    archive.finish()?;
+    archive
+        .into_inner()
+        .map_err(|error| ZiFileError::Backend(error.to_string()))?
+        .finish()
+        .map_err(|error| ZiFileError::Backend(error.to_string()))?;
+    Ok(summary)
+}
+
 fn open_tar_reader(
     path: &Path,
     format: ArchiveFormat,
@@ -2211,6 +2239,7 @@ fn open_tar_reader(
                 .map_err(|error| ZiFileError::Backend(error.to_string()))
         }
         ArchiveFormat::TarBzip2 => Ok(Box::new(BzDecoder::new(file))),
+        ArchiveFormat::TarLz4 => Ok(Box::new(FrameDecoder::new(file))),
         _ => Err(ZiFileError::UnsupportedOperation(format)),
     }
 }

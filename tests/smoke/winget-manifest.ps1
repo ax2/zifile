@@ -37,11 +37,13 @@ try {
         $preflight.public_installer_model -cne 'all-in-one-msixbundle') {
         throw 'ZiFile preflight did not accept the deterministic WinGet candidate.'
     }
-    if (@($preflight.file_extensions).Count -ne 29 -or
+    if (@($preflight.file_extensions).Count -ne 31 -or
         $preflight.file_extensions -cnotcontains 'rar' -or
         $preflight.file_extensions -cnotcontains 'cab' -or
         $preflight.file_extensions -cnotcontains 'zipx' -or
-        $preflight.file_extensions -cnotcontains 'cbr') {
+        $preflight.file_extensions -cnotcontains 'cbr' -or
+        $preflight.file_extensions -cnotcontains 'tar.lz4' -or
+        $preflight.file_extensions -cnotcontains 'tlz4') {
         throw 'ZiFile preflight did not preserve the complete open-extension contract.'
     }
 

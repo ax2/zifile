@@ -37,7 +37,7 @@ try {
 
     $formatValues = @(
         'zip', 'seven-zip', 'tar', 'tar-gzip', 'tar-zstd', 'tar-xz', 'tar-lzma',
-        'tar-bzip2', 'gzip', 'zstandard', 'xz', 'lzma', 'bzip2', 'lz4', 'brotli'
+        'tar-bzip2', 'tar-lz4', 'gzip', 'zstandard', 'xz', 'lzma', 'bzip2', 'lz4', 'brotli'
     )
     $formatValueLine = '[possible values: {0}]' -f ($formatValues -join ', ')
     if ($createHelp -notmatch [Regex]::Escape($formatValueLine)) {
@@ -72,6 +72,7 @@ try {
         "TAR + XZ`tyes`tyes`tyes`tfiles-or-directories`t0-9`tno`tAlpha",
         "TAR + LZMA`tyes`tyes`tyes`tfiles-or-directories`t0-9`tno`tAlpha",
         "TAR + Bzip2`tyes`tyes`tyes`tfiles-or-directories`t1-9`tno`tAlpha",
+        "TAR + LZ4`tyes`tyes`tyes`tfiles-or-directories`tfixed`tno`tAlpha",
         "gzip`tyes`tyes`tyes`tsingle-file`t0-9`tno`tAlpha",
         "Zstandard`tyes`tyes`tyes`tsingle-file`t0-22`tno`tAlpha",
         "XZ`tyes`tyes`tyes`tsingle-file`t0-9`tno`tAlpha",
