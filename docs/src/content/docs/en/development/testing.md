@@ -112,6 +112,8 @@ Open-failure regressions distinguish password/encryption diagnostics from corrup
 
 Password-visibility regressions cover default masking, archive/create field wiring in both UIs, and restoring masking whenever a password is released. The accessible candidate additionally locks three unique field IDs, native checkbox labels, dynamic `password`/`text` types, and matching `aria-controls`. This source and unit evidence does not replace a real screen-reader or foreground visual pass.
 
+The encrypted-file-list password input supports `Enter` submission. The default UI reuses the existing reload path through Iced's input submission event. A pure helper regression for the accessible candidate requires an enabled, non-composing input with no Ctrl/Alt/Shift/Meta modifiers, permits lock-state modifiers, and prevents duplicate submission while busy.
+
 Create-page regressions also require the default Iced and accessible Dioxus UIs to use the same bilingual status announcements for adding, removing, and clearing sources. The status includes the change and remaining total, so a list update cannot silently lose feedback for the user or assistive technology.
 
 Save-path regressions require both desktop variants to add the selected format's canonical suffix when the user omits an extension, while preserving an explicitly entered alternative suffix. Compound formats such as TAR + gzip must produce the complete `.tar.gz`, not only `.gz`.

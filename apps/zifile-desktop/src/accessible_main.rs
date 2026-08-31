@@ -508,6 +508,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
             pending.is_some(),
             view.pending_archive_requires_password,
         );
+        let can_unlock = pending.is_some() && !view.busy;
         return rsx! { section { class: "empty-state", "aria-labelledby": "pending-archive-title",
             h2 { id: "pending-archive-title", {heading} }
             p { {description} }
@@ -515,14 +516,27 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 if view.pending_archive_requires_password {
                     div { class: "password-field",
                         label { r#for: "pending-archive-password", span { {locale.text(Text::PasswordEncrypted)} }
-                            input { id: "pending-archive-password", r#type: if view.password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().set_archive_password(event.value()) }
+                            input { id: "pending-archive-password", r#type: if view.password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", value: view.password.clone(),
+                                oninput: move |event| state.write().set_archive_password(event.value()),
+                                onkeydown: move |event: KeyboardEvent| {
+                                    if unlock_submit_key(
+                                        &event.key().to_string(),
+                                        event.modifiers(),
+                                        event.is_composing(),
+                                        can_unlock,
+                                    ) {
+                                        event.prevent_default();
+                                        reload_archive(state);
+                                    }
+                                }
+                            }
                         }
                         label { class: "password-toggle",
                             input { r#type: "checkbox", checked: view.password_visible, "aria-controls": "pending-archive-password", onchange: move |event| state.write().password_visible = event.checked() }
                             span { {locale.text(Text::ShowPassword)} }
                         }
                     }
-                    button { class: "primary", disabled: pending.is_none() || view.busy, "aria-keyshortcuts": ARIA_SHORTCUT_RELOAD, onclick: move |_| reload_archive(state), {locale.text(Text::UnlockArchive)} }
+                    button { class: "primary", disabled: !can_unlock, "aria-keyshortcuts": ARIA_SHORTCUT_RELOAD, onclick: move |_| reload_archive(state), {locale.text(Text::UnlockArchive)} }
                 }
                 button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} }
             }
@@ -917,6 +931,13 @@ fn accessible_shortcut(
         }
         _ => None,
     }
+}
+
+fn unlock_submit_key(key: &str, modifiers: Modifiers, composing: bool, enabled: bool) -> bool {
+    enabled
+        && !composing
+        && shortcut_modifiers(modifiers).is_empty()
+        && key.eq_ignore_ascii_case("Enter")
 }
 
 fn shortcut_modifiers(modifiers: Modifiers) -> Modifiers {
@@ -2752,6 +2773,26 @@ mod tests {
             Modifiers::CONTROL | Modifiers::SHIFT
         ));
         assert!(!is_select_all_shortcut("o", Modifiers::CONTROL));
+    }
+
+    #[test]
+    fn unlock_enter_requires_an_enabled_idle_non_composing_input() {
+        assert!(unlock_submit_key("Enter", Modifiers::empty(), false, true));
+        assert!(unlock_submit_key(
+            "enter",
+            Modifiers::CAPS_LOCK,
+            false,
+            true
+        ));
+        assert!(!unlock_submit_key("Enter", Modifiers::CONTROL, false, true));
+        assert!(!unlock_submit_key("Enter", Modifiers::empty(), true, true));
+        assert!(!unlock_submit_key(
+            "Enter",
+            Modifiers::empty(),
+            false,
+            false
+        ));
+        assert!(!unlock_submit_key("Space", Modifiers::empty(), false, true));
     }
 
     #[test]

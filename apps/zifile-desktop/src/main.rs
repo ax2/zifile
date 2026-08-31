@@ -1688,6 +1688,9 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                 text_input(state.locale.text(Text::PasswordEncrypted), &state.password)
                     .secure(!state.password_visible)
                     .on_input(Message::PasswordChanged)
+                    .on_submit_maybe(
+                        (pending.is_some() && !state.busy).then_some(Message::ReloadArchive),
+                    )
                     .width(280),
                 checkbox(state.password_visible)
                     .label(state.locale.text(Text::ShowPassword))
@@ -2632,6 +2635,7 @@ mod tests {
         assert!(source.contains("Message::ArchivePasswordVisibilityChanged"));
         assert!(source.contains("Message::CreatePasswordVisibilityChanged"));
         assert!(source.contains("Text::ShowPassword"));
+        assert!(source.contains(".on_submit_maybe("));
     }
 
     #[test]
