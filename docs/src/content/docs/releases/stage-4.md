@@ -17,7 +17,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、15 个创建格式、17 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5` 和 `v0.1.6` 均通过匹配 tag 自动生成公开 GitHub Release。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6` 和 `v0.1.7` 均通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -27,7 +27,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.6` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.7` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
 
 ## 2026-08-29 正式公开版本结果
 
@@ -193,3 +193,11 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `v0.1.6` 后已完成最近打开列表及其隐私控制、归档全选/全不选/反选与 `Ctrl+I`，并把独立 x64 EXE 门禁升级为创建—列出—解压完整往返，形成新的可用补丁发布节点。
 - workspace、三个内部依赖约束、六个 workspace lock 条目和 Astro 文档包统一升级到 `0.1.7`；MSIX 版本映射为 `0.1.7.0`。
 - `CHANGELOG.md` 保留空的顶部 `[Unreleased]`，把本阶段用户可见功能和发布质量改进整理到 `0.1.7`。下载文档在 Release 真正成功前继续指向已验证的 v0.1.6。
+
+## 2026-08-31 — 0.1.7 正式发布结果
+
+- PR [#70](https://github.com/ax2/zifile/pull/70) 在 7 项常规质量门禁及 x64/ARM64 双架构可复现构建全部通过后合并；注释 tag `v0.1.7` 精确指向 merge commit `c6f8b48d391a5545b303738fb5c12e9a825c6243`。
+- [Release workflow #33344163683](https://github.com/ax2/zifile/actions/runs/33344163683) 成功完成 SBOM、x64/ARM64 构建、独立 EXE 审计、来源证明、一体化 MSIX Bundle 和公开发布；签名分支按本次未签名常规发布策略跳过。
+- 非草稿、非预发布的 [v0.1.7 Release](https://github.com/ax2/zifile/releases/tag/v0.1.7) 严格只公开 `ZiFile-0.1.7.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`，没有 DLL、JSON、YAML、SBOM 或内部组件。
+- 独立下载后重算 SHA-256：MSIX Bundle 为 `afdea49df562319d9f787b3bb2a933a72f8c341cbfb8ed000ca97aa8fbc12ee8`，x64 EXE 为 `9100f1a843b061ff128fe35c27b78c0d55197b4d28536ee6f743d37e05820515`，ARM64 EXE 为 `70b3be0b3772128a3cd6ab68c1febc011232eb7a6b268d511d843869828702ad`；三者均与 `SHA256SUMS.txt` 和 GitHub asset digest 一致。
+- 下载后的 x64 EXE 被复制到没有旁置 Worker 或 DLL 的独立临时目录，仅靠自身完成 ZIP 创建、列出 `hello.txt`、解压和逐字节核对，结果为 `round_trip_verified=true`。ARM64 EXE 的 PE machine 为 `0xAA64` 且无旁置 Worker；实际运行仍保留给物理 ARM64 门禁。
