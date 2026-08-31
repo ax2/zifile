@@ -21,6 +21,13 @@ All notable changes to ZiFile are documented here. The format follows
 - Add the `rename` CLI command with repeated `FROM=TO` mappings and advance the
   Worker IPC contract to version 3 for the new request type.
 
+## [0.1.13] - 2026-09-01
+
+### Added
+
+- Add TAR + LZ4 composition creation, listing, integrity testing, extraction,
+  update support, CLI selection, and shared desktop format-menu coverage.
+
 ## [0.1.12] - 2026-09-01
 
 ### Added
