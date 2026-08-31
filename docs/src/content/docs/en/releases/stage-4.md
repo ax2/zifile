@@ -17,7 +17,7 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 - `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, fifteen creation formats, seventeen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
 - `release/readiness.json` binds stable tags to accessibility, queue, trusted-install, ARM64, screenshot, WACK, WinGet, Store, Partner Center, and signing evidence.
 - The Release workflow derives dual-architecture builds, audits, checksums, SBOMs, provenance, and GitHub Releases from the workspace version; ordinary public releases use unsigned artifacts, while formal signing can be enabled explicitly through workflow inputs.
-- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, `v0.1.8`, `v0.1.9`, and `v0.1.10` have been published as public GitHub Releases from matching tags.
+- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, `v0.1.8`, `v0.1.9`, `v0.1.10`, and `v0.1.11` have been published as public GitHub Releases from matching tags.
 
 ## Required to finish
 
@@ -27,14 +27,20 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 ## Release result
 
-Stable 1.0 has not been published; `v0.1.10` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+Stable 1.0 has not been published; `v0.1.11` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
 
 ## 2026-09-01 — archive-entry rename
 
 - The core now exposes `ArchiveRename` and `rename_archive`. ZIP, 7z, and TAR-family archives are rebuilt in a sibling staging directory and replace the original only after the rename succeeds; directory mappings move the complete subtree, while single-file streams, RAR, and CAB remain read-only.
 - Mappings are validated before staging content changes: archive-relative path policy, case-collision, duplicate/overlapping source and destination, type conflicts, existing targets, links/reparse points, and cancellation are covered. A temporary move phase makes batch swaps deterministic and failed work cannot commit the original archive.
 - Worker IPC advances to `PROTOCOL_VERSION = 3`; the CLI adds repeatable `rename <archive> --rename <FROM=TO>`. The default Iced UI and the Dioxus/WebView2 accessibility candidate both expose bilingual single-selection rename editors and reload the archive after success.
-- Verification: 54/54 core integration tests, 10/10 CLI unit tests, 4/4 Worker protocol tests, and desktop `cargo check --all-targets --all-features` passed. Real foreground UI, signing, Store, and WACK gates remain explicitly unclaimed.
+- Verification: 55/55 core integration tests, 10/10 CLI unit tests, 4/4 Worker protocol tests, and desktop `cargo check --all-targets --all-features` passed. Real foreground UI, signing, Store, and WACK gates remain explicitly unclaimed.
+
+## 2026-09-01 — 0.1.11 public release result
+
+- PR [#95](https://github.com/ax2/zifile/pull/95) merged as commit `f66843d2cee0d7fca53a050972771b4de1fbee96`; tag `v0.1.11` points to the release commit.
+- [Release workflow 33426811784](https://github.com/ax2/zifile/actions/runs/33426811784) completed x64/ARM64 workspace validation, MSIX and standalone EXE builds, x64 EXE smoke testing, ARM64 PE auditing, the all-in-one bundle, SBOM, asset auditing, and GitHub publication.
+- The [v0.1.11 Release](https://github.com/ax2/zifile/releases/tag/v0.1.11) is neither a draft nor a prerelease and exposes exactly `ZiFile-0.1.11.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, or ZIP is public. Both EXEs are self-contained standalone Windows downloads.
 
 ## 2026-08-31 — 0.1.10 public release result
 
