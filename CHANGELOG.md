@@ -6,6 +6,13 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Add safe removal of selected archive entries for ZIP, 7z, and TAR-family
+  containers through the core API, Worker, CLI, and both desktop UIs. Removal
+  accepts archive-relative paths, removes nested descendants as one operation,
+  and atomically replaces the original only after a successful rebuild.
+
 ## [0.1.9] - 2026-08-31
 
 ### Added
