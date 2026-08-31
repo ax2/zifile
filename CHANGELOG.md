@@ -6,6 +6,12 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Require an exact password confirmation before creating encrypted ZIP or 7z
+  archives in both desktop UIs. Mismatches are shown inline, block the save
+  dialog, and both transient values are released after an accepted request.
+
 ## [0.1.7] - 2026-08-31
 
 ### Added

@@ -87,6 +87,7 @@ input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent);
 input[type="range"] { padding: 8px 0; accent-color: var(--accent); }
 label > span { display: block; margin-bottom: 6px; color: var(--muted); font-size: .88rem; }
 .password-field { min-width: 0; }
+.field-error { color: var(--danger); margin: 0; font-weight: 650; }
 .password-toggle { display: inline-flex; align-items: center; gap: 7px; margin-top: 7px; color: var(--muted); cursor: pointer; font-size: .88rem; }
 .password-toggle > span { display: inline; margin: 0; color: inherit; font-size: inherit; }
 .password-toggle input[type="checkbox"] { flex: none; margin: 0; }
