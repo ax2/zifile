@@ -19,6 +19,14 @@ All notable changes to ZiFile are documented here. The format follows
 - Add the `rename` CLI command with repeated `FROM=TO` mappings and advance the
   Worker IPC contract to version 3 for the new request type.
 
+## [0.1.12] - 2026-09-01
+
+### Added
+
+- Add desktop batch rename rules for selected archive files. Find/replace,
+  prefix, and suffix inputs produce explicit mappings, skip unchanged entries,
+  and reuse the existing atomic update and collision checks.
+
 ## [0.1.11] - 2026-09-01
 
 ### Added
