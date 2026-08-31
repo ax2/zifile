@@ -8,6 +8,7 @@ description: Common ZiFile open, extraction, creation, Worker, and installation 
 - Confirm that the download completed and compare its SHA-256 with a trusted source when one is available.
 - The extension may not match the real format. ZiFile fails safely instead of guessing the wrong decoder.
 - Encrypted archives require the correct password. The CLI uses `--password-stdin`; an empty password is rejected.
+- If a file was still being written or a transient I/O fault occurred, the failed-open view retains its path and offers one **Reload** attempt; an encrypted file list instead presents password entry and **Unlock**. Do not repeatedly retry an untrusted archive or one rejected by a safety limit.
 - Volumes, recovery records, or uncommon encodings may be outside the current scope. RAR reading is Beta and RAR creation is unsupported.
 
 For a compatibility report, provide the creating tool and version, format options, ZiFile version, and a public minimal reproducer when possible. Never upload customer data, passwords, or private archives.

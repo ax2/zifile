@@ -8,6 +8,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Expose an explicit, busy-safe retry action after a non-password archive-open
+  failure while retaining the dedicated unlock flow for encrypted file lists.
+
 - Add official project, documentation, and localized privacy links to both About
   pages, with fixed HTTPS destinations and visible launch failure feedback.
 

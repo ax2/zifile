@@ -108,7 +108,7 @@ File-dialog coverage locks the open-archive, extraction-folder, add-file/folder,
 
 Archive-browser regressions also require both UIs to show a bilingual empty state when the current folder is empty or a search has no matches, rather than rendering an ambiguous blank table; clearing search preserves the folder and returns to page one.
 
-Open-failure regressions distinguish password/encryption diagnostics from corruption, unknown formats, and ordinary I/O errors: only a likely password case presents password input and an Unlock retry. Both UIs also reject stale Worker completions before applying results, so an old task cannot overwrite the current archive or busy state.
+Open-failure regressions distinguish password/encryption diagnostics from corruption, unknown formats, and ordinary I/O errors. A likely password case presents password input and a dedicated Unlock action; other failures retain the pending path and expose Reload for a one-time retry after an incomplete write or transient I/O fault. A shared combination gate enables ordinary retry only while idle with a pending path and no password requirement, keeps it disabled during loading, and hides it from the initial empty state. Both UIs also reject stale Worker completions before applying results, so an old task cannot overwrite the current archive or busy state.
 
 Password-visibility regressions cover default masking, archive/create field wiring in both UIs, and restoring masking whenever a password is released. The accessible candidate additionally locks three unique field IDs, native checkbox labels, dynamic `password`/`text` types, and matching `aria-controls`. This source and unit evidence does not replace a real screen-reader or foreground visual pass.
 

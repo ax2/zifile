@@ -117,6 +117,15 @@ pub fn create_passwords_match(password: &str, confirmation: &str) -> bool {
     password == confirmation
 }
 
+/// Returns whether a failed non-password archive open can be retried now.
+pub const fn can_retry_archive_open(
+    busy: bool,
+    has_pending_archive: bool,
+    requires_password: bool,
+) -> bool {
+    has_pending_archive && !busy && !requires_password
+}
+
 /// Opens one of ZiFile's compile-time official destinations in the default browser.
 ///
 /// Accepting an enum rather than an arbitrary URL keeps UI events from becoming a
@@ -275,6 +284,14 @@ mod tests {
             );
             assert!(!url.contains(['\r', '\n', '"']));
         }
+    }
+
+    #[test]
+    fn archive_retry_is_only_available_for_idle_non_password_failures() {
+        assert!(can_retry_archive_open(false, true, false));
+        assert!(!can_retry_archive_open(true, true, false));
+        assert!(!can_retry_archive_open(false, false, false));
+        assert!(!can_retry_archive_open(false, true, true));
     }
 
     #[test]
