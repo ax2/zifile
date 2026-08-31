@@ -227,6 +227,20 @@ impl UiState {
         self.create_password_visible = false;
     }
 
+    fn set_archive_password(&mut self, password: String) {
+        self.password = password;
+        if self.password.is_empty() {
+            self.password_visible = false;
+        }
+    }
+
+    fn set_create_password(&mut self, password: String) {
+        self.create_password = password;
+        if self.create_password.is_empty() {
+            self.create_password_visible = false;
+        }
+    }
+
     fn set_status(&mut self, status: String) {
         self.status = status;
         self.status_kind = StatusKind::Informational;
@@ -501,7 +515,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 if view.pending_archive_requires_password {
                     div { class: "password-field",
                         label { r#for: "pending-archive-password", span { {locale.text(Text::PasswordEncrypted)} }
-                            input { id: "pending-archive-password", r#type: if view.password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() }
+                            input { id: "pending-archive-password", r#type: if view.password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().set_archive_password(event.value()) }
                         }
                         label { class: "password-toggle",
                             input { r#type: "checkbox", checked: view.password_visible, "aria-controls": "pending-archive-password", onchange: move |event| state.write().password_visible = event.checked() }
@@ -586,7 +600,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
         div { class: "toolbar",
             div { class: "password-field",
                 label { r#for: "archive-password", span { {locale.text(Text::PasswordEncrypted)} }
-                    input { id: "archive-password", r#type: if view.password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() }
+                    input { id: "archive-password", r#type: if view.password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().set_archive_password(event.value()) }
                 }
                 label { class: "password-toggle",
                     input { r#type: "checkbox", checked: view.password_visible, "aria-controls": "archive-password", onchange: move |event| state.write().password_visible = event.checked() }
@@ -839,7 +853,7 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
             }
             div { class: "password-field",
                 label { r#for: "create-password", span { if encrypted { {locale.text(Text::PasswordOptional)} } else { {locale.text(Text::PasswordUnavailable)} } }
-                    input { id: "create-password", r#type: if view.create_password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: !encrypted, oninput: move |event| state.write().create_password = event.value() }
+                    input { id: "create-password", r#type: if view.create_password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: !encrypted, oninput: move |event| state.write().set_create_password(event.value()) }
                 }
                 label { class: "password-toggle",
                     input { r#type: "checkbox", checked: view.create_password_visible, disabled: !encrypted, "aria-controls": "create-password", onchange: move |event| state.write().create_password_visible = event.checked() }
@@ -2308,6 +2322,23 @@ mod tests {
             source.contains("if view.create_password_visible { \"text\" } else { \"password\" }")
         );
         assert!(STYLES.contains(".password-toggle"));
+    }
+
+    #[test]
+    fn empty_password_input_restores_masking() {
+        let mut state = UiState {
+            password: "secret".to_owned(),
+            password_visible: true,
+            create_password: "secret".to_owned(),
+            create_password_visible: true,
+            ..UiState::default()
+        };
+
+        state.set_archive_password(String::new());
+        assert!(!state.password_visible);
+
+        state.set_create_password(String::new());
+        assert!(!state.create_password_visible);
     }
 
     #[test]
