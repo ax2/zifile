@@ -31,9 +31,9 @@ mod worker_client;
 
 use i18n::{
     Locale, Text, archive_empty_state_description, archive_filter_summary, archive_no_matches,
-    create_source_removed_status, create_source_summary, create_sources_added_status,
-    create_sources_cleared_status, format_archive_modified, format_worker_error,
-    worker_error_may_require_password,
+    archive_size_summary, create_source_removed_status, create_source_summary,
+    create_sources_added_status, create_sources_cleared_status, format_archive_modified,
+    format_worker_error, worker_error_may_require_password,
 };
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
@@ -604,7 +604,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
         return rsx! { section { class: "archive-page", "aria-labelledby": "archive-title",
             div { class: "page-heading", div {
                 h2 { id: "archive-title", {archive_name} }
-                p { "{archive.format} · {archive.entries.len()} · {format_bytes(archive.total_size)}" }
+                p { "{archive.format} · {archive.entries.len()} {choose(locale, \"entries\", \"个项目\")} · {archive_size_summary(locale, archive.total_size, archive.compressed_size)}" }
             }
             div { class: "button-row",
                 button { onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
@@ -655,7 +655,7 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
         .to_string();
 
     rsx! { section { class: "archive-page", "aria-labelledby": "archive-title",
-        div { class: "page-heading", div { h2 { id: "archive-title", {archive_name} } p { "{archive.format} · {archive.entries.len()} · {format_bytes(archive.total_size)}" } }
+        div { class: "page-heading", div { h2 { id: "archive-title", {archive_name} } p { "{archive.format} · {archive.entries.len()} {choose(locale, \"entries\", \"个项目\")} · {archive_size_summary(locale, archive.total_size, archive.compressed_size)}" } }
             div { class: "button-row",
                 button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
                 button { onclick: move |_| reveal_archive(state), {locale.text(Text::RevealInExplorer)} }
@@ -2630,6 +2630,8 @@ mod tests {
         assert!(source.contains("onclick: move |_| reveal_archive(state)"));
         assert!(source.contains("reveal_in_file_manager(&path)"));
         assert!(source.contains("Text::RevealInExplorer"));
+        assert!(source.contains("archive_size_summary("));
+        assert!(source.contains("archive.compressed_size"));
     }
 
     #[test]

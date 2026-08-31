@@ -359,6 +359,58 @@ pub fn create_source_summary(locale: Locale, count: usize) -> String {
     }
 }
 
+pub fn archive_size_summary(locale: Locale, expanded: u64, packed: u64) -> String {
+    let expanded_text = format_bytes(expanded);
+    let packed_text = format_bytes(packed);
+    if expanded == 0 {
+        return match locale {
+            Locale::En => format!("{expanded_text} expanded · {packed_text} packed"),
+            Locale::ZhCn => format!("展开后 {expanded_text} · 压缩后 {packed_text}"),
+        };
+    }
+    let (percent, comparison) = if packed <= expanded {
+        (
+            (expanded - packed) as f64 / expanded as f64 * 100.0,
+            match locale {
+                Locale::En => "smaller",
+                Locale::ZhCn => "缩小",
+            },
+        )
+    } else {
+        (
+            (packed - expanded) as f64 / expanded as f64 * 100.0,
+            match locale {
+                Locale::En => "larger",
+                Locale::ZhCn => "增大",
+            },
+        )
+    };
+    match locale {
+        Locale::En => {
+            format!("{expanded_text} expanded · {packed_text} packed · {percent:.1}% {comparison}")
+        }
+        Locale::ZhCn => {
+            format!("展开后 {expanded_text} · 压缩后 {packed_text} · {comparison} {percent:.1}%")
+        }
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        let unit_label = UNITS.get(unit).copied().unwrap_or("TB");
+        format!("{value:.1} {unit_label}")
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Text {
     ArchiveStudio,
@@ -503,6 +555,18 @@ mod tests {
         assert_eq!(Locale::ZhCn.text(Text::ClearSearch), "清除搜索");
         assert_eq!(Locale::En.text(Text::ConflictPolicy), "Conflict policy");
         assert_eq!(Locale::ZhCn.text(Text::ConflictPolicy), "文件冲突策略");
+        assert_eq!(
+            archive_size_summary(Locale::En, 1_000, 500),
+            "1000 B expanded · 500 B packed · 50.0% smaller"
+        );
+        assert_eq!(
+            archive_size_summary(Locale::ZhCn, 1_000, 1_250),
+            "展开后 1000 B · 压缩后 1.2 KB · 增大 25.0%"
+        );
+        assert_eq!(
+            archive_size_summary(Locale::En, 0, 0),
+            "0 B expanded · 0 B packed"
+        );
         assert_eq!(
             Locale::En.text(Text::OpeningArchiveDescription),
             "Opening this archive…"
