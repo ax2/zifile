@@ -15,6 +15,27 @@ use std::process::Command;
 
 use zifile_core::{ArchiveFormat, ArchiveInfo, detect_format, detect_format_from_path};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OfficialLink {
+    Project,
+    DocumentationZh,
+    DocumentationEn,
+    PrivacyZh,
+    PrivacyEn,
+}
+
+impl OfficialLink {
+    pub const fn url(self) -> &'static str {
+        match self {
+            Self::Project => "https://github.com/ax2/zifile",
+            Self::DocumentationZh => "https://ax2.github.io/zifile/",
+            Self::DocumentationEn => "https://ax2.github.io/zifile/en/",
+            Self::PrivacyZh => "https://ax2.github.io/zifile/product/privacy/",
+            Self::PrivacyEn => "https://ax2.github.io/zifile/en/product/privacy/",
+        }
+    }
+}
+
 pub mod create_validation;
 pub mod entry_view;
 pub mod operation_queue;
@@ -94,6 +115,59 @@ pub fn ensure_archive_extension(path: PathBuf, format: ArchiveFormat) -> PathBuf
 /// diverging at the point where an unrecoverable archive password is chosen.
 pub fn create_passwords_match(password: &str, confirmation: &str) -> bool {
     password == confirmation
+}
+
+/// Opens one of ZiFile's compile-time official destinations in the default browser.
+///
+/// Accepting an enum rather than an arbitrary URL keeps UI events from becoming a
+/// general-purpose protocol launcher.
+pub fn open_official_link(link: OfficialLink) -> std::io::Result<()> {
+    let url = link.url();
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        use windows::core::PCWSTR;
+
+        let encoded = url
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        // SAFETY: every pointer references a live NUL-terminated UTF-16 buffer or is null;
+        // ShellExecuteW does not retain these pointers after returning.
+        let result = unsafe {
+            ShellExecuteW(
+                None,
+                PCWSTR::null(),
+                PCWSTR(encoded.as_ptr()),
+                PCWSTR::null(),
+                PCWSTR::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        if result.0 as isize <= 32 {
+            return Err(std::io::Error::other(
+                "Windows could not open the official link",
+            ));
+        }
+        Ok(())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(url).spawn().map(|_| ())
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open").arg(url).spawn().map(|_| ())
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        let _ = url;
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "no default browser launcher is available",
+        ))
+    }
 }
 
 /// Opens the containing folder and selects an archive when the host supports
@@ -181,6 +255,26 @@ mod tests {
         assert!(!create_passwords_match("correct horse", "correct Horse"));
         assert!(!create_passwords_match("secret", ""));
         assert!(!create_passwords_match("", "secret"));
+    }
+
+    #[test]
+    fn official_links_are_fixed_https_destinations() {
+        let links = [
+            OfficialLink::Project,
+            OfficialLink::DocumentationZh,
+            OfficialLink::DocumentationEn,
+            OfficialLink::PrivacyZh,
+            OfficialLink::PrivacyEn,
+        ];
+        for link in links {
+            let url = link.url();
+            assert!(url.starts_with("https://"));
+            assert!(
+                url.starts_with("https://github.com/ax2/zifile")
+                    || url.starts_with("https://ax2.github.io/zifile/")
+            );
+            assert!(!url.contains(['\r', '\n', '"']));
+        }
     }
 
     #[test]

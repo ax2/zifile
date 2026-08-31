@@ -104,6 +104,8 @@ Iced 和 Dioxus 的入口回归同时锁定探测在异步/阻塞线程池路径
 
 归档列表的交互语义回归要求只有目录名称使用可操作的导航按钮，普通文件名称保持为文本，文件和目录的选择统一由每行复选框承担。这样普通文件不会显示成无法点击的伪按钮，也不会暗示不存在的名称操作；目录导航仍保留明确的点击目标。
 
+关于页外链回归要求两套 UI 都提供项目主页、当前语言文档和当前语言隐私政策三个可操作入口。共享层只接受编译期 `OfficialLink` 枚举，五个实际地址必须使用 HTTPS 且只能落在项目 GitHub 或 GitHub Pages 路径，不能把任意用户字符串传给系统协议启动器；Windows 使用 `ShellExecuteW` 调用默认浏览器，启动成功或失败都会更新应用状态区。
+
 保存路径回归要求两个桌面端在用户省略扩展名时补上所选格式的规范后缀，并保留用户明确输入的其他后缀；复合格式例如 TAR + gzip 必须生成完整的 `.tar.gz`，不能只生成 `.gz`。
 
 `tests/reproducibility/windows-build.ps1` 在两个全新目标目录使用固定 Rust 1.93.0、锁文件、单作业构建与 MSVC `/Brepro`，比较默认桌面、可访问候选、CLI、Worker 和 Explorer DLL。云端 32813453959 在新工具链上得到双架构各 4/5；schema v2 运行 32822543635 进一步确认默认 Iced EXE 的 `.rdata` 首差异是 `glutin_wgl_sys` 生成绑定内嵌的 `build-a`/`build-b` target 路径。脚本现用 `CARGO_ENCODED_RUSTFLAGS` 与 `--remap-path-prefix` 把两个根映射到同一虚拟路径；修复后 32826187552 的 x64/ARM64 都达到 5/5 且 `reproducible=true`。

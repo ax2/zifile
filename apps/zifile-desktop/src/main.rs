@@ -48,8 +48,9 @@ use zifile_desktop::entry_view::{
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 use zifile_desktop::{
-    append_unique_paths as append_unique, create_passwords_match, ensure_archive_extension,
-    invert_archive_file_selection, is_openable_archive_path, reveal_in_file_manager,
+    OfficialLink, append_unique_paths as append_unique, create_passwords_match,
+    ensure_archive_extension, invert_archive_file_selection, is_openable_archive_path,
+    open_official_link, reveal_in_file_manager,
 };
 
 const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
@@ -186,6 +187,7 @@ enum Message {
     Navigate(Page),
     ToggleTheme,
     ToggleLocale,
+    OpenOfficialLink(OfficialLink),
     OpenArchiveDialog,
     OpenArchiveDialogFinished(Option<PathBuf>),
     OpenRecentArchive(PathBuf),
@@ -369,6 +371,20 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             set_status(state, state.locale.text(Text::Ready));
             save_settings(state);
         }
+        Message::OpenOfficialLink(link) => match open_official_link(link) {
+            Ok(()) => set_status(
+                state,
+                choose(state.locale, "Opened official link", "已打开官方链接"),
+            ),
+            Err(_) => set_error(
+                state,
+                choose(
+                    state.locale,
+                    "Could not open the official link",
+                    "无法打开官方链接",
+                ),
+            ),
+        },
         Message::OpenArchiveDialog => {
             if state.dialog_open {
                 return Task::none();
@@ -1603,6 +1619,16 @@ fn recent_archive_label(path: &Path) -> String {
 
 fn about_view(state: &ZiFile) -> Element<'_, Message> {
     let locale = state.locale;
+    let documentation = if locale == Locale::ZhCn {
+        OfficialLink::DocumentationZh
+    } else {
+        OfficialLink::DocumentationEn
+    };
+    let privacy = if locale == Locale::ZhCn {
+        OfficialLink::PrivacyZh
+    } else {
+        OfficialLink::PrivacyEn
+    };
     let detail = |label: &'static str, value: String| {
         container(
             column![text(label).size(13), text(value).size(18)]
@@ -1638,10 +1664,23 @@ fn about_view(state: &ZiFile) -> Element<'_, Message> {
             ),
         ]
         .spacing(14),
-        detail(
-            locale.text(Text::ProjectWebsite),
-            "https://github.com/ax2/zifile".to_owned()
-        ),
+        container(
+            row![
+                button(locale.text(Text::ProjectWebsite))
+                    .style(button::secondary)
+                    .on_press(Message::OpenOfficialLink(OfficialLink::Project)),
+                button(choose(locale, "Documentation", "使用文档"))
+                    .style(button::secondary)
+                    .on_press(Message::OpenOfficialLink(documentation)),
+                button(locale.text(Text::Privacy))
+                    .style(button::secondary)
+                    .on_press(Message::OpenOfficialLink(privacy)),
+            ]
+            .spacing(10),
+        )
+        .padding(18)
+        .width(Fill)
+        .style(container::rounded_box),
         container(
             column![
                 text(locale.text(Text::KeyboardShortcuts)).size(20),
@@ -2516,6 +2555,10 @@ mod tests {
         assert!(source.contains("\"MIT\".to_owned()"));
         assert!(source.contains("ArchiveFormat::ALL.len().to_string()"));
         assert!(source.contains("https://github.com/ax2/zifile"));
+        assert!(source.contains("Message::OpenOfficialLink(OfficialLink::Project)"));
+        assert!(source.contains("Message::OpenOfficialLink(documentation)"));
+        assert!(source.contains("Message::OpenOfficialLink(privacy)"));
+        assert!(source.contains("open_official_link(link)"));
         assert!(source.contains("key::Named::F1"));
         assert!(source.contains("KeyboardShortcut(Shortcut::About)"));
     }

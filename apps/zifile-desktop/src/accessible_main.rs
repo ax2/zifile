@@ -46,8 +46,9 @@ use zifile_desktop::entry_view::{
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 use zifile_desktop::{
-    append_unique_paths as append_unique, create_passwords_match, ensure_archive_extension,
-    invert_archive_file_selection, is_openable_archive_path, reveal_in_file_manager,
+    OfficialLink, append_unique_paths as append_unique, create_passwords_match,
+    ensure_archive_extension, invert_archive_file_selection, is_openable_archive_path,
+    open_official_link, reveal_in_file_manager,
 };
 
 const STYLES: &str = include_str!("accessible_ui.css");
@@ -470,6 +471,16 @@ fn Home(mut state: Signal<UiState>) -> Element {
 fn AboutPage(state: Signal<UiState>) -> Element {
     let view = state.read();
     let locale = view.locale;
+    let documentation = if locale == Locale::ZhCn {
+        OfficialLink::DocumentationZh
+    } else {
+        OfficialLink::DocumentationEn
+    };
+    let privacy = if locale == Locale::ZhCn {
+        OfficialLink::PrivacyZh
+    } else {
+        OfficialLink::PrivacyEn
+    };
     rsx! { section { class: "home", "aria-labelledby": "about-title",
         h2 { id: "about-title", {locale.text(Text::AboutHeading)} }
         p { class: "lead", {locale.text(Text::AboutDescription)} }
@@ -478,6 +489,11 @@ fn AboutPage(state: Signal<UiState>) -> Element {
             div { dt { {locale.text(Text::License)} } dd { "MIT" } }
             div { dt { {locale.text(Text::SupportedFormatFamilies)} } dd { {ArchiveFormat::ALL.len().to_string()} } }
             div { dt { {locale.text(Text::ProjectWebsite)} } dd { "https://github.com/ax2/zifile" } }
+        }
+        div { class: "button-row",
+            button { onclick: move |_| open_about_link(state, OfficialLink::Project), {locale.text(Text::ProjectWebsite)} }
+            button { onclick: move |_| open_about_link(state, documentation), {choose(locale, "Documentation", "使用文档")} }
+            button { onclick: move |_| open_about_link(state, privacy), {locale.text(Text::Privacy)} }
         }
         section { class: "shortcut-help", "aria-labelledby": "shortcut-help-title",
             h3 { id: "shortcut-help-title", {locale.text(Text::KeyboardShortcuts)} }
@@ -498,6 +514,23 @@ fn AboutPage(state: Signal<UiState>) -> Element {
             p { {locale.text(Text::PrivacyDescription)} }
         }
     } }
+}
+
+fn open_about_link(mut state: Signal<UiState>, link: OfficialLink) {
+    let locale = state.read().locale;
+    match open_official_link(link) {
+        Ok(()) => state
+            .write()
+            .set_status(choose(locale, "Opened official link", "已打开官方链接").to_owned()),
+        Err(_) => state.write().set_error(
+            choose(
+                locale,
+                "Could not open the official link",
+                "无法打开官方链接",
+            )
+            .to_owned(),
+        ),
+    }
 }
 
 #[component]
@@ -2307,6 +2340,10 @@ mod tests {
         assert!(source.contains("dt { {locale.text(Text::Version)} }"));
         assert!(source.contains("dd { {env!(\"CARGO_PKG_VERSION\")} }"));
         assert!(source.contains("https://github.com/ax2/zifile"));
+        assert!(source.contains("open_about_link(state, OfficialLink::Project)"));
+        assert!(source.contains("open_about_link(state, documentation)"));
+        assert!(source.contains("open_about_link(state, privacy)"));
+        assert!(source.contains("open_official_link(link)"));
         assert!(source.contains("\"aria-keyshortcuts\": ARIA_SHORTCUT_ABOUT"));
         assert!(STYLES.contains(".about-details"));
         assert!(source.contains("class: \"shortcut-help\""));
