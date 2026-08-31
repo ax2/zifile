@@ -33,9 +33,9 @@ use zifile_worker_protocol::WorkerRequest;
 
 use i18n::{
     Locale, Text, archive_empty_state_description, archive_filter_summary, archive_no_matches,
-    create_source_removed_status, create_source_summary, create_sources_added_status,
-    create_sources_cleared_status, format_archive_modified, format_worker_error,
-    worker_error_may_require_password,
+    archive_size_summary, create_source_removed_status, create_source_summary,
+    create_sources_added_status, create_sources_cleared_status, format_archive_modified,
+    format_worker_error, worker_error_may_require_password,
 };
 use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
@@ -1804,10 +1804,15 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                 column![
                     text(archive_name).size(28),
                     text(format!(
-                        "{} · {} entries · {}",
+                        "{} · {} {} · {}",
                         archive.format,
                         archive.entries.len(),
-                        format_bytes(archive.total_size)
+                        choose(state.locale, "entries", "个项目"),
+                        archive_size_summary(
+                            state.locale,
+                            archive.total_size,
+                            archive.compressed_size
+                        )
                     )),
                 ]
                 .spacing(5),
@@ -1850,21 +1855,13 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                     .to_string_lossy()
             )
             .size(28),
-            text(if state.locale == Locale::ZhCn {
-                format!(
-                    "{} · {} 个项目 · 展开后 {}",
-                    archive.format,
-                    archive.entries.len(),
-                    format_bytes(archive.total_size)
-                )
-            } else {
-                format!(
-                    "{} · {} entries · {} expanded",
-                    archive.format,
-                    archive.entries.len(),
-                    format_bytes(archive.total_size)
-                )
-            }),
+            text(format!(
+                "{} · {} {} · {}",
+                archive.format,
+                archive.entries.len(),
+                choose(state.locale, "entries", "个项目"),
+                archive_size_summary(state.locale, archive.total_size, archive.compressed_size)
+            )),
         ]
         .spacing(5),
         row![
@@ -2936,6 +2933,8 @@ mod tests {
         assert!(source.contains("Message::RevealArchive"));
         assert!(source.contains("reveal_in_file_manager(&path)"));
         assert!(source.contains("Text::RevealInExplorer"));
+        assert!(source.contains("archive_size_summary("));
+        assert!(source.contains("archive.compressed_size"));
     }
 
     #[test]

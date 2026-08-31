@@ -14,6 +14,8 @@ ZiFile is currently a Stage 4 public release and has not shipped through Microso
 
 Detection uses both signatures and extensions. If an extension disagrees with the content, ZiFile reports a detection or parsing error instead of forcing the wrong decoder.
 
+The archive header shows expanded size, packed size, and the percentage smaller. If container overhead makes the archive grow, it explicitly reports a **larger** percentage; an empty archive omits the meaningless percentage.
+
 ## Extract safely
 
 Select all or individual entries, choose Rename, Overwrite, Skip, or Error under the visibly labelled **Conflict policy** field, choose a destination, then start extraction. ZiFile rejects traversal, absolute paths, Windows device names, case collisions, unsafe links, extraction destinations containing symbolic links, junctions, or reparse points, and content beyond entry-count, expanded-size, or compression-ratio limits. Treat such a rejection as a reason to verify the archive's source, not as a prompt to disable safety boundaries.

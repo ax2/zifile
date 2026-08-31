@@ -20,6 +20,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Changed
 
+- Show expanded size, packed size, and a localized smaller/larger percentage in
+  both archive headers, including busy-state summaries and empty archives.
+
 - Keep visible bilingual labels above the default archive password and search
   inputs, so their purpose remains clear after placeholder text disappears.
 
