@@ -66,6 +66,10 @@ pub enum WorkerRequest {
         compression_level: u8,
         password: Option<String>,
         limits: SafetyLimits,
+        /// Optional archive-relative files or directories to remove. The
+        /// default keeps version-2 requests backward compatible.
+        #[serde(default)]
+        remove_paths: Vec<PathBuf>,
     },
 }
 
@@ -157,5 +161,42 @@ mod tests {
             serde_json::to_string(&Envelope::new(WorkerEvent::ArchiveEntry { entry: current }))
                 .unwrap();
         assert!(encoded.contains("checksum"));
+    }
+
+    #[test]
+    fn update_request_without_removals_is_backward_compatible() {
+        let legacy = r#"{
+            "version": 2,
+            "payload": {
+                "operation": "update",
+                "archive": "sample.zip",
+                "additions": ["new.txt"],
+                "compression_level": 6,
+                "password": null,
+                "limits": {
+                    "max_entries": 100,
+                    "max_path_depth": 8,
+                    "max_path_bytes": 4096,
+                    "max_expanded_bytes": 1048576,
+                    "max_expansion_ratio": 1000,
+                    "max_compression_ratio": 100
+                }
+            }
+        }"#;
+        let decoded: Envelope<WorkerRequest> = serde_json::from_str(legacy).unwrap();
+        let Envelope {
+            payload:
+                WorkerRequest::Update {
+                    remove_paths,
+                    additions,
+                    ..
+                },
+            ..
+        } = decoded
+        else {
+            panic!("legacy request decoded as the wrong variant");
+        };
+        assert!(remove_paths.is_empty());
+        assert_eq!(additions, [PathBuf::from("new.txt")]);
     }
 }

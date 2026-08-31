@@ -135,6 +135,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             compression_level,
             password,
             limits,
+            remove_paths,
         } => {
             let progress = OperationProgress::default();
             let cancellation = zifile_core::CancellationToken::default();
@@ -144,6 +145,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 compression_level,
                 password,
                 limits,
+                remove_paths,
                 cancellation,
                 progress: progress.clone(),
             };
