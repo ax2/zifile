@@ -6,6 +6,8 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-08-31
+
 ### Added
 
 - Add a bilingual recent-archives section to both desktop home pages. The eight

@@ -186,3 +186,9 @@ Stable 1.0 has not been published; `v0.1.6` is the current usable public GitHub 
 - The desktop EXE is confirmed to spawn its constrained isolated child from its own path with `--zifile-worker`, so the public single-file download does not depend on an adjacent `zifile-worker.exe`.
 - The x64 Release smoke advances from reading an externally authored ZIP to using only that EXE to create a ZIP, list its entry, extract it, and byte-compare the source; the temporary directory explicitly rejects any adjacent Worker.
 - ARM64 retains PE-architecture and no-adjacent-Worker audits on the x64 runner. Full execution remains a physical ARM64 gate rather than being overstated from a cross-architecture static check.
+
+## 2026-08-31 — 0.1.7 release preparation
+
+- Since `v0.1.6`, recent archives with privacy controls, explicit select-all/select-none/invert actions with `Ctrl+I`, and a complete create-list-extract gate for the standalone x64 EXE form a useful patch-release boundary.
+- The workspace, three internal dependency constraints, six workspace lock entries, and Astro documentation package are aligned at `0.1.7`; its MSIX version maps to `0.1.7.0`.
+- `CHANGELOG.md` retains an empty top `[Unreleased]` section and collects this stage's user-facing and release-quality improvements under `0.1.7`. Download guidance continues to identify verified v0.1.6 until the new Release actually succeeds.
