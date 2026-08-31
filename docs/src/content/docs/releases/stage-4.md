@@ -17,7 +17,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、15 个创建格式、17 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6` 和 `v0.1.7` 均通过匹配 tag 自动生成公开 GitHub Release。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7` 和 `v0.1.8` 均通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -27,7 +27,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.7` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.8` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
 
 ## 2026-08-29 正式公开版本结果
 
@@ -193,3 +193,21 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `v0.1.6` 后已完成最近打开列表及其隐私控制、归档全选/全不选/反选与 `Ctrl+I`，并把独立 x64 EXE 门禁升级为创建—列出—解压完整往返，形成新的可用补丁发布节点。
 - workspace、三个内部依赖约束、六个 workspace lock 条目和 Astro 文档包统一升级到 `0.1.7`；MSIX 版本映射为 `0.1.7.0`。
 - `CHANGELOG.md` 保留空的顶部 `[Unreleased]`，把本阶段用户可见功能和发布质量改进整理到 `0.1.7`。下载文档在 Release 真正成功前继续指向已验证的 v0.1.6。
+
+## 2026-08-31 — 0.1.8 正式发布结果
+
+- PR [#85](https://github.com/ax2/zifile/pull/85) 合并提交为
+  `9001928b3a9694af908a57baf3a137ea41e665f1`，注释 tag `v0.1.8` 精确指向该提交。
+- [Release workflow 33372674521](https://github.com/ax2/zifile/actions/runs/33372674521)
+  成功完成 SBOM、x64/ARM64 构建、x64 独立 EXE 创建—列出—解压冒烟、ARM64
+  架构审计、all-in-one MSIX bundle、产物证明和公开发布。
+- 非 Draft、非 prerelease 的 [v0.1.8 Release](https://github.com/ax2/zifile/releases/tag/v0.1.8)
+  严格只公开 `ZiFile-0.1.8.0-windows.msixbundle`、`zifile-windows-x64.exe`、
+  `zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`；没有 DLL、JSON、YAML 或 ZIP。
+- API 回读的 GitHub asset digest 与发布工作流结果一致：MSIX 为
+  `5c3deefe2d5a71946c65b2b35de1e550f17b7e7aa3b038e7705795083f215dbb`，x64 EXE 为
+  `de74718b7accb0e4b10b07b289c74cf1630169fa3633bd34d077abc2f3688cfc`，ARM64 EXE 为
+  `ca7eb53d694080e8fdb642123ec6dfec670e5be7807ccc82d8fd485df2dada89`，校验文件为
+  `49985c1572f7b973c66b093023111a5a391f7949e65d50f0ae5dc248079b623c`。
+- 本次仍为未签名 GitHub 构建；签名、WinGet 社区接纳、Microsoft Store、WACK、物理
+  ARM64 和完整辅助技术认证继续由独立外部门禁跟踪。
