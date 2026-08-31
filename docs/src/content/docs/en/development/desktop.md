@@ -75,6 +75,8 @@ When opening fails, the desktop distinguishes likely password-related archive er
 
 Password fields for unlocking, testing/extracting, and creating encrypted archives provide a **Show password** checkbox and remain masked by default. Visibility is session-only and is never saved. It resets to masked when the archive or password is cleared, a create request is accepted, or the user selects a format without encryption. The accessible candidate uses native checkboxes, explicit labels, and `aria-controls` to scope each toggle to its password field.
 
+When an encrypted file list is waiting for a password, pressing `Enter` in the input performs the same reload as **Unlock archive**. The accessible candidate ignores IME composition and modified Enter keys, and neither UI submits another request while work is already running.
+
 When a replacement archive is opened while another operation is active, the
 default Iced UI keeps the currently visible archive until the replacement list
 operation actually starts. A queued request or a request rejected because the
