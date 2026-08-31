@@ -1826,7 +1826,9 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                     button(state.locale.text(Text::TestArchive))
                         .style(button::secondary)
                         .on_press(Message::TestArchive),
-                    button(state.locale.text(Text::CloseArchive)).style(button::secondary),
+                    button(state.locale.text(Text::CloseArchive))
+                        .style(button::secondary)
+                        .on_press_maybe((!state.busy).then_some(Message::CloseArchive)),
                 ]
                 .spacing(10),
                 container(text(state.locale.text(Text::BusyArchiveDescription))).padding(24),
@@ -3221,6 +3223,21 @@ mod tests {
         assert!(archive_view.contains("text(state.locale.text(Text::Search)).size(13)"));
         assert!(archive_view.contains(".id(ARCHIVE_SEARCH_ID)"));
         assert!(archive_view.contains("Message::ClearArchiveFilter"));
+    }
+
+    #[test]
+    fn busy_archive_close_action_is_not_presented_as_enabled() {
+        let source = include_str!("main.rs");
+        let busy_view = source
+            .split_once("if state.busy {")
+            .expect("busy archive view")
+            .1
+            .split_once("let all_files = archive")
+            .expect("normal archive view follows busy archive view")
+            .0;
+        assert!(busy_view.contains(
+            ".on_press_maybe((!state.busy).then_some(Message::CloseArchive))"
+        ));
     }
 
     #[test]
