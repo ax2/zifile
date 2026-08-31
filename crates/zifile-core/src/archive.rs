@@ -156,6 +156,30 @@ impl Default for CreateOptions {
     }
 }
 
+/// Options for rebuilding an existing multi-entry archive after merging one
+/// or more local files or directories into it. The original archive is only
+/// replaced after the complete staged rebuild succeeds.
+#[derive(Debug, Clone)]
+pub struct UpdateOptions {
+    pub compression_level: u8,
+    pub password: Option<String>,
+    pub limits: SafetyLimits,
+    pub cancellation: CancellationToken,
+    pub progress: OperationProgress,
+}
+
+impl Default for UpdateOptions {
+    fn default() -> Self {
+        Self {
+            compression_level: 6,
+            password: None,
+            limits: SafetyLimits::default(),
+            cancellation: CancellationToken::default(),
+            progress: OperationProgress::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperationSummary {
     pub files: u64,
@@ -546,6 +570,223 @@ pub fn create_archive(
         | ArchiveFormat::Brotli => create_stream(sources, destination, format, options),
         ArchiveFormat::Rar | ArchiveFormat::Cab => Err(ZiFileError::UnsupportedOperation(format)),
     }
+}
+
+/// Adds local files or directories to an existing multi-entry archive.
+///
+/// The archive is extracted into a private sibling staging directory, the
+/// additions are merged by archive-relative root name, and a fresh archive is
+/// created before the original is atomically replaced. A source file with an
+/// existing archive-relative name is updated; directory/file type collisions
+/// are rejected. RAR, CAB, and single-file stream formats remain read-only for
+/// this operation.
+pub fn update_archive(
+    archive: impl AsRef<Path>,
+    additions: &[PathBuf],
+    options: &UpdateOptions,
+) -> ZiFileResult<OperationSummary> {
+    options.cancellation.check()?;
+    if additions.is_empty() {
+        return Err(ZiFileError::InvalidInput(
+            "at least one addition is required".to_owned(),
+        ));
+    }
+
+    let archive = archive.as_ref();
+    let format = detect_format(archive)?;
+    if !format.supports_update() {
+        return Err(ZiFileError::UnsupportedOperation(format));
+    }
+    let canonical_archive = fs::canonicalize(archive)?;
+    for source in additions {
+        let canonical_source = fs::canonicalize(source).map_err(|error| {
+            ZiFileError::InvalidInput(format!(
+                "addition does not exist or cannot be resolved: {} ({error})",
+                source.display()
+            ))
+        })?;
+        if path_is_same_or_descendant(&canonical_archive, &canonical_source) {
+            return Err(ZiFileError::InvalidInput(
+                "an archive cannot be added to itself or to one of its parent sources".to_owned(),
+            ));
+        }
+    }
+
+    let parent = archive.parent().unwrap_or_else(|| Path::new("."));
+    let staging = tempfile::tempdir_in(parent)?;
+    let contents = staging.path().join("contents");
+    fs::create_dir(&contents)?;
+    let extract_options = ExtractOptions {
+        conflict: ConflictPolicy::Error,
+        limits: options.limits,
+        password: options.password.clone(),
+        selected_paths: None,
+        cancellation: options.cancellation.clone(),
+        progress: options.progress.clone(),
+    };
+    extract_archive(archive, &contents, &extract_options)?;
+    for source in additions {
+        merge_update_source(source, &contents, options)?;
+    }
+
+    let sources = top_level_sources(&contents)?;
+    let output = staging
+        .path()
+        .join(format!("updated.{}", format.canonical_extension()));
+    let source_entries = collect_sources(&sources, &output)?;
+    validate_update_entries(&source_entries, options.limits)?;
+    options.cancellation.check()?;
+    let create_options = CreateOptions {
+        compression_level: format.clamp_compression_level(options.compression_level),
+        password: options.password.clone(),
+        cancellation: options.cancellation.clone(),
+        progress: options.progress.clone(),
+    };
+    let summary = create_archive(&sources, &output, format, &create_options)?;
+    options.cancellation.check()?;
+    replace_existing_file(&output, archive)?;
+    Ok(summary)
+}
+
+fn top_level_sources(contents: &Path) -> ZiFileResult<Vec<PathBuf>> {
+    let mut sources = fs::read_dir(contents)?
+        .map(|entry| entry.map(|entry| entry.path()).map_err(ZiFileError::Io))
+        .collect::<ZiFileResult<Vec<_>>>()?;
+    sources.sort();
+    if sources.is_empty() {
+        return Err(ZiFileError::InvalidInput(
+            "the archive and additions contain no entries".to_owned(),
+        ));
+    }
+    Ok(sources)
+}
+
+fn validate_update_entries(entries: &[SourceEntry], limits: SafetyLimits) -> ZiFileResult<()> {
+    if entries.len() as u64 > limits.max_entries {
+        return Err(ZiFileError::LimitExceeded(format!(
+            "entry count exceeds {}",
+            limits.max_entries
+        )));
+    }
+    let total_size = entries.iter().try_fold(0_u64, |total, entry| {
+        total
+            .checked_add(entry.size)
+            .ok_or_else(|| ZiFileError::LimitExceeded("archive size overflow".to_owned()))
+    })?;
+    if total_size > limits.max_expanded_bytes {
+        return Err(ZiFileError::LimitExceeded(format!(
+            "expanded data exceeds {} bytes",
+            limits.max_expanded_bytes
+        )));
+    }
+    Ok(())
+}
+
+fn merge_update_source(
+    source: &Path,
+    contents: &Path,
+    options: &UpdateOptions,
+) -> ZiFileResult<()> {
+    let metadata = fs::symlink_metadata(source)?;
+    if metadata_is_link_like(&metadata) {
+        return Err(ZiFileError::LinkEntry(source.display().to_string()));
+    }
+    let root_name = source.file_name().ok_or_else(|| {
+        ZiFileError::InvalidInput(format!("addition has no file name: {}", source.display()))
+    })?;
+    let root = safe_relative_path(&root_name.to_string_lossy(), options.limits.max_path_depth)?;
+    for item in WalkDir::new(source).follow_links(false) {
+        options.cancellation.check()?;
+        let item = item.map_err(|error| ZiFileError::Backend(error.to_string()))?;
+        let item_metadata = fs::symlink_metadata(item.path())?;
+        if metadata_is_link_like(&item_metadata) {
+            return Err(ZiFileError::LinkEntry(item.path().display().to_string()));
+        }
+        let relative = item.path().strip_prefix(source).map_err(|error| {
+            ZiFileError::InvalidInput(format!("cannot relativize addition: {error}"))
+        })?;
+        let relative_archive_path = root.join(relative);
+        let safe = safe_relative_path(
+            &relative_archive_path.to_string_lossy(),
+            options.limits.max_path_depth,
+        )?;
+        let target = contents.join(&safe);
+        reject_symlink_components(&target)?;
+        if item_metadata.is_dir() {
+            if target.exists() && !target.is_dir() {
+                return Err(ZiFileError::NameCollision(safe));
+            }
+            fs::create_dir_all(&target)?;
+            set_modified_time_if_present(&target, item_metadata.modified().ok())?;
+        } else if item_metadata.is_file() {
+            if target.exists() && target.is_dir() {
+                return Err(ZiFileError::NameCollision(safe));
+            }
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut input = BufReader::new(File::open(item.path())?);
+            let mut output = BufWriter::new(File::create(&target)?);
+            let mut copied = 0_u64;
+            copy_limited(
+                &mut input,
+                &mut output,
+                &mut copied,
+                options.limits.max_expanded_bytes,
+                Some(&options.cancellation),
+                Some(&options.progress),
+            )?;
+            output.flush()?;
+            output.get_ref().sync_all()?;
+            set_modified_time_if_present(&target, item_metadata.modified().ok())?;
+        } else {
+            return Err(ZiFileError::UnsupportedEntry(
+                item.path().display().to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn replace_existing_file(source: &Path, destination: &Path) -> ZiFileResult<()> {
+    if destination.is_dir() {
+        return Err(ZiFileError::DestinationExists(destination.to_path_buf()));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+        };
+
+        let source: Vec<u16> = source
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let destination: Vec<u16> = destination
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        // SAFETY: both vectors are NUL-terminated UTF-16 paths that remain
+        // alive for the duration of the synchronous Win32 call.
+        let moved = unsafe {
+            MoveFileExW(
+                source.as_ptr(),
+                destination.as_ptr(),
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            )
+        };
+        if moved == 0 {
+            return Err(ZiFileError::Io(io::Error::last_os_error()));
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        fs::rename(source, destination)?;
+    }
+    Ok(())
 }
 
 fn open_cab(path: &Path) -> ZiFileResult<Cabinet<BufReader<File>>> {

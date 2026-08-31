@@ -129,6 +129,29 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             })?;
             emit(&writer, WorkerEvent::Summary { summary })?;
         }
+        WorkerRequest::Update {
+            archive,
+            additions,
+            compression_level,
+            password,
+            limits,
+        } => {
+            let progress = OperationProgress::default();
+            let cancellation = zifile_core::CancellationToken::default();
+            listen_for_cancel(cancellation.clone());
+            wait_for_test_delay(&cancellation);
+            let options = zifile_core::UpdateOptions {
+                compression_level,
+                password,
+                limits,
+                cancellation,
+                progress: progress.clone(),
+            };
+            let summary = with_progress(writer.clone(), progress, move || {
+                zifile_core::update_archive(archive, &additions, &options)
+            })?;
+            emit(&writer, WorkerEvent::Summary { summary })?;
+        }
     }
     Ok(())
 }
@@ -264,7 +287,7 @@ mod tests {
     #[test]
     fn rejects_incompatible_protocol_versions() {
         let input =
-            br#"{"version":2,"payload":{"operation":"list","archive":"a.zip","password":null}}"#;
+            br#"{"version":1,"payload":{"operation":"list","archive":"a.zip","password":null}}"#;
         assert!(read_request(&mut Cursor::new(input)).is_err());
     }
 

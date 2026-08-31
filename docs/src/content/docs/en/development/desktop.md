@@ -38,6 +38,8 @@ The archive selection bar provides explicit `Select all`, `Select none`, and `In
 
 `Extract to named folder` skips the folder picker and extracts every entry to a matching directory beside the archive: `sample.zip` uses `sample/`, while `backup.tar.gz` uses `backup/`. It shares naming rules with the File Explorer command and keeps the current conflict policy, operation queue, isolated Worker, and post-completion `Show output` action. Use `Extract all` when choosing a different destination.
 
+For ZIP, 7z, and TAR-family containers, the archive page also provides `Add to archive` and `Add folder to archive`. ZiFile creates a bounded temporary workspace beside the original, fully extracts the archive, merges the new sources by root name, and rebuilds the same format. The original is replaced only after rebuilding, validation, and cancellation checks succeed. A new regular file with the same relative path updates the previous file; file/directory type collisions, links, RAR/CAB, and single-file streams are rejected explicitly, and a failure leaves the original archive intact.
+
 Search is immediate and results are paged at 500 rows, keeping 100,000-entry archives bounded. Safety limits still apply during listing. Worker byte progress, or entry progress when bytes are unavailable, is mirrored to the Windows taskbar.
 
 ## Integrity-test checksums
@@ -58,7 +60,7 @@ does not add another settings entry or log record.
 
 ## Operation queue
 
-Open, reload, test, extract, and create requests may be submitted while work is running. A 32-item in-memory FIFO executes snapshots in order. Clearing removes only waiting work; cancel affects only the current Worker and then advances the queue. Both desktop UIs clear the create-form password as soon as a create request is accepted for execution or queuing, while retaining the input when a full queue rejects the request for retry. Request snapshots release paths and passwords after clearing, completion, or exit. Settings and logs do not retain the queue, passwords, create sources, or output destinations; only a successfully listed archive path is persisted under the recent-history policy above.
+Open, reload, test, extract, create, and update requests may be submitted while work is running. A 32-item in-memory FIFO executes snapshots in order. Clearing removes only waiting work; cancel affects only the current Worker and then advances the queue. Both desktop UIs clear the create-form password as soon as a create request is accepted for execution or queuing, while retaining the input when a full queue rejects the request for retry. Request snapshots release paths and passwords after clearing, completion, or exit. Settings and logs do not retain the queue, passwords, create sources, or output destinations; only a successfully listed archive path is persisted under the recent-history policy above.
 
 After successful creation or extraction, the status bar provides a bilingual `Show output` action that selects the generated archive or extraction directory in File Explorer. Starting new work clears the old output action; failures, cancellation, and Worker protocol result-type mismatches never leave a clickable success path, so status text and follow-up action cannot refer to different jobs.
 

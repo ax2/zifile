@@ -22,7 +22,7 @@ try {
 
     $rootHelp = (& $cli --help 2>&1) -join "`n"
     if ($LASTEXITCODE -ne 0) { throw 'The CLI top-level help returned a non-zero exit code.' }
-    foreach ($command in @('formats', 'detect', 'list', 'test', 'extract', 'create')) {
+    foreach ($command in @('formats', 'detect', 'list', 'test', 'extract', 'create', 'update')) {
         if ($rootHelp -notmatch ("(?m)^  " + [Regex]::Escape($command) + '\s')) {
             throw "The CLI top-level help omits the public command: $command"
         }
@@ -42,6 +42,13 @@ try {
     $formatValueLine = '[possible values: {0}]' -f ($formatValues -join ', ')
     if ($createHelp -notmatch [Regex]::Escape($formatValueLine)) {
         throw 'The CLI create help format enum drifted from the public contract.'
+    }
+
+    $updateHelp = (& $cli update --help 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or
+        $updateHelp -notmatch '--password-stdin' -or
+        $updateHelp -match '(?m)^\s*--password(?:\s|=|<)') {
+        throw 'The CLI update help violates the password-input contract.'
     }
 
     $formats = (& $cli formats 2>&1) -join "`n"
@@ -112,10 +119,25 @@ try {
         throw 'CLI syntax rejection created an output file.'
     }
 
+    $archive = Join-Path $testRoot 'update.zip'
+    $addition = Join-Path $testRoot 'addition.txt'
+    Set-Content -LiteralPath $addition -Value 'updated contract smoke' -NoNewline
+    $createOutput = (& $cli create $archive (Join-Path $testRoot 'input\hello.txt') --format zip --level 6 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "CLI create setup failed: $createOutput" }
+    $updateOutput = (& $cli update $archive $addition --level 6 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "CLI update round trip failed: $updateOutput" }
+    $extractRoot = Join-Path $testRoot 'updated-output'
+    $extractOutput = (& $cli extract $archive $extractRoot --conflict error 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "CLI update extraction failed: $extractOutput" }
+    $updatedFile = Join-Path $extractRoot 'addition.txt'
+    if ((Get-Content -Raw -LiteralPath $updatedFile) -ne 'updated contract smoke') {
+        throw 'CLI update round trip produced unexpected file content.'
+    }
+
     $global:LASTEXITCODE = 0
     [ordered]@{
         schema_version = 1
-        commands_checked = 6
+        commands_checked = 7
         create_formats_checked = $formatValues.Count
         capability_rows_checked = $expectedRows.Count - 1
         runtime_error_exit_code = 1

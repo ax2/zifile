@@ -29,9 +29,10 @@ mod path_policy;
 pub use archive::{
     ArchiveEntryInfo, ArchiveInfo, ArchiveTimestamp, ArchiveTimestampOffset,
     ArchiveTimestampPrecision, CancellationToken, ConflictPolicy, CreateOptions, ExtractOptions,
-    ListOptions, OperationProgress, OperationSummary, ProgressSnapshot, TestOptions,
+    ListOptions, OperationProgress, OperationSummary, ProgressSnapshot, TestOptions, UpdateOptions,
     create_archive, extract_archive, list_archive, list_archive_with_limits,
     list_archive_with_options, test_archive, test_archive_with_limits, test_archive_with_options,
+    update_archive,
 };
 pub use path_policy::safe_relative_path;
 
@@ -228,6 +229,23 @@ impl ArchiveFormat {
         matches!(
             self,
             Self::Tar
+                | Self::TarGzip
+                | Self::TarZstd
+                | Self::TarXz
+                | Self::TarLzma
+                | Self::TarBzip2
+        )
+    }
+
+    /// Whether an existing multi-entry archive can be rebuilt in place through
+    /// the safe update path. Single-file streams and read-only providers stay
+    /// explicitly out of this operation.
+    pub const fn supports_update(self) -> bool {
+        matches!(
+            self,
+            Self::Zip
+                | Self::SevenZip
+                | Self::Tar
                 | Self::TarGzip
                 | Self::TarZstd
                 | Self::TarXz
@@ -639,6 +657,38 @@ mod tests {
                 assert!(!format.capabilities().create);
                 assert_eq!(format.create_input(), None);
             }
+        }
+    }
+
+    #[test]
+    fn update_capability_is_limited_to_multi_entry_containers() {
+        for format in [
+            ArchiveFormat::Zip,
+            ArchiveFormat::SevenZip,
+            ArchiveFormat::Tar,
+            ArchiveFormat::TarGzip,
+            ArchiveFormat::TarZstd,
+            ArchiveFormat::TarXz,
+            ArchiveFormat::TarLzma,
+            ArchiveFormat::TarBzip2,
+        ] {
+            assert!(format.supports_update(), "{format} should be updateable");
+        }
+        for format in [
+            ArchiveFormat::Gzip,
+            ArchiveFormat::Zstandard,
+            ArchiveFormat::Xz,
+            ArchiveFormat::Lzma,
+            ArchiveFormat::Bzip2,
+            ArchiveFormat::Lz4,
+            ArchiveFormat::Brotli,
+            ArchiveFormat::Rar,
+            ArchiveFormat::Cab,
+        ] {
+            assert!(
+                !format.supports_update(),
+                "{format} should remain read-only"
+            );
         }
     }
 

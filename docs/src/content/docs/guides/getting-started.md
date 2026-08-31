@@ -30,9 +30,11 @@ ZiFile 目前是 Stage 4 公开版本，尚未发布 Microsoft Store 或 WinGet 
 
 ZIP、7z 和 TAR 组合支持多个文件与文件夹。gzip、Zstandard、XZ、LZMA、Bzip2、LZ4 和 Brotli 是单文件流，必须恰好选择一个现有文件；需要压缩目录时，请改用对应 TAR 组合。RAR 与 CAB 只支持读取，不支持创建。
 
+打开 ZIP、7z 或 TAR 组合后，可以选择“添加到压缩文件”或“将文件夹添加到压缩文件”更新原归档。更新会在原文件旁的临时工作区中完成解包、合并和重建，只有成功后才替换原文件；单文件流、RAR 和 CAB 不支持更新。
+
 ## 队列与设置
 
-任务运行时仍可提交打开、校验、解压或创建，ZiFile 最多保存 32 项并按顺序执行。“清空队列”只移除等待项，“取消”只作用于当前任务。语言与深浅主题保存在 `%LOCALAPPDATA%\ZiFile\settings.conf`；路径、最近记录和密码不会保存。
+任务运行时仍可提交打开、校验、解压、创建或更新，ZiFile 最多保存 32 项并按顺序执行。“清空队列”只移除等待项，“取消”只作用于当前任务。语言与深浅主题保存在 `%LOCALAPPDATA%\ZiFile\settings.conf`；路径、最近记录和密码不会保存。
 
 “关于”页显示当前运行版本、MIT 许可证、格式系列数量、项目地址和本地处理隐私边界，可按 `F1` 直接打开。页面还可用默认浏览器打开项目主页、中文使用文档和中文隐私政策；若系统拒绝启动链接，底部状态区会显示错误。报告问题时请从这里核对版本，不要仅依赖安装文件名。
 
@@ -44,6 +46,7 @@ zifile list archive.zip
 zifile test archive.7z
 zifile extract archive.zip output --conflict rename
 zifile create output.7z files --format seven-zip --level 9
+zifile update archive.zip new-files --level 6
 ```
 
 `zifile formats` 的 `COMPRESSION_LEVEL` 列会列出每种格式允许的闭区间；`fixed` 表示编码器没有可调等级，必须省略 `--level`。可调格式省略该参数时默认使用等级 6；越界时会明确报错，不会用另一个等级继续创建。

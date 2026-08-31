@@ -106,6 +106,7 @@ enum OperationKind {
     Test,
     Extract,
     Create,
+    Update,
 }
 
 struct QueuedOperation {
@@ -660,6 +661,8 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
                 button { onclick: move |_| reveal_archive(state), {locale.text(Text::RevealInExplorer)} }
                 button { onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} }
+                button { disabled: view.busy || !archive.format.supports_update(), onclick: move |_| add_to_archive_files(state), {locale.text(Text::AddToArchive)} }
+                button { disabled: view.busy || !archive.format.supports_update(), onclick: move |_| add_to_archive_folder(state), {locale.text(Text::AddFolderToArchive)} }
                 button { "aria-keyshortcuts": ARIA_SHORTCUT_CLOSE, onclick: move |_| close_archive(state), {locale.text(Text::CloseArchive)} }
             }
         }
@@ -1193,6 +1196,128 @@ fn test_archive(state: Signal<UiState>) {
     );
 }
 
+fn add_to_archive_files(mut state: Signal<UiState>) {
+    let (locale, can_update) = {
+        let value = state.read();
+        (
+            value.locale,
+            value
+                .archive
+                .as_ref()
+                .is_some_and(|archive| archive.format.supports_update()),
+        )
+    };
+    if !can_update {
+        state.write().set_error(
+            choose(
+                locale,
+                "This archive format cannot be updated",
+                "此压缩格式不支持更新",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    if state.read().dialog_open || state.read().busy {
+        return;
+    }
+    state.write().dialog_open = true;
+    let dialog = AsyncFileDialog::new().set_title(locale.text(Text::UpdateArchiveDialog));
+    spawn(async move {
+        let paths = dialog.pick_files().await.map(|files| {
+            files
+                .into_iter()
+                .map(|file| file.path().to_path_buf())
+                .collect::<Vec<_>>()
+        });
+        state.write().dialog_open = false;
+        if let Some(paths) = paths {
+            submit_archive_update(state, paths);
+        }
+    });
+}
+
+fn add_to_archive_folder(mut state: Signal<UiState>) {
+    let (locale, can_update) = {
+        let value = state.read();
+        (
+            value.locale,
+            value
+                .archive
+                .as_ref()
+                .is_some_and(|archive| archive.format.supports_update()),
+        )
+    };
+    if !can_update {
+        state.write().set_error(
+            choose(
+                locale,
+                "This archive format cannot be updated",
+                "此压缩格式不支持更新",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    if state.read().dialog_open || state.read().busy {
+        return;
+    }
+    state.write().dialog_open = true;
+    let dialog = AsyncFileDialog::new().set_title(locale.text(Text::AddFolderToArchive));
+    spawn(async move {
+        let path = dialog
+            .pick_folder()
+            .await
+            .map(|folder| folder.path().to_path_buf());
+        state.write().dialog_open = false;
+        if let Some(path) = path {
+            submit_archive_update(state, vec![path]);
+        }
+    });
+}
+
+fn submit_archive_update(mut state: Signal<UiState>, additions: Vec<PathBuf>) {
+    if additions.is_empty() {
+        return;
+    }
+    let value = state.read();
+    let Some(archive) = value.archive.as_ref() else {
+        return;
+    };
+    let format = archive.format;
+    let path = archive.path.clone();
+    let locale = value.locale;
+    let password = non_empty(&value.password);
+    drop(value);
+    if !format.supports_update() {
+        state.write().set_error(
+            choose(
+                locale,
+                "This archive format cannot be updated",
+                "此压缩格式不支持更新",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    launch_worker(
+        state,
+        WorkerRequest::Update {
+            archive: path.clone(),
+            additions,
+            compression_level: format.clamp_compression_level(6),
+            password,
+            limits: SafetyLimits::default(),
+        },
+        OperationKind::Update,
+        format!(
+            "{} {}…",
+            choose(locale, "Updating", "正在更新"),
+            path.display()
+        ),
+    );
+}
+
 fn extract_selected(state: Signal<UiState>) {
     extract_with_scope(state, false);
 }
@@ -1631,6 +1756,22 @@ fn finish_worker(
             summary_status(locale, summary, false),
             StatusKind::Informational,
         ),
+        (OperationKind::Update, Ok(WorkerOutput::Summary(summary))) => (
+            if locale == Locale::ZhCn {
+                format!(
+                    "压缩文件已更新 · {} 个文件 · {}",
+                    summary.files,
+                    format_bytes(summary.bytes)
+                )
+            } else {
+                format!(
+                    "Archive updated · {} files · {}",
+                    summary.files,
+                    format_bytes(summary.bytes)
+                )
+            },
+            StatusKind::Informational,
+        ),
         (_, Ok(_)) => (
             choose(
                 locale,
@@ -1650,6 +1791,7 @@ fn finish_worker(
                     }
                     OperationKind::Extract => choose(locale, "Extraction failed", "解压失败"),
                     OperationKind::Create => choose(locale, "Creation failed", "创建失败"),
+                    OperationKind::Update => choose(locale, "Update failed", "更新失败"),
                 },
                 format_worker_error(locale, &error)
             ),
@@ -1661,6 +1803,16 @@ fn finish_worker(
         && status_kind == StatusKind::Informational
     {
         state.write().completed_output = completed_output;
+    }
+    if kind == OperationKind::Update && succeeded && status_kind == StatusKind::Informational {
+        let path = state
+            .read()
+            .archive
+            .as_ref()
+            .map(|archive| archive.path.clone());
+        if let Some(path) = path {
+            begin_load(state, path);
+        }
     }
     if let Some(destination) = automatic_extract {
         extract_to(state, destination, true);
@@ -1691,7 +1843,9 @@ fn operation_output_path(request: &WorkerRequest) -> Option<PathBuf> {
         WorkerRequest::Extract { destination, .. } | WorkerRequest::Create { destination, .. } => {
             Some(destination.clone())
         }
-        WorkerRequest::List { .. } | WorkerRequest::Test { .. } => None,
+        WorkerRequest::List { .. } | WorkerRequest::Test { .. } | WorkerRequest::Update { .. } => {
+            None
+        }
     }
 }
 

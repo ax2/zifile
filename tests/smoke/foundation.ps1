@@ -209,7 +209,7 @@ try {
         throw 'Worker executable was not produced.'
     }
     $workerRequest = @{
-        version = 1
+        version = 2
         payload = @{
             operation = 'list'
             archive = $archivePath
@@ -239,7 +239,7 @@ try {
     }
 
     $workerTestRequest = @{
-        version = 1
+        version = 2
         payload = @{
             operation = 'test'
             archive = $archivePath
@@ -280,7 +280,7 @@ try {
         $sourceStream.Dispose()
     }
     $createRequest = @{
-        version = 1
+        version = 2
         payload = @{
             operation = 'create'
             sources = @($cancelSource)
@@ -291,7 +291,7 @@ try {
         }
     } | ConvertTo-Json -Depth 6 -Compress
     $cancelRequest = @{
-        version = 1
+        version = 2
         payload = @{ control = 'cancel' }
     } | ConvertTo-Json -Depth 4 -Compress
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()

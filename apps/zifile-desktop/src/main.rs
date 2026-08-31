@@ -219,6 +219,11 @@ enum Message {
     ExtractFinished(u64, Option<PathBuf>, Result<OperationSummary, String>),
     TestArchive,
     TestFinished(u64, Result<ArchiveInfo, String>),
+    AddToArchive,
+    AddToArchiveDialogFinished(Option<Vec<PathBuf>>),
+    AddFolderToArchive,
+    AddFolderToArchiveDialogFinished(Option<PathBuf>),
+    UpdateFinished(u64, Result<OperationSummary, String>),
     AddFiles,
     AddFilesDialogFinished(Option<Vec<PathBuf>>),
     AddFolder,
@@ -260,6 +265,7 @@ enum OperationKind {
     Test,
     Extract,
     Create,
+    Update,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -757,6 +763,60 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
             return continue_queue(state, id);
         }
+        Message::AddToArchive => {
+            return update_files_dialog_task(state);
+        }
+        Message::AddToArchiveDialogFinished(paths) => {
+            state.dialog_open = false;
+            if let Some(paths) = paths {
+                return submit_archive_update(state, paths);
+            }
+        }
+        Message::AddFolderToArchive => {
+            return update_folder_dialog_task(state);
+        }
+        Message::AddFolderToArchiveDialogFinished(path) => {
+            state.dialog_open = false;
+            if let Some(path) = path {
+                return submit_archive_update(state, vec![path]);
+            }
+        }
+        Message::UpdateFinished(id, result) => {
+            if state.operations.active_id() != Some(id) {
+                return Task::none();
+            }
+            state.busy = false;
+            state.cancellation = None;
+            state.progress = None;
+            let failed = result.is_err();
+            let archive_path = state.archive.as_ref().map(|archive| archive.path.clone());
+            let status = match result {
+                Ok(summary) if state.locale == Locale::ZhCn => format!(
+                    "压缩文件已更新 · {} 个文件 · {}",
+                    summary.files,
+                    format_bytes(summary.bytes)
+                ),
+                Ok(summary) => format!(
+                    "Archive updated · {} files · {}",
+                    summary.files,
+                    format_bytes(summary.bytes)
+                ),
+                Err(error) => format!(
+                    "{}: {}",
+                    choose(state.locale, "Update failed", "更新失败"),
+                    format_worker_error(state.locale, &error)
+                ),
+            };
+            if failed {
+                set_error(state, status);
+            } else {
+                set_status(state, status);
+                if let Some(path) = archive_path {
+                    let _ = begin_load(state, path);
+                }
+            }
+            return continue_queue(state, id);
+        }
         Message::AddFiles => {
             if state.dialog_open {
                 return Task::none();
@@ -1222,6 +1282,108 @@ fn quick_extraction_operation(state: &ZiFile) -> Option<QueuedOperation> {
     extract_operation(state, destination, true)
 }
 
+fn update_files_dialog_task(state: &mut ZiFile) -> Task<Message> {
+    let Some(archive) = state.archive.as_ref() else {
+        return Task::none();
+    };
+    if !archive.format.supports_update() {
+        set_error(
+            state,
+            choose(
+                state.locale,
+                "This archive format cannot be updated",
+                "此压缩格式不支持更新",
+            ),
+        );
+        return Task::none();
+    }
+    if state.dialog_open || state.busy {
+        return Task::none();
+    }
+    state.dialog_open = true;
+    let dialog = FileDialog::new().set_title(state.locale.text(Text::UpdateArchiveDialog));
+    Task::perform(
+        async move {
+            tokio::task::spawn_blocking(move || dialog.pick_files())
+                .await
+                .unwrap_or(None)
+        },
+        Message::AddToArchiveDialogFinished,
+    )
+}
+
+fn update_folder_dialog_task(state: &mut ZiFile) -> Task<Message> {
+    let Some(archive) = state.archive.as_ref() else {
+        return Task::none();
+    };
+    if !archive.format.supports_update() {
+        set_error(
+            state,
+            choose(
+                state.locale,
+                "This archive format cannot be updated",
+                "此压缩格式不支持更新",
+            ),
+        );
+        return Task::none();
+    }
+    if state.dialog_open || state.busy {
+        return Task::none();
+    }
+    state.dialog_open = true;
+    let dialog = FileDialog::new().set_title(state.locale.text(Text::AddFolderToArchive));
+    Task::perform(
+        async move {
+            tokio::task::spawn_blocking(move || dialog.pick_folder())
+                .await
+                .unwrap_or(None)
+        },
+        Message::AddFolderToArchiveDialogFinished,
+    )
+}
+
+fn submit_archive_update(state: &mut ZiFile, additions: Vec<PathBuf>) -> Task<Message> {
+    let Some(archive) = state.archive.as_ref() else {
+        return Task::none();
+    };
+    if additions.is_empty() {
+        return Task::none();
+    }
+    let format = archive.format;
+    if !format.supports_update() {
+        set_error(
+            state,
+            choose(
+                state.locale,
+                "This archive format cannot be updated",
+                "此压缩格式不支持更新",
+            ),
+        );
+        return Task::none();
+    }
+    let path = archive.path.clone();
+    let request = WorkerRequest::Update {
+        archive: path.clone(),
+        additions,
+        compression_level: format.clamp_compression_level(6),
+        password: non_empty(&state.password),
+        limits: SafetyLimits::default(),
+    };
+    submit_operation(
+        state,
+        QueuedOperation {
+            kind: OperationKind::Update,
+            request,
+            status: format!(
+                "{} {}…",
+                choose(state.locale, "Updating", "正在更新"),
+                path.display()
+            ),
+            archive_path: None,
+        },
+    )
+}
+
 fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Message> {
     let kind = operation.kind;
     match state.operations.submit(operation) {
@@ -1338,6 +1500,10 @@ fn start_operation(state: &mut ZiFile, job: Job<QueuedOperation>) -> Task<Messag
             async move { run_worker(request, progress, cancellation).and_then(expect_summary) },
             move |result| Message::CreateFinished(id, completed_output, result),
         ),
+        OperationKind::Update => Task::perform(
+            async move { run_worker(request, progress, cancellation).and_then(expect_summary) },
+            move |result| Message::UpdateFinished(id, result),
+        ),
     }
 }
 
@@ -1346,7 +1512,9 @@ fn operation_output_path(request: &WorkerRequest) -> Option<PathBuf> {
         WorkerRequest::Extract { destination, .. } | WorkerRequest::Create { destination, .. } => {
             Some(destination.clone())
         }
-        WorkerRequest::List { .. } | WorkerRequest::Test { .. } => None,
+        WorkerRequest::List { .. } | WorkerRequest::Test { .. } | WorkerRequest::Update { .. } => {
+            None
+        }
     }
 }
 
@@ -1919,6 +2087,17 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
 
     let operation_controls = row![
         button(state.locale.text(Text::Reload)).on_press(Message::ReloadArchive),
+        button(state.locale.text(Text::AddToArchive))
+            .style(button::secondary)
+            .on_press_maybe(
+                (archive.format.supports_update() && !state.busy).then_some(Message::AddToArchive),
+            ),
+        button(state.locale.text(Text::AddFolderToArchive))
+            .style(button::secondary)
+            .on_press_maybe(
+                (archive.format.supports_update() && !state.busy)
+                    .then_some(Message::AddFolderToArchive),
+            ),
         column![
             text(state.locale.text(Text::ConflictPolicy)).size(13),
             pick_list(
