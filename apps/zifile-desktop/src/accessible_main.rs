@@ -46,9 +46,9 @@ use zifile_desktop::entry_view::{
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 use zifile_desktop::{
-    OfficialLink, append_unique_paths as append_unique, create_passwords_match,
-    ensure_archive_extension, invert_archive_file_selection, is_openable_archive_path,
-    open_official_link, reveal_in_file_manager,
+    OfficialLink, append_unique_paths as append_unique, can_retry_archive_open,
+    create_passwords_match, ensure_archive_extension, invert_archive_file_selection,
+    is_openable_archive_path, open_official_link, reveal_in_file_manager,
 };
 
 const STYLES: &str = include_str!("accessible_ui.css");
@@ -553,6 +553,11 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
             view.pending_archive_requires_password,
         );
         let can_unlock = pending.is_some() && !view.busy;
+        let can_retry = can_retry_archive_open(
+            view.busy,
+            pending.is_some(),
+            view.pending_archive_requires_password,
+        );
         return rsx! { section { class: "empty-state", "aria-labelledby": "pending-archive-title",
             h2 { id: "pending-archive-title", {heading} }
             p { {description} }
@@ -581,6 +586,9 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                         }
                     }
                     button { class: "primary", disabled: !can_unlock, "aria-keyshortcuts": ARIA_SHORTCUT_RELOAD, onclick: move |_| reload_archive(state), {locale.text(Text::UnlockArchive)} }
+                }
+                if pending.is_some() && !view.pending_archive_requires_password {
+                    button { class: "primary", disabled: !can_retry, "aria-keyshortcuts": ARIA_SHORTCUT_RELOAD, onclick: move |_| reload_archive(state), {locale.text(Text::Reload)} }
                 }
                 button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAction)} }
             }
@@ -2196,6 +2204,24 @@ mod tests {
         assert!(source.contains("disabled: view.busy, title: \"{path.display()}\""));
         assert!(source.contains("record_recent_archive(&mut value, recent_path)"));
         assert!(source.contains("remove_recent_archive(state, path.clone())"));
+    }
+
+    #[test]
+    fn failed_archive_empty_state_exposes_an_idle_non_password_retry() {
+        let source = include_str!("accessible_main.rs");
+        let archive_page = source
+            .split_once("fn ArchivePage")
+            .expect("archive page")
+            .1
+            .split_once("fn set_entry_sort")
+            .expect("sort helper follows archive page")
+            .0;
+        assert!(archive_page.contains("can_retry_archive_open("));
+        assert!(
+            archive_page.contains("pending.is_some() && !view.pending_archive_requires_password")
+        );
+        assert!(archive_page.contains("disabled: !can_retry"));
+        assert!(archive_page.contains("Text::UnlockArchive"));
     }
 
     #[test]

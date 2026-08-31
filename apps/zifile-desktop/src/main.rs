@@ -48,9 +48,9 @@ use zifile_desktop::entry_view::{
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 use zifile_desktop::{
-    OfficialLink, append_unique_paths as append_unique, create_passwords_match,
-    ensure_archive_extension, invert_archive_file_selection, is_openable_archive_path,
-    open_official_link, reveal_in_file_manager,
+    OfficialLink, append_unique_paths as append_unique, can_retry_archive_open,
+    create_passwords_match, ensure_archive_extension, invert_archive_file_selection,
+    is_openable_archive_path, open_official_link, reveal_in_file_manager,
 };
 
 const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
@@ -1746,6 +1746,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             pending.is_some(),
             requires_password,
         );
+        let can_retry = can_retry_archive_open(state.busy, pending.is_some(), requires_password);
         let retry_controls: Element<'_, Message> = if requires_password {
             column![
                 text_input(state.locale.text(Text::PasswordEncrypted), &state.password)
@@ -1766,6 +1767,11 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             ]
             .spacing(12)
             .into()
+        } else if pending.is_some() {
+            button(state.locale.text(Text::Reload))
+                .style(button::primary)
+                .on_press_maybe(can_retry.then_some(Message::ReloadArchive))
+                .into()
         } else {
             space().height(0).into()
         };
@@ -2485,6 +2491,22 @@ mod tests {
         drop(update(&mut state, Message::CloseArchive));
 
         assert!(state.archive.is_some());
+    }
+
+    #[test]
+    fn failed_archive_empty_state_exposes_an_idle_non_password_retry() {
+        let source = include_str!("main.rs");
+        let archive_view = source
+            .split_once("fn archive_view(state: &ZiFile)")
+            .expect("archive view")
+            .1
+            .split_once("fn create_view(state: &ZiFile)")
+            .expect("create view follows archive view")
+            .0;
+        assert!(archive_view.contains("can_retry_archive_open("));
+        assert!(archive_view.contains("else if pending.is_some()"));
+        assert!(archive_view.contains("can_retry.then_some(Message::ReloadArchive)"));
+        assert!(archive_view.contains("Text::UnlockArchive"));
     }
 
     #[test]
