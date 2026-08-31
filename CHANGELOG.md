@@ -20,6 +20,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Changed
 
+- Explicitly disable the Iced close-archive action while an archive operation
+  is busy, keeping the unavailable state consistent with the accessible UI.
+
 - Show expanded size, packed size, and a localized smaller/larger percentage in
   both archive headers, including busy-state summaries and empty archives.
 
