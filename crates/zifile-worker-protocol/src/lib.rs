@@ -13,11 +13,11 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use zifile_core::{
-    ArchiveEntryInfo, ArchiveFormat, ConflictPolicy, OperationSummary, ProgressSnapshot,
-    SafetyLimits,
+    ArchiveEntryInfo, ArchiveFormat, ArchiveRename, ConflictPolicy, OperationSummary,
+    ProgressSnapshot, SafetyLimits,
 };
 
-pub const PROTOCOL_VERSION: u16 = 2;
+pub const PROTOCOL_VERSION: u16 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Envelope<T> {
@@ -67,9 +67,16 @@ pub enum WorkerRequest {
         password: Option<String>,
         limits: SafetyLimits,
         /// Optional archive-relative files or directories to remove. The
-        /// default keeps version-2 requests backward compatible.
+        /// default keeps older update requests structurally compatible.
         #[serde(default)]
         remove_paths: Vec<PathBuf>,
+    },
+    Rename {
+        archive: PathBuf,
+        renames: Vec<ArchiveRename>,
+        compression_level: u8,
+        password: Option<String>,
+        limits: SafetyLimits,
     },
 }
 
@@ -198,5 +205,26 @@ mod tests {
         };
         assert!(remove_paths.is_empty());
         assert_eq!(additions, [PathBuf::from("new.txt")]);
+    }
+
+    #[test]
+    fn rename_request_round_trips_archive_relative_mappings() {
+        let envelope = Envelope::new(WorkerRequest::Rename {
+            archive: PathBuf::from("sample.zip"),
+            renames: vec![ArchiveRename {
+                from: PathBuf::from("old.txt"),
+                to: PathBuf::from("new.txt"),
+            }],
+            compression_level: 6,
+            password: None,
+            limits: SafetyLimits::default(),
+        });
+        let encoded = serde_json::to_string(&envelope).unwrap();
+        let decoded: Envelope<WorkerRequest> = serde_json::from_str(&encoded).unwrap();
+        let WorkerRequest::Rename { renames, .. } = decoded.payload else {
+            panic!("rename request decoded as the wrong variant");
+        };
+        assert_eq!(renames[0].from, PathBuf::from("old.txt"));
+        assert_eq!(renames[0].to, PathBuf::from("new.txt"));
     }
 }

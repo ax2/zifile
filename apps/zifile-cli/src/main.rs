@@ -16,9 +16,9 @@ use std::{
 
 use clap::{Parser, Subcommand, ValueEnum};
 use zifile_core::{
-    ArchiveFormat, ConflictPolicy, CreateInputKind, CreateOptions, ExtractOptions, UpdateOptions,
-    create_archive, detect_format, detect_format_from_path, extract_archive, list_archive,
-    test_archive, update_archive,
+    ArchiveFormat, ArchiveRename, ConflictPolicy, CreateInputKind, CreateOptions, ExtractOptions,
+    UpdateOptions, create_archive, detect_format, detect_format_from_path, extract_archive,
+    list_archive, rename_archive, test_archive, update_archive,
 };
 
 const RUNTIME_ERROR_EXIT_CODE: i32 = 1;
@@ -86,6 +86,19 @@ enum Command {
         /// Archive-relative files or directories to remove; may be repeated.
         #[arg(long = "remove", value_name = "ARCHIVE_PATH")]
         remove_paths: Vec<PathBuf>,
+        /// Compression level; defaults to 6 for adjustable formats.
+        #[arg(long, value_parser = clap::value_parser!(u8).range(0..=22))]
+        level: Option<u8>,
+        /// Read the archive password from one line of standard input.
+        #[arg(long)]
+        password_stdin: bool,
+    },
+    /// Rename files or directories inside an existing multi-entry archive.
+    Rename {
+        archive: PathBuf,
+        /// Archive-relative rename mapping; may be repeated.
+        #[arg(long = "rename", value_name = "FROM=TO", required = true)]
+        renames: Vec<String>,
         /// Compression level; defaults to 6 for adjustable formats.
         #[arg(long, value_parser = clap::value_parser!(u8).range(0..=22))]
         level: Option<u8>,
@@ -300,8 +313,64 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 summary.files, summary.directories, summary.bytes
             );
         }
+        Command::Rename {
+            archive,
+            renames,
+            level,
+            password_stdin,
+        } => {
+            let renames = renames
+                .iter()
+                .map(|spec| parse_rename_spec(spec))
+                .collect::<Result<Vec<_>, _>>()?;
+            let password = read_password(password_stdin)?;
+            let format = detect_format(&archive)?;
+            if !format.supports_update() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("{format} archives cannot be renamed"),
+                )
+                .into());
+            }
+            let compression_level = resolve_compression_level(format, level)?;
+            let summary = rename_archive(
+                archive,
+                &renames,
+                &UpdateOptions {
+                    compression_level,
+                    password,
+                    ..UpdateOptions::default()
+                },
+            )?;
+            println!(
+                "Renamed {} entries in {format}; archive now has {} files and {} directories ({} bytes)",
+                renames.len(),
+                summary.files,
+                summary.directories,
+                summary.bytes
+            );
+        }
     }
     Ok(())
+}
+
+fn parse_rename_spec(spec: &str) -> io::Result<ArchiveRename> {
+    let Some((from, to)) = spec.split_once('=') else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("rename must use FROM=TO syntax: {spec}"),
+        ));
+    };
+    if from.is_empty() || to.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("rename paths cannot be empty: {spec}"),
+        ));
+    }
+    Ok(ArchiveRename {
+        from: PathBuf::from(from),
+        to: PathBuf::from(to),
+    })
 }
 
 fn read_password(enabled: bool) -> io::Result<Option<String>> {
@@ -426,7 +495,7 @@ mod tests {
         assert_eq!(
             subcommands,
             [
-                "formats", "detect", "list", "test", "extract", "create", "update"
+                "formats", "detect", "list", "test", "extract", "create", "update", "rename"
             ]
         );
         assert_eq!(command.get_version(), Some(env!("CARGO_PKG_VERSION")));
@@ -493,6 +562,42 @@ mod tests {
         };
         assert!(additions.is_empty());
         assert_eq!(remove_paths, [PathBuf::from("folder/file.txt")]);
+    }
+
+    #[test]
+    fn rename_accepts_repeated_from_to_mappings() {
+        let cli = Cli::try_parse_from([
+            "zifile",
+            "rename",
+            "archive.zip",
+            "--rename",
+            "old.txt=new.txt",
+            "--rename",
+            "folder=renamed-folder",
+        ])
+        .unwrap();
+        let Command::Rename { renames, .. } = cli.command else {
+            panic!("expected rename command");
+        };
+        assert_eq!(renames, ["old.txt=new.txt", "folder=renamed-folder"]);
+        let parsed: Vec<_> = renames
+            .iter()
+            .map(|spec| super::parse_rename_spec(spec).unwrap())
+            .collect();
+        assert_eq!(parsed[0].from, PathBuf::from("old.txt"));
+        assert_eq!(parsed[0].to, PathBuf::from("new.txt"));
+        assert_eq!(parsed[1].from, PathBuf::from("folder"));
+        assert_eq!(parsed[1].to, PathBuf::from("renamed-folder"));
+    }
+
+    #[test]
+    fn rename_spec_requires_non_empty_from_to_paths() {
+        for spec in ["old.txt", "=new.txt", "old.txt="] {
+            assert!(super::parse_rename_spec(spec).is_err(), "accepted {spec}");
+        }
+        let parsed = super::parse_rename_spec("folder\\old.txt=folder/new.txt").unwrap();
+        assert_eq!(parsed.from, PathBuf::from("folder\\old.txt"));
+        assert_eq!(parsed.to, PathBuf::from("folder/new.txt"));
     }
 
     #[test]

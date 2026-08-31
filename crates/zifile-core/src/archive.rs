@@ -172,6 +172,16 @@ pub struct UpdateOptions {
     pub progress: OperationProgress,
 }
 
+/// One archive-relative rename applied while rebuilding a multi-entry archive.
+///
+/// Both paths are validated with the archive path policy before any staging
+/// content is changed. Directory renames move the complete subtree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArchiveRename {
+    pub from: PathBuf,
+    pub to: PathBuf,
+}
+
 impl Default for UpdateOptions {
     fn default() -> Self {
         Self {
@@ -665,6 +675,220 @@ pub fn update_archive(
     options.cancellation.check()?;
     replace_existing_file(&output, archive)?;
     Ok(summary)
+}
+
+/// Renames files or directories inside an existing multi-entry archive.
+///
+/// The archive is extracted into a private staging directory, all rename
+/// mappings are validated, and the rebuilt archive replaces the original only
+/// after encoding succeeds. ZIP, 7z, and TAR-family archives support this
+/// operation; single-file streams and read-only providers do not.
+pub fn rename_archive(
+    archive: impl AsRef<Path>,
+    renames: &[ArchiveRename],
+    options: &UpdateOptions,
+) -> ZiFileResult<OperationSummary> {
+    options.cancellation.check()?;
+    if renames.is_empty() {
+        return Err(ZiFileError::InvalidInput(
+            "at least one rename is required".to_owned(),
+        ));
+    }
+
+    let archive = archive.as_ref();
+    let format = detect_format(archive)?;
+    if !format.supports_update() {
+        return Err(ZiFileError::UnsupportedOperation(format));
+    }
+
+    let staging = tempfile::tempdir_in(archive.parent().unwrap_or_else(|| Path::new(".")))?;
+    let contents = staging.path().join("contents");
+    fs::create_dir(&contents)?;
+    let extract_options = ExtractOptions {
+        conflict: ConflictPolicy::Error,
+        limits: options.limits,
+        password: options.password.clone(),
+        selected_paths: None,
+        cancellation: options.cancellation.clone(),
+        progress: options.progress.clone(),
+    };
+    extract_archive(archive, &contents, &extract_options)?;
+    let renames = normalized_archive_renames(renames, options.limits)?;
+    apply_archive_renames(&contents, &renames, options)?;
+
+    let sources = top_level_sources(&contents)?;
+    let output = staging
+        .path()
+        .join(format!("renamed.{}", format.canonical_extension()));
+    let source_entries = collect_sources(&sources, &output)?;
+    validate_update_entries(&source_entries, options.limits)?;
+    options.cancellation.check()?;
+    let create_options = CreateOptions {
+        compression_level: format.clamp_compression_level(options.compression_level),
+        password: options.password.clone(),
+        cancellation: options.cancellation.clone(),
+        progress: options.progress.clone(),
+    };
+    let summary = create_archive_inner(&sources, &output, format, &create_options, true)?;
+    options.cancellation.check()?;
+    replace_existing_file(&output, archive)?;
+    Ok(summary)
+}
+
+fn normalized_archive_renames(
+    renames: &[ArchiveRename],
+    limits: SafetyLimits,
+) -> ZiFileResult<Vec<ArchiveRename>> {
+    let mut normalized = Vec::with_capacity(renames.len());
+    let mut source_keys = HashSet::with_capacity(renames.len());
+    let mut destination_keys = HashSet::with_capacity(renames.len());
+    for rename in renames {
+        let from = safe_relative_path(&rename.from.to_string_lossy(), limits.max_path_depth)?;
+        let to = safe_relative_path(&rename.to.to_string_lossy(), limits.max_path_depth)?;
+        if from == to {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename source and destination are identical: {}",
+                from.display()
+            )));
+        }
+        if !source_keys.insert(archive_collision_key(&from)) {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename source collides with another source: {}",
+                from.display()
+            )));
+        }
+        if !destination_keys.insert(archive_collision_key(&to)) {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename destination collides with another destination: {}",
+                to.display()
+            )));
+        }
+        if archive_collision_key(&from) == archive_collision_key(&to) {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename source and destination collide: {} -> {}",
+                from.display(),
+                to.display()
+            )));
+        }
+        if normalized
+            .iter()
+            .any(|item: &ArchiveRename| item.from == from)
+        {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename source is specified more than once: {}",
+                from.display()
+            )));
+        }
+        if normalized.iter().any(|item: &ArchiveRename| item.to == to) {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename destination is specified more than once: {}",
+                to.display()
+            )));
+        }
+        normalized.push(ArchiveRename { from, to });
+    }
+
+    for (index, current) in normalized.iter().enumerate() {
+        for (other_index, other) in normalized.iter().enumerate() {
+            if index == other_index {
+                continue;
+            }
+            if current.from.starts_with(&other.from) || other.from.starts_with(&current.from) {
+                return Err(ZiFileError::InvalidInput(
+                    "rename sources cannot overlap".to_owned(),
+                ));
+            }
+        }
+        if normalized
+            .iter()
+            .any(|other| current.to != other.from && current.to.starts_with(&other.from))
+        {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename destination is inside a renamed source: {}",
+                current.to.display()
+            )));
+        }
+        if normalized.iter().any(|other| {
+            current.to != other.to
+                && (current.to.starts_with(&other.to) || other.to.starts_with(&current.to))
+        }) {
+            return Err(ZiFileError::InvalidInput(
+                "rename destinations cannot overlap".to_owned(),
+            ));
+        }
+    }
+    Ok(normalized)
+}
+
+fn apply_archive_renames(
+    contents: &Path,
+    renames: &[ArchiveRename],
+    options: &UpdateOptions,
+) -> ZiFileResult<()> {
+    let mut source_kinds = HashMap::with_capacity(renames.len());
+    for rename in renames {
+        options.cancellation.check()?;
+        let source = contents.join(&rename.from);
+        reject_symlink_components(&source)?;
+        let metadata = fs::symlink_metadata(&source).map_err(|error| {
+            if error.kind() == io::ErrorKind::NotFound {
+                ZiFileError::InvalidInput(format!(
+                    "archive entry to rename was not found: {}",
+                    rename.from.display()
+                ))
+            } else {
+                ZiFileError::Io(error)
+            }
+        })?;
+        if metadata_is_link_like(&metadata) {
+            return Err(ZiFileError::LinkEntry(rename.from.display().to_string()));
+        }
+        if !metadata.is_dir() && !metadata.is_file() {
+            return Err(ZiFileError::UnsupportedEntry(
+                rename.from.display().to_string(),
+            ));
+        }
+        source_kinds.insert(rename.from.clone(), metadata.is_dir());
+    }
+
+    for rename in renames {
+        options.cancellation.check()?;
+        let destination = contents.join(&rename.to);
+        reject_symlink_components(&destination)?;
+        if let Some(source_is_directory) = source_kinds.get(&rename.to) {
+            let source_is_directory = *source_is_directory;
+            let current_is_directory =
+                source_kinds.get(&rename.from).copied().ok_or_else(|| {
+                    ZiFileError::InvalidInput("rename source validation lost an entry".to_owned())
+                })?;
+            if source_is_directory != current_is_directory {
+                return Err(ZiFileError::NameCollision(rename.to.clone()));
+            }
+        } else if fs::symlink_metadata(&destination).is_ok() {
+            return Err(ZiFileError::NameCollision(rename.to.clone()));
+        }
+    }
+
+    // Move every source out of the way first. This also makes swaps such as
+    // a.txt -> b.txt and b.txt -> a.txt deterministic on Windows.
+    let temporary = tempfile::tempdir_in(contents.parent().unwrap_or(contents))?;
+    for (index, rename) in renames.iter().enumerate() {
+        options.cancellation.check()?;
+        fs::rename(
+            contents.join(&rename.from),
+            temporary.path().join(index.to_string()),
+        )?;
+    }
+    for (index, rename) in renames.iter().enumerate() {
+        options.cancellation.check()?;
+        let destination = contents.join(&rename.to);
+        if let Some(parent) = destination.parent() {
+            reject_symlink_components(parent)?;
+            fs::create_dir_all(parent)?;
+        }
+        fs::rename(temporary.path().join(index.to_string()), destination)?;
+    }
+    options.cancellation.check()
 }
 
 fn normalized_update_removals(

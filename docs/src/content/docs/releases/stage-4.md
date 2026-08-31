@@ -29,6 +29,13 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 稳定 1.0 尚未发布；`v0.1.10` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
 
+## 2026-09-01 归档内重命名
+
+- 核心新增 `ArchiveRename` 和 `rename_archive`。ZIP、7z 与 TAR-family 通过同目录临时 staging 完成重命名后再原子替换原归档；目录映射会移动完整子树，单流、RAR 与 CAB 继续只读。
+- 重命名映射在 staging 内容变更前统一校验：归档相对路径策略、大小写冲突、重复/重叠源与目标、类型冲突、目标存在、符号链接/重解析点和取消状态均受保护；临时搬移阶段支持批量交换，失败不会提交原归档。
+- Worker IPC 升级到 `PROTOCOL_VERSION = 3`，CLI 新增可重复的 `rename <archive> --rename <FROM=TO>`；默认 Iced UI 和 Dioxus/WebView2 无障碍候选均提供单选项目的双语重命名编辑器，并在完成后重新加载归档。
+- 验证：核心集成测试 54/54、CLI 单测 10/10、Worker 协议单测 4/4，桌面 `cargo check --all-targets --all-features` 通过；真实前台 UI、签名和 Store/WACK 等外部门禁仍未声称完成。
+
 ## 2026-08-31 v0.1.10 正式公开版本结果
 
 - PR [#92](https://github.com/ax2/zifile/pull/92) 合并提交为 `b778ba5c2095aa19ccdd03500a5aacae59ae75e8`；注释 tag `v0.1.10` 指向该发布提交。
