@@ -366,6 +366,100 @@ fn updating_zip_merges_a_matching_directory_and_replaces_colliding_files() {
 }
 
 #[test]
+fn updating_zip_can_remove_files_and_nested_directories_atomically() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("input");
+    fs::create_dir_all(source.join("nested")).unwrap();
+    fs::write(source.join("keep.txt"), "keep\n").unwrap();
+    fs::write(source.join("nested/remove.txt"), "remove\n").unwrap();
+    fs::write(source.join("nested/also-remove.txt"), "remove\n").unwrap();
+    let archive = temp.path().join("editable.zip");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    update_archive(
+        &archive,
+        &[],
+        &UpdateOptions {
+            remove_paths: vec![PathBuf::from("input/nested")],
+            ..UpdateOptions::default()
+        },
+    )
+    .unwrap();
+
+    let output = temp.path().join("output");
+    extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
+    assert_eq!(
+        fs::read_to_string(output.join("input/keep.txt")).unwrap(),
+        "keep\n"
+    );
+    assert!(!output.join("input/nested").exists());
+}
+
+#[test]
+fn update_removal_normalizes_duplicate_and_descendant_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("input");
+    fs::create_dir_all(source.join("nested")).unwrap();
+    fs::write(source.join("nested/remove.txt"), "remove\n").unwrap();
+    let archive = temp.path().join("editable.zip");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    update_archive(
+        &archive,
+        &[],
+        &UpdateOptions {
+            remove_paths: vec![
+                PathBuf::from("input/nested/remove.txt"),
+                PathBuf::from(r"input\nested"),
+                PathBuf::from("input/nested"),
+            ],
+            ..UpdateOptions::default()
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn updating_zip_can_remove_the_last_root_file_and_leave_a_valid_empty_archive() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("only.txt");
+    fs::write(&source, "only\n").unwrap();
+    let archive = temp.path().join("empty-after-remove.zip");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    update_archive(
+        &archive,
+        &[],
+        &UpdateOptions {
+            remove_paths: vec![PathBuf::from("only.txt")],
+            ..UpdateOptions::default()
+        },
+    )
+    .unwrap();
+
+    let info = list_archive(&archive, None).unwrap();
+    assert!(info.entries.is_empty());
+}
+
+#[test]
 fn updating_a_single_file_stream_is_explicitly_rejected() {
     let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("payload.txt");

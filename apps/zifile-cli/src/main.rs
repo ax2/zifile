@@ -81,8 +81,11 @@ enum Command {
     /// Add files or directories to an existing multi-entry archive.
     Update {
         archive: PathBuf,
-        #[arg(required = true)]
+        /// Files or directories to add. May be omitted when --remove is used.
         additions: Vec<PathBuf>,
+        /// Archive-relative files or directories to remove; may be repeated.
+        #[arg(long = "remove", value_name = "ARCHIVE_PATH")]
+        remove_paths: Vec<PathBuf>,
         /// Compression level; defaults to 6 for adjustable formats.
         #[arg(long, value_parser = clap::value_parser!(u8).range(0..=22))]
         level: Option<u8>,
@@ -265,9 +268,13 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Command::Update {
             archive,
             additions,
+            remove_paths,
             level,
             password_stdin,
         } => {
+            if additions.is_empty() && remove_paths.is_empty() {
+                return Err("update requires at least one addition or --remove path".into());
+            }
             let password = read_password(password_stdin)?;
             let format = detect_format(&archive)?;
             if !format.supports_update() {
@@ -284,6 +291,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 &UpdateOptions {
                     compression_level,
                     password,
+                    remove_paths,
                     ..UpdateOptions::default()
                 },
             )?;
@@ -398,12 +406,13 @@ const fn yes_no(value: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
+    use std::path::PathBuf;
 
     use clap::{CommandFactory, Parser, ValueEnum};
 
     use super::{
-        Cli, ConflictArg, FormatArg, RUNTIME_ERROR_EXIT_CODE, format_matrix, read_password_from,
-        resolve_compression_level,
+        Cli, Command, ConflictArg, FormatArg, RUNTIME_ERROR_EXIT_CODE, format_matrix,
+        read_password_from, resolve_compression_level,
     };
     use zifile_core::ArchiveFormat;
 
@@ -462,6 +471,28 @@ mod tests {
                 "brotli",
             ]
         );
+    }
+
+    #[test]
+    fn update_accepts_removals_without_additions() {
+        let cli = Cli::try_parse_from([
+            "zifile",
+            "update",
+            "archive.zip",
+            "--remove",
+            "folder/file.txt",
+        ])
+        .unwrap();
+        let Command::Update {
+            additions,
+            remove_paths,
+            ..
+        } = cli.command
+        else {
+            panic!("expected update command");
+        };
+        assert!(additions.is_empty());
+        assert_eq!(remove_paths, [PathBuf::from("folder/file.txt")]);
     }
 
     #[test]

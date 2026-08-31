@@ -156,14 +156,18 @@ impl Default for CreateOptions {
     }
 }
 
-/// Options for rebuilding an existing multi-entry archive after merging one
-/// or more local files or directories into it. The original archive is only
-/// replaced after the complete staged rebuild succeeds.
+/// Options for rebuilding an existing multi-entry archive after merging local
+/// files or directories and/or removing archive-relative paths. The original
+/// archive is only replaced after the complete staged rebuild succeeds.
 #[derive(Debug, Clone)]
 pub struct UpdateOptions {
     pub compression_level: u8,
     pub password: Option<String>,
     pub limits: SafetyLimits,
+    /// Archive-relative files or directories to remove after extraction.
+    /// Paths are normalized and checked with the same policy used for archive
+    /// entries before anything is removed from the staging tree.
+    pub remove_paths: Vec<PathBuf>,
     pub cancellation: CancellationToken,
     pub progress: OperationProgress,
 }
@@ -174,6 +178,7 @@ impl Default for UpdateOptions {
             compression_level: 6,
             password: None,
             limits: SafetyLimits::default(),
+            remove_paths: Vec::new(),
             cancellation: CancellationToken::default(),
             progress: OperationProgress::default(),
         }
@@ -524,8 +529,18 @@ pub fn create_archive(
     format: ArchiveFormat,
     options: &CreateOptions,
 ) -> ZiFileResult<OperationSummary> {
+    create_archive_inner(sources, destination, format, options, false)
+}
+
+fn create_archive_inner(
+    sources: &[PathBuf],
+    destination: impl AsRef<Path>,
+    format: ArchiveFormat,
+    options: &CreateOptions,
+    allow_empty: bool,
+) -> ZiFileResult<OperationSummary> {
     options.cancellation.check()?;
-    if sources.is_empty() {
+    if sources.is_empty() && !allow_empty {
         return Err(ZiFileError::InvalidInput(
             "at least one source is required".to_owned(),
         ));
@@ -586,9 +601,9 @@ pub fn update_archive(
     options: &UpdateOptions,
 ) -> ZiFileResult<OperationSummary> {
     options.cancellation.check()?;
-    if additions.is_empty() {
+    if additions.is_empty() && options.remove_paths.is_empty() {
         return Err(ZiFileError::InvalidInput(
-            "at least one addition is required".to_owned(),
+            "at least one addition or removal is required".to_owned(),
         ));
     }
 
@@ -616,6 +631,7 @@ pub fn update_archive(
     let staging = tempfile::tempdir_in(parent)?;
     let contents = staging.path().join("contents");
     fs::create_dir(&contents)?;
+    let remove_paths = normalized_update_removals(&options.remove_paths, options.limits)?;
     let extract_options = ExtractOptions {
         conflict: ConflictPolicy::Error,
         limits: options.limits,
@@ -625,6 +641,9 @@ pub fn update_archive(
         progress: options.progress.clone(),
     };
     extract_archive(archive, &contents, &extract_options)?;
+    for path in &remove_paths {
+        remove_update_path(&contents, path, options)?;
+    }
     for source in additions {
         merge_update_source(source, &contents, options)?;
     }
@@ -642,10 +661,57 @@ pub fn update_archive(
         cancellation: options.cancellation.clone(),
         progress: options.progress.clone(),
     };
-    let summary = create_archive(&sources, &output, format, &create_options)?;
+    let summary = create_archive_inner(&sources, &output, format, &create_options, true)?;
     options.cancellation.check()?;
     replace_existing_file(&output, archive)?;
     Ok(summary)
+}
+
+fn normalized_update_removals(
+    paths: &[PathBuf],
+    limits: SafetyLimits,
+) -> ZiFileResult<Vec<PathBuf>> {
+    let mut normalized = paths
+        .iter()
+        .map(|path| safe_relative_path(&path.to_string_lossy(), limits.max_path_depth))
+        .collect::<ZiFileResult<Vec<_>>>()?;
+    normalized.sort_by_key(|path| path.components().count());
+    normalized.dedup();
+
+    let mut roots = Vec::with_capacity(normalized.len());
+    for path in normalized {
+        if !roots.iter().any(|root: &PathBuf| path.starts_with(root)) {
+            roots.push(path);
+        }
+    }
+    Ok(roots)
+}
+
+fn remove_update_path(contents: &Path, path: &Path, options: &UpdateOptions) -> ZiFileResult<()> {
+    options.cancellation.check()?;
+    let target = contents.join(path);
+    reject_symlink_components(&target)?;
+    let metadata = fs::symlink_metadata(&target).map_err(|error| {
+        if error.kind() == io::ErrorKind::NotFound {
+            ZiFileError::InvalidInput(format!(
+                "archive entry to remove was not found: {}",
+                path.display()
+            ))
+        } else {
+            ZiFileError::Io(error)
+        }
+    })?;
+    if metadata_is_link_like(&metadata) {
+        return Err(ZiFileError::LinkEntry(path.display().to_string()));
+    }
+    if metadata.is_dir() {
+        fs::remove_dir_all(&target)?;
+    } else if metadata.is_file() {
+        fs::remove_file(&target)?;
+    } else {
+        return Err(ZiFileError::UnsupportedEntry(path.display().to_string()));
+    }
+    options.cancellation.check()
 }
 
 fn top_level_sources(contents: &Path) -> ZiFileResult<Vec<PathBuf>> {
@@ -653,11 +719,6 @@ fn top_level_sources(contents: &Path) -> ZiFileResult<Vec<PathBuf>> {
         .map(|entry| entry.map(|entry| entry.path()).map_err(ZiFileError::Io))
         .collect::<ZiFileResult<Vec<_>>>()?;
     sources.sort();
-    if sources.is_empty() {
-        return Err(ZiFileError::InvalidInput(
-            "the archive and additions contain no entries".to_owned(),
-        ));
-    }
     Ok(sources)
 }
 

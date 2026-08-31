@@ -1308,6 +1308,7 @@ fn submit_archive_update(mut state: Signal<UiState>, additions: Vec<PathBuf>) {
             compression_level: format.clamp_compression_level(6),
             password,
             limits: SafetyLimits::default(),
+            remove_paths: Vec::new(),
         },
         OperationKind::Update,
         format!(

@@ -137,6 +137,7 @@ struct ZiFile {
     cancellation: Option<CancellationToken>,
     progress: Option<OperationProgress>,
     operations: OperationQueue<QueuedOperation>,
+    confirm_remove: bool,
     recent_archives: Vec<PathBuf>,
     dark: bool,
     locale: Locale,
@@ -175,6 +176,7 @@ impl Default for ZiFile {
             cancellation: None,
             progress: None,
             operations: OperationQueue::default(),
+            confirm_remove: false,
             recent_archives: settings.recent_archives,
             dark: settings.dark,
             locale: settings.locale,
@@ -223,6 +225,9 @@ enum Message {
     AddToArchiveDialogFinished(Option<Vec<PathBuf>>),
     AddFolderToArchive,
     AddFolderToArchiveDialogFinished(Option<PathBuf>),
+    RequestRemoveSelected,
+    ConfirmRemoveSelected,
+    CancelRemoveSelected,
     UpdateFinished(u64, Result<OperationSummary, String>),
     AddFiles,
     AddFilesDialogFinished(Option<Vec<PathBuf>>),
@@ -555,6 +560,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
         }
         Message::ToggleEntry(path, selected) => {
+            state.confirm_remove = false;
             if selected {
                 state.selected.insert(path);
             } else {
@@ -562,6 +568,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
         }
         Message::ToggleDirectory(directory, selected) => {
+            state.confirm_remove = false;
             if let Some(archive) = &state.archive {
                 let descendants = descendant_file_paths(archive, &directory);
                 if selected {
@@ -574,6 +581,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
         }
         Message::SelectAll(selected) => {
+            state.confirm_remove = false;
             state.selected.clear();
             if selected && let Some(archive) = &state.archive {
                 state.selected.extend(
@@ -595,6 +603,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             set_status(state, status);
         }
         Message::InvertSelection => {
+            state.confirm_remove = false;
             if let Some(archive) = &state.archive {
                 let selected = invert_archive_file_selection(archive, &mut state.selected);
                 set_status(
@@ -769,7 +778,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::AddToArchiveDialogFinished(paths) => {
             state.dialog_open = false;
             if let Some(paths) = paths {
-                return submit_archive_update(state, paths);
+                return submit_archive_update(state, paths, Vec::new());
             }
         }
         Message::AddFolderToArchive => {
@@ -778,8 +787,42 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::AddFolderToArchiveDialogFinished(path) => {
             state.dialog_open = false;
             if let Some(path) = path {
-                return submit_archive_update(state, vec![path]);
+                return submit_archive_update(state, vec![path], Vec::new());
             }
+        }
+        Message::RequestRemoveSelected => {
+            if state.busy || state.selected.is_empty() {
+                return Task::none();
+            }
+            let can_update = state
+                .archive
+                .as_ref()
+                .is_some_and(|archive| archive.format.supports_update());
+            if !can_update {
+                set_error(
+                    state,
+                    choose(
+                        state.locale,
+                        "This archive format cannot be updated",
+                        "此压缩格式不支持更新",
+                    ),
+                );
+                return Task::none();
+            }
+            state.confirm_remove = true;
+            set_status(state, state.locale.text(Text::RemoveSelectedPrompt));
+        }
+        Message::CancelRemoveSelected => {
+            state.confirm_remove = false;
+            set_status(state, state.locale.text(Text::Ready));
+        }
+        Message::ConfirmRemoveSelected => {
+            if state.busy || state.selected.is_empty() {
+                return Task::none();
+            }
+            let remove_paths = state.selected.iter().cloned().collect::<Vec<_>>();
+            state.confirm_remove = false;
+            return submit_archive_update(state, Vec::new(), remove_paths);
         }
         Message::UpdateFinished(id, result) => {
             if state.operations.active_id() != Some(id) {
@@ -811,6 +854,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 set_error(state, status);
             } else {
                 set_status(state, status);
+                state.selected.clear();
                 if let Some(path) = archive_path {
                     let _ = begin_load(state, path);
                 }
@@ -1342,11 +1386,15 @@ fn update_folder_dialog_task(state: &mut ZiFile) -> Task<Message> {
     )
 }
 
-fn submit_archive_update(state: &mut ZiFile, additions: Vec<PathBuf>) -> Task<Message> {
+fn submit_archive_update(
+    state: &mut ZiFile,
+    additions: Vec<PathBuf>,
+    remove_paths: Vec<PathBuf>,
+) -> Task<Message> {
     let Some(archive) = state.archive.as_ref() else {
         return Task::none();
     };
-    if additions.is_empty() {
+    if additions.is_empty() && remove_paths.is_empty() {
         return Task::none();
     }
     let format = archive.format;
@@ -1368,6 +1416,7 @@ fn submit_archive_update(state: &mut ZiFile, additions: Vec<PathBuf>) -> Task<Me
         compression_level: format.clamp_compression_level(6),
         password: non_empty(&state.password),
         limits: SafetyLimits::default(),
+        remove_paths,
     };
     submit_operation(
         state,
@@ -2085,6 +2134,28 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     .align_y(iced::Alignment::Center)
     .spacing(10);
 
+    let remove_control: Element<'_, Message> = if state.confirm_remove {
+        row![
+            text(state.locale.text(Text::RemoveSelectedPrompt)),
+            button(state.locale.text(Text::ConfirmRemoveSelected))
+                .style(button::danger)
+                .on_press(Message::ConfirmRemoveSelected),
+            button(state.locale.text(Text::Cancel))
+                .style(button::secondary)
+                .on_press(Message::CancelRemoveSelected),
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center)
+        .into()
+    } else {
+        button(state.locale.text(Text::RemoveSelected))
+            .style(button::danger)
+            .on_press_maybe(
+                (archive.format.supports_update() && !state.busy && !state.selected.is_empty())
+                    .then_some(Message::RequestRemoveSelected),
+            )
+            .into()
+    };
     let operation_controls = row![
         button(state.locale.text(Text::Reload)).on_press(Message::ReloadArchive),
         button(state.locale.text(Text::AddToArchive))
@@ -2098,6 +2169,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                 (archive.format.supports_update() && !state.busy)
                     .then_some(Message::AddFolderToArchive),
             ),
+        remove_control,
         column![
             text(state.locale.text(Text::ConflictPolicy)).size(13),
             pick_list(
