@@ -18,7 +18,7 @@ $expectedFileExtensions = @(
     'gz', 'tar.gz', 'tgz',
     'zst', 'tar.zst', 'tzst',
     'xz', 'tar.xz', 'txz', 'tar.lzma', 'lzma',
-    'bz', 'bz2', 'tar.bz2', 'tbz', 'tbz2',
+    'bz', 'bz2', 'tar.bz2', 'tbz', 'tbz2', 'tar.lz4', 'tlz4',
     'lz4', 'br'
 )
 $directory = [IO.Path]::GetFullPath($ManifestDirectory)
