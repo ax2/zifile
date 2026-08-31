@@ -53,7 +53,7 @@ use zifile_desktop::{
     is_openable_archive_path, open_official_link, reveal_in_file_manager,
 };
 
-const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
+const CREATE_FORMATS: [ArchiveFormat; 16] = ArchiveFormat::CREATABLE;
 const ARCHIVE_TABLE_MIN_WIDTH: f32 = 1_040.0;
 const ARCHIVE_SEARCH_ID: &str = "archive-search";
 

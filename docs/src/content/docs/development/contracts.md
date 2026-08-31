@@ -7,7 +7,7 @@ description: ZiFile 1.0 的 CLI、核心 Provider、IPC 与版本兼容边界。
 
 ## CLI 契约
 
-1.0 候选保留以下命令：`formats`、`detect`、`list`、`test`、`extract`、`create`、`update`、`rename`。创建格式值为 `zip`、`seven-zip`、`tar`、`tar-gzip`、`tar-zstd`、`tar-xz`、`tar-lzma`、`tar-bzip2`、`gzip`、`zstandard`、`xz`、`lzma`、`bzip2`、`lz4` 和 `brotli`；冲突策略为 `overwrite`、`skip`、`rename` 和 `error`。
+1.0 候选保留以下命令：`formats`、`detect`、`list`、`test`、`extract`、`create`、`update`、`rename`。创建格式值为 `zip`、`seven-zip`、`tar`、`tar-gzip`、`tar-zstd`、`tar-xz`、`tar-lzma`、`tar-bzip2`、`tar-lz4`、`gzip`、`zstandard`、`xz`、`lzma`、`bzip2`、`lz4` 和 `brotli`；冲突策略为 `overwrite`、`skip`、`rename` 和 `error`。
 
 密码输入只允许显式 `--password-stdin`。CLI 不接受明文密码参数，也不保证交互式提示。
 

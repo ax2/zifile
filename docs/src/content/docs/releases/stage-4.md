@@ -11,6 +11,10 @@ description: ZiFile 1.0 稳定发布的准备、合同冻结与跨渠道门禁�
 
 Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 workflow、SBOM、来源证明、校验和和阶段档案已存在，但这只能证明发布链路已准备，不能证明稳定版本已满足所有门禁。
 
+## 当前 Unreleased 增量
+
+TAR + LZ4 已贯通核心、CLI、两套桌面格式菜单、更新路径、格式检测、往返/冒烟/性能测试和双语文档。该增量已在本地 Windows 验证，但尚未进入公开版本；下一次发布仍应生成 all-in-one MSIX 与 x64/ARM64 独立 EXE，并保留无 DLL/JSON/YAML/ZIP 的 Release assets 白名单。
+
 ## 已准备
 
 - `docs/src/content/docs/development/contracts.md` 定义 CLI 命令、格式值、冲突策略、密码输入、退出码、核心 Provider 和 Worker 协议边界。

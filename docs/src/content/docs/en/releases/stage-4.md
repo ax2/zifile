@@ -11,6 +11,10 @@ Freeze the public CLI/provider contracts, finish user and release documentation,
 
 Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest, the Release workflow, SBOMs, provenance, checksums, and stage records exist, but they prove release preparation rather than completion of every stable-release gate.
 
+## Current Unreleased increment
+
+TAR + LZ4 now runs through the core, CLI, both desktop format menus, update path, format detection, round-trip/smoke/performance tests, and bilingual documentation. The increment is verified locally on Windows but is not in a public version yet; the next release must still produce the all-in-one MSIX plus standalone x64/ARM64 EXEs and keep the Release asset allowlist free of DLL, JSON, YAML, and ZIP files.
+
 ## Prepared
 
 - `docs/src/content/docs/en/development/contracts.md` defines CLI commands, format values, conflict policies, password input, exit codes, core-provider boundaries, and Worker protocol compatibility.

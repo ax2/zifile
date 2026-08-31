@@ -26,6 +26,7 @@ try {
         $formats -notmatch '(?m)^Bzip2\tyes\tyes\tyes\tsingle-file\t1-9\tno\tAlpha$' -or
         $formats -notmatch '(?m)^TAR\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha$' -or
         $formats -notmatch '(?m)^TAR \+ LZMA\tyes\tyes\tyes\tfiles-or-directories\t0-9\tno\tAlpha$' -or
+        $formats -notmatch '(?m)^TAR \+ LZ4\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha$' -or
         $formats -notmatch '(?m)^LZ4\tyes\tyes\tyes\tsingle-file\tfixed\tno\tAlpha$' -or
         $formats -notmatch '(?m)^RAR\tyes\tyes\tno\tnone\tnone\tyes\tBeta$' -or
         $formats -notmatch '(?m)^CAB\tyes\tyes\tno\tnone\tnone\tno\tBeta$'
@@ -79,6 +80,17 @@ try {
         throw 'CLI fixed-format creation without --level failed.'
     }
 
+    $fixedLz4Archive = Join-Path $smokeRoot 'fixed-level.tar.lz4'
+    $fixedLz4LevelError = (& $cliPath create $fixedLz4Archive `
+        (Join-Path $smokeRoot 'input\hello.txt') --format tar-lz4 --level 6 2>&1) -join "`n"
+    if (
+        $LASTEXITCODE -ne 1 -or
+        $fixedLz4LevelError -notmatch 'compression level is fixed for TAR \+ LZ4; omit --level instead of passing 6' -or
+        (Test-Path -LiteralPath $fixedLz4Archive)
+    ) {
+        throw "CLI TAR + LZ4 fixed compression-level rejection failed: $fixedLz4LevelError"
+    }
+
     function Invoke-CliRoundTrip {
         param(
             [Parameter(Mandatory)][string]$Format,
@@ -112,7 +124,8 @@ try {
     foreach ($case in @(
         @{ Format = 'tar-zstd'; ArchiveName = 'smoke.tar.zst'; Output = 'tar-zstd-output' },
         @{ Format = 'tar-xz'; ArchiveName = 'smoke.tar.xz'; Output = 'tar-xz-output' },
-        @{ Format = 'tar-bzip2'; ArchiveName = 'smoke.tar.bz2'; Output = 'tar-bzip2-output' }
+        @{ Format = 'tar-bzip2'; ArchiveName = 'smoke.tar.bz2'; Output = 'tar-bzip2-output' },
+        @{ Format = 'tar-lz4'; ArchiveName = 'smoke.tar.lz4'; Output = 'tar-lz4-output' }
     )) {
         Invoke-CliRoundTrip `
             -Format $case.Format `
@@ -192,6 +205,11 @@ try {
     $lzmaDetection = (cargo run --quiet -p zifile-cli -- detect $lzmaArchivePath) -join "`n"
     if ($LASTEXITCODE -ne 0 -or $lzmaDetection -notmatch 'TAR \+ LZMA') {
         throw 'CLI TAR + LZMA format detection smoke test failed.'
+    }
+    $lz4ArchivePath = Join-Path $smokeRoot 'smoke.tar.lz4'
+    $lz4Detection = (cargo run --quiet -p zifile-cli -- detect $lz4ArchivePath) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or $lz4Detection -notmatch 'TAR \+ LZ4') {
+        throw 'CLI TAR + LZ4 format detection smoke test failed.'
     }
 
     $listing = (cargo run --quiet -p zifile-cli -- list $archivePath) -join "`n"

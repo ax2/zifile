@@ -641,6 +641,7 @@ fn updating_seven_zip_and_tar_compositions_preserves_the_merge_contract() {
         ArchiveFormat::TarXz,
         ArchiveFormat::TarLzma,
         ArchiveFormat::TarBzip2,
+        ArchiveFormat::TarLz4,
     ];
     let temp = tempfile::tempdir().unwrap();
 
@@ -787,6 +788,7 @@ fn tar_family_round_trips() {
         ArchiveFormat::TarXz,
         ArchiveFormat::TarLzma,
         ArchiveFormat::TarBzip2,
+        ArchiveFormat::TarLz4,
     ] {
         assert_round_trip(format);
     }
@@ -1673,6 +1675,7 @@ fn tar_listing_honors_declared_expansion_limits_before_skipping_payload() {
         ArchiveFormat::TarXz,
         ArchiveFormat::TarLzma,
         ArchiveFormat::TarBzip2,
+        ArchiveFormat::TarLz4,
     ];
     for format in formats {
         let temp = tempfile::tempdir().unwrap();
@@ -1746,6 +1749,7 @@ fn renamed_tar_compositions_are_detected_from_a_bounded_decoded_header() {
         ArchiveFormat::TarZstd,
         ArchiveFormat::TarXz,
         ArchiveFormat::TarBzip2,
+        ArchiveFormat::TarLz4,
     ] {
         let original = temp
             .path()

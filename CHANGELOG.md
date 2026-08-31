@@ -8,6 +8,8 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Add TAR + LZ4 composition creation, listing, integrity testing, extraction,
+  update support, CLI selection, and shared desktop format-menu coverage.
 - Add batch rename controls to both desktop archive views. Select at least two
   regular files, then combine find/replace with optional prefix and suffix
   rules; unchanged entries are skipped and the resulting mappings use the same

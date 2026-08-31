@@ -31,11 +31,11 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 | 性能测试 | 吞吐、压缩率、峰值内存、启动和大列表 |
 | 冒烟测试 | CLI、桌面启动、安装、升级、文件关联和卸载 |
 
-固定负向矩阵为全部 17 类受支持格式构造带正确签名或扩展提示、但截断/损坏的最小输入，并要求 List 与完整性校验都返回普通错误而不 panic。它补充而不替代持续 libFuzzer campaign、历史 7z 崩溃夹具和第三方真实语料。
+固定负向矩阵为全部 18 类受支持格式构造带正确签名或扩展提示、但截断/损坏的最小输入，并要求 List 与完整性校验都返回普通错误而不 panic。它补充而不替代持续 libFuzzer campaign、历史 7z 崩溃夹具和第三方真实语料。
 
 基础冒烟还会向真实 `zifile-worker.exe` 发送版本化 list 请求，要求最终完整进度快照先于 metadata、Unicode entry 和唯一结束事件；随后对 32 MiB 随机输入启动 7z 创建并发送取消控制消息，验证 Worker 在时限内退出、目标不存在且没有临时文件残留。桌面协议单测覆盖缺少终结事件和逐条条目重建；Windows 实机检查验证桌面可通过 Job Object Worker 打开并校验 7z。
 
-Foundation smoke 还使用实际 Windows CLI 对主要可创建格式执行完整往返：TAR+Zstandard、TAR+XZ、TAR+Bzip2、gzip、Zstandard、XZ、LZMA、Bzip2、LZ4 和 Brotli；每个场景都创建归档、执行完整性校验、解压，并断言 Unicode 文件或单流输出内容。ZIP、TAR+gzip、TAR+LZMA 和 AES 7z 由同一冒烟流程中的独立场景覆盖，因此这组矩阵不是只检查能力表或“文件存在”。
+Foundation smoke 还使用实际 Windows CLI 对主要可创建格式执行完整往返：TAR+Zstandard、TAR+XZ、TAR+Bzip2、TAR+LZ4、gzip、Zstandard、XZ、LZMA、Bzip2、LZ4 和 Brotli；每个场景都创建归档、执行完整性校验、解压，并断言 Unicode 文件或单流输出内容。ZIP、TAR+gzip、TAR+LZMA 和 AES 7z 由同一冒烟流程中的独立场景覆盖，因此这组矩阵不是只检查能力表或“文件存在”。
 
 核心往返测试还覆盖“更新现有归档”：ZIP、7z 和全部 TAR 组合都会验证同名普通文件替换、嵌套新文件加入、选中条目删除、删除最后一个文件以及更新后重新解包；gzip 等单文件流、RAR 和 CAB 则验证明确的只读错误。更新使用同目录临时工作区，失败或取消不得替换原归档；重复或包含关系的删除路径会先规范化，避免重复重建。
 
@@ -83,9 +83,9 @@ Windows 条目冲突键使用 Unicode 小写规则；Windows 专属 ZIP 回归�
 
 CI 另外运行 Windows `performance` job，实际执行 `format_detection` 与 `archive_throughput` Criterion 基准，固定 10 个样本并保存文本输出、Criterion 基线和 HTML 数据为 30 天 artifact。Criterion 的相对回归提示需要结合相同机器的历史基线复核；该 job 的成功首先证明基准确实执行且没有运行时失败。
 
-`archive_throughput` 同时测量 ZIP Deflate 与 TAR + LZMA-alone；后者使用独立的 1 MiB 样本分别测量创建和校验，确保新增组合格式也有可重复的吞吐观测。
+`archive_throughput` 同时测量 ZIP Deflate、TAR + LZMA-alone 与 TAR + LZ4；后两者使用独立的 1 MiB 样本分别测量创建和校验，确保组合格式也有可重复的吞吐观测。
 
-`tests/smoke/contract-policy.ps1` 锁定 CLI 的 6 个公开命令、15 个创建格式、17 行 `formats` 能力矩阵、双语公开契约文档，以及运行时错误码 1 和参数语法错误码 2；它在 Windows CI 的 Foundation smoke 后运行，最终 1.0 冻结仍需在发布提交上完成。
+`tests/smoke/contract-policy.ps1` 锁定 CLI 的 8 个公开命令、16 个创建格式、18 行 `formats` 能力矩阵、双语公开契约文档，以及运行时错误码 1 和参数语法错误码 2；它在 Windows CI 的 Foundation smoke 后运行，最终 1.0 冻结仍需在发布提交上完成。
 
 共享桌面测试还覆盖拖放分类：有效归档的内容签名优先于扩展名，改名归档仍进入浏览流程；对外层签名相同的改名 TAR+gzip、TAR+Zstandard、TAR+XZ 和 TAR+Bzip2，会在最多 1 MiB 压缩输入与 512 字节解码头的有界探测中识别内层 TAR；已知扩展在探测失败时保留兼容回退，普通文件和归档命名目录不会被误判为可打开归档。
 Iced 和 Dioxus 的入口回归同时锁定探测在异步/阻塞线程池路径上执行，防止文件头读取回到 UI 事件线程。
@@ -130,7 +130,7 @@ CAB 解码阶段负向回归保留合法元数据并翻转首个 CFDATA 压缩�
 
 修改时间测试先为源文件和目录设置确定时间，创建 ZIP、7z 与 TAR 家族归档，再要求列表元数据和解压后的文件/目录均保留预期值；独立创建的 RAR 5 与 CAB 夹具覆盖只读 Provider。协议测试会反序列化没有可选时间字段的旧版 `archive_entry` 事件，两套桌面程序还共用格式化测试，明确区分 UTC 与归档格式未保存时区的时间。
 
-每次 CI 会编译 libFuzzer 目标；每周定时工作流对路径策略、格式识别和归档解析器各运行 180 秒有界 fuzz，失败时保留崩溃产物 14 天。归档目标用带格式签名的变异输入覆盖 ZIP、7z、RAR、CAB、六个 TAR 格式和七种单流格式，限制输入为 256 KiB、RSS 为 2 GiB、单输入为 10 秒；目标内部还使用 256 条目、4 MiB 展开量、64 倍压缩比和 32 层路径的严格限制。Windows/MSVC 本地 `cargo-fuzz` 因 `sevenz-rust2` DLL 与 libFuzzer 入口点参数冲突无法链接，Rust 编译检查可通过；动态 campaign 以 Linux GNU 定时工作流为验收环境。损坏、截断、炸弹及更多 libarchive 变体仍需继续扩展。
+每次 CI 会编译 libFuzzer 目标；每周定时工作流对路径策略、格式识别和归档解析器各运行 180 秒有界 fuzz，失败时保留崩溃产物 14 天。归档目标用带格式签名的变异输入覆盖 ZIP、7z、RAR、CAB、七个 TAR 格式和七种单流格式，限制输入为 256 KiB、RSS 为 2 GiB、单输入为 10 秒；目标内部还使用 256 条目、4 MiB 展开量、64 倍压缩比和 32 层路径的严格限制。Windows/MSVC 本地 `cargo-fuzz` 因 `sevenz-rust2` DLL 与 libFuzzer 入口点参数冲突无法链接，Rust 编译检查可通过；动态 campaign 以 Linux GNU 定时工作流为验收环境。损坏、截断、炸弹及更多 libarchive 变体仍需继续扩展。
 
 首轮归档解析器 campaign 32733658052 在约 569,000 次执行后发现 292 字节输入可令 `sevenz-rust2` 0.20.2 的文件数量分配触发 `capacity overflow`。第二轮 campaign 32803785688 又发现 173 字节输入可触发 ASan 超大内存分配；这类 OOM 不能由 `catch_unwind` 可靠隔离。两份输入均已转为永久集成测试和 fuzz 启动重放夹具。项目因此升级到 Rust 1.93.0 与带有元数据计数边界修复的 `sevenz-rust2` 0.22.0；Provider 的 panic 边界继续作为纵深防御。升级后的定向 campaign 32813469578 强制重放两份样本，并在 181 秒内继续执行 498,937 次、峰值 RSS 370 MiB，未产生新崩溃产物。
 
