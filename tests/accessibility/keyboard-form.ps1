@@ -522,6 +522,15 @@ function Get-Value {
     return $pattern.Current.Value
 }
 
+function Get-ToggleState {
+    param([Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element)
+
+    $pattern = [System.Windows.Automation.TogglePattern]$Element.GetCurrentPattern(
+        [System.Windows.Automation.TogglePattern]::Pattern
+    )
+    return $pattern.Current.ToggleState
+}
+
 $executable = Resolve-RepoPath -Path $ExecutablePath
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "Accessible desktop executable not found: $executable"
@@ -715,6 +724,7 @@ try {
         -Deadline $deadline
     Send-AppKey -Keys '{ENTER}' -ProcessId $process.Id
     $archiveWorkflowCompleted = $false
+    $archivePasswordVisibility = $false
     $archiveConflictValue = $null
     $reloadActivation = $null
     if (-not $SkipArchiveWorkflow) {
@@ -791,12 +801,66 @@ try {
             throw 'The archive password field is not exposed as a protected password control.'
         }
         Send-AppKey -Keys 'archive-test' -ProcessId $process.Id
+        $showArchivePassword = Move-FocusForward `
+            -ProcessId $process.Id `
+            -Names @('Show password', '显示密码') `
+            -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+            -MaximumTabs 3
+        if ((Get-ToggleState -Element $showArchivePassword.Element) -ne
+            [System.Windows.Automation.ToggleState]::Off) {
+            throw 'Archive password visibility did not start unchecked.'
+        }
+        Send-AppKey -Keys ' ' -ProcessId $process.Id
+        Start-Sleep -Milliseconds 100
+        $window = Get-AppWindow -ProcessId $process.Id -NativeWindowHandle $script:ZiFileWindowHandle
+        $archivePassword = Wait-NamedControl `
+            -Root $window `
+            -Names @('Password (if encrypted)', '密码（如已加密）') `
+            -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        if ($archivePassword.Current.IsPassword) {
+            throw 'Archive password remained protected after Show password was checked.'
+        }
+        $showArchivePasswordElement = Wait-NamedControl `
+            -Root $window `
+            -Names @('Show password', '显示密码') `
+            -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        if ((Get-ToggleState -Element $showArchivePasswordElement) -ne
+            [System.Windows.Automation.ToggleState]::On) {
+            throw 'Archive Show password checkbox did not expose its checked state.'
+        }
+        $archivePassword.SetFocus()
+        $null = Wait-Focus `
+            -ProcessId $process.Id `
+            -Names @('Password (if encrypted)', '密码（如已加密）') `
+            -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
         Send-AppKey -Keys '^a' -ProcessId $process.Id
         Send-AppKey -Keys '{BACKSPACE}' -ProcessId $process.Id
         Start-Sleep -Milliseconds 100
+        $window = Get-AppWindow -ProcessId $process.Id -NativeWindowHandle $script:ZiFileWindowHandle
+        $archivePassword = Wait-NamedControl `
+            -Root $window `
+            -Names @('Password (if encrypted)', '密码（如已加密）') `
+            -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
         if ((Get-Value -Element $archivePassword).Length -ne 0) {
             throw 'Archive password Ctrl+A and Backspace did not clear the field.'
         }
+        if (-not $archivePassword.Current.IsPassword) {
+            throw 'Clearing the archive password did not restore protected input semantics.'
+        }
+        $showArchivePasswordElement = Wait-NamedControl `
+            -Root $window `
+            -Names @('Show password', '显示密码') `
+            -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        if ((Get-ToggleState -Element $showArchivePasswordElement) -ne
+            [System.Windows.Automation.ToggleState]::Off) {
+            throw 'Clearing the archive password did not reset Show password.'
+        }
+        $archivePasswordVisibility = $true
         $archiveText = Get-DocumentText -Root $window
         if (-not ($archiveText.Contains('2 selected') -or
                 $archiveText.Contains('2/2 selected') -or
@@ -1095,11 +1159,55 @@ try {
         }
         throw "The password field did not accept keyboard input. Focused: $focusedDescription"
     }
+    $showCreatePassword = Move-FocusForward `
+        -ProcessId $process.Id `
+        -Names @('Show password', '显示密码') `
+        -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+        -MaximumTabs 3
+    if ((Get-ToggleState -Element $showCreatePassword.Element) -ne
+        [System.Windows.Automation.ToggleState]::Off) {
+        throw 'Create password visibility did not start unchecked.'
+    }
+    Send-AppKey -Keys ' ' -ProcessId $process.Id
+    Start-Sleep -Milliseconds 100
+    $window = Get-AppWindow -ProcessId $process.Id -NativeWindowHandle $script:ZiFileWindowHandle
+    $password = Wait-NamedControl `
+        -Root $window `
+        -Names @('No encryption', '不加密') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+    if ($password.Current.IsPassword) {
+        throw 'Create password remained protected after Show password was checked.'
+    }
+    $password.SetFocus()
+    $null = Wait-Focus `
+        -ProcessId $process.Id `
+        -Names @('No encryption', '不加密') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
     Send-AppKey -Keys '^a' -ProcessId $process.Id
     Send-AppKey -Keys '{BACKSPACE}' -ProcessId $process.Id
     Start-Sleep -Milliseconds 100
+    $window = Get-AppWindow -ProcessId $process.Id -NativeWindowHandle $script:ZiFileWindowHandle
+    $password = Wait-NamedControl `
+        -Root $window `
+        -Names @('No encryption', '不加密') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
     if ((Get-Value -Element $password).Length -ne 0) {
         throw 'Ctrl+A and Backspace did not clear the password field.'
+    }
+    if (-not $password.Current.IsPassword) {
+        throw 'Clearing the create password did not restore protected input semantics.'
+    }
+    $showCreatePasswordElement = Wait-NamedControl `
+        -Root $window `
+        -Names @('Show password', '显示密码') `
+        -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+    if ((Get-ToggleState -Element $showCreatePasswordElement) -ne
+        [System.Windows.Automation.ToggleState]::Off) {
+        throw 'Clearing the create password did not reset Show password.'
     }
 
     $null = Move-FocusBackward `
@@ -1162,6 +1270,7 @@ try {
             reload = $archiveWorkflowCompleted
             reload_activation = $reloadActivation
             password_ctrl_a_scoped = $archiveWorkflowCompleted
+            password_visibility_toggle = $archivePasswordVisibility
             search_ctrl_a_scoped = $archiveWorkflowCompleted
             search_seed = if ($archiveWorkflowCompleted) { 'keyboard beta plus Enter composition commit' } else { $null }
             conflict_policy = $archiveConflictValue
@@ -1174,6 +1283,7 @@ try {
             selected_format = $selectedFormat
             compression_level = '6 -> 7 -> 6'
             password_keyboard_entry_and_clear = $true
+            password_visibility_toggle = $true
             password_value_recorded = $false
             reverse_combo_slider_password = $true
             add_files_button_reached_by_keyboard = $true
