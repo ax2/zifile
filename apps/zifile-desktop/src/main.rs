@@ -3235,9 +3235,9 @@ mod tests {
             .split_once("let all_files = archive")
             .expect("normal archive view follows busy archive view")
             .0;
-        assert!(busy_view.contains(
-            ".on_press_maybe((!state.busy).then_some(Message::CloseArchive))"
-        ));
+        assert!(
+            busy_view.contains(".on_press_maybe((!state.busy).then_some(Message::CloseArchive))")
+        );
     }
 
     #[test]
