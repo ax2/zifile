@@ -30,7 +30,7 @@ Work runs in an isolated Worker. Pressing `Escape` or choosing **Cancel** reques
 
 ZIP, 7z, and TAR compositions accept multiple files and folders. gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli are single-file streams and require exactly one existing file; use the matching TAR composition for a directory. RAR and CAB are read-only and cannot be created.
 
-After opening a ZIP, 7z, or TAR-family archive, use `Add to archive` or `Add folder to archive` to update it in place. ZiFile extracts, merges, and rebuilds in a temporary workspace beside the original, replacing the original only after success; single-file streams, RAR, and CAB cannot be updated.
+After opening a ZIP, 7z, or TAR-family archive, use `Add to archive` or `Add folder to archive` to update it in place, or select entries and choose `Remove selected`. Updates and removals extract, merge or delete, and rebuild in a temporary workspace beside the original, replacing the original only after success; single-file streams, RAR, and CAB cannot be updated.
 
 ## Queue and settings
 
@@ -47,9 +47,10 @@ zifile test archive.7z
 zifile extract archive.zip output --conflict rename
 zifile create output.7z files --format seven-zip --level 9
 zifile update archive.zip new-files --level 6
+zifile update archive.zip --remove folder/old.txt --remove folder/cache
 ```
 
-The `COMPRESSION_LEVEL` column in `zifile formats` gives each format's inclusive range; `fixed` means the encoder has no adjustable level and `--level` must be omitted. Adjustable formats default to level 6 when the option is omitted; an out-of-range value is reported instead of continuing with a different level.
+The `COMPRESSION_LEVEL` column in `zifile formats` gives each format's inclusive range; `fixed` means the encoder has no adjustable level and `--level` must be omitted. Adjustable formats default to level 6 when the option is omitted; an out-of-range value is reported instead of continuing with a different level. `update` requires at least one source or `--remove`; `--remove` takes archive-relative paths, may be repeated, and removes descendants when a directory is selected.
 
 Encrypted operations read a password from standard input. ZiFile does not accept a plaintext password argument that would enter process arguments or ordinary shell history:
 

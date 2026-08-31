@@ -17,7 +17,7 @@ description: ZiFile 1.0 的 CLI、核心 Provider、IPC 与版本兼容边界。
 | `1` | 文件、格式、密码、策略、后端或其他运行时错误 |
 | `2` | Clap 检测到命令行语法或参数错误 |
 
-运行时错误写入标准错误并使用 `error: ` 前缀。普通成功文案面向用户阅读，可在不改变命令语义的情况下改进；自动化不应解析这些自然语言句子。`zifile formats` 是稳定的制表符分隔能力表，包含 `CREATE_INPUT` 列（`files-or-directories`、`single-file` 或 `none`）和 `COMPRESSION_LEVEL` 列（闭区间、`fixed` 或 `none`）。可调格式未指定 `create --level` 或 `update --level` 时使用默认值 6；指定值会根据最终识别的格式校验，越界属于退出码 `1` 的运行时输入错误。`fixed` 格式必须省略这两个命令的 `--level`。CLI 不会静默钳制或忽略显式输入。`update <archive> <additions...>` 只重建 ZIP、7z 和 TAR 组合等多项目容器；它先在归档同目录的临时区完成解包与合并，成功后才替换原文件，单流、RAR 与 CAB 明确保持只读。
+运行时错误写入标准错误并使用 `error: ` 前缀。普通成功文案面向用户阅读，可在不改变命令语义的情况下改进；自动化不应解析这些自然语言句子。`zifile formats` 是稳定的制表符分隔能力表，包含 `CREATE_INPUT` 列（`files-or-directories`、`single-file` 或 `none`）和 `COMPRESSION_LEVEL` 列（闭区间、`fixed` 或 `none`）。可调格式未指定 `create --level` 或 `update --level` 时使用默认值 6；指定值会根据最终识别的格式校验，越界属于退出码 `1` 的运行时输入错误。`fixed` 格式必须省略这两个命令的 `--level`。CLI 不会静默钳制或忽略显式输入。`update <archive> [<additions>...] [--remove <archive-path>]` 至少需要一个新增来源或移除路径，只重建 ZIP、7z 和 TAR 组合等多项目容器；它先在归档同目录的临时区完成解包、合并或删除，成功后才替换原文件，单流、RAR 与 CAB 明确保持只读。
 
 ## 核心 Provider 契约
 
