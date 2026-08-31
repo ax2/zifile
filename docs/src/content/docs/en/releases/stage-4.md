@@ -17,7 +17,7 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 - `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, fifteen creation formats, seventeen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
 - `release/readiness.json` binds stable tags to accessibility, queue, trusted-install, ARM64, screenshot, WACK, WinGet, Store, Partner Center, and signing evidence.
 - The Release workflow derives dual-architecture builds, audits, checksums, SBOMs, provenance, and GitHub Releases from the workspace version; ordinary public releases use unsigned artifacts, while formal signing can be enabled explicitly through workflow inputs.
-- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, and `v0.1.8` have been published as public GitHub Releases from matching tags.
+- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, `v0.1.8`, and `v0.1.9` have been published as public GitHub Releases from matching tags.
 
 ## Required to finish
 
@@ -27,7 +27,13 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 ## Release result
 
-Stable 1.0 has not been published; `v0.1.8` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+Stable 1.0 has not been published; `v0.1.9` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+
+## 2026-08-31 — 0.1.9 public release result
+
+- PR [#88](https://github.com/ax2/zifile/pull/88) merged as commit `5477766c1a8590576cab59326b1b2aeeeb74cc51`; annotated tag `v0.1.9` points to the release commit.
+- [Release workflow 33391659106](https://github.com/ax2/zifile/actions/runs/33391659106) successfully completed SBOM, x64/ARM64 builds, the all-in-one MSIX bundle, and publication.
+- The [v0.1.9 Release](https://github.com/ax2/zifile/releases/tag/v0.1.9) exposes exactly `ZiFile-0.1.9.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, or ZIP is public.
 
 ## 2026-08-29 public release result
 

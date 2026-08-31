@@ -17,7 +17,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、15 个创建格式、17 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7` 和 `v0.1.8` 均通过匹配 tag 自动生成公开 GitHub Release。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7`、`v0.1.8` 和 `v0.1.9` 均通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -27,7 +27,13 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.8` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.9` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+
+## 2026-08-31 v0.1.9 正式公开版本结果
+
+- PR [#88](https://github.com/ax2/zifile/pull/88) 合并提交为 `5477766c1a8590576cab59326b1b2aeeeb74cc51`；注释 tag `v0.1.9` 指向该发布提交。
+- [Release workflow 33391659106](https://github.com/ax2/zifile/actions/runs/33391659106) 成功完成 SBOM、x64/ARM64 构建、all-in-one MSIX bundle 和公开发布。
+- [v0.1.9 Release](https://github.com/ax2/zifile/releases/tag/v0.1.9) 严格只公开 `ZiFile-0.1.9.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`；没有 DLL、JSON、YAML 或 ZIP。
 
 ## 2026-08-29 正式公开版本结果
 

@@ -1,25 +1,25 @@
 {
   "schema_version": 1,
-  "version": "0.1.8",
-  "tag": "v0.1.8",
-  "release_url": "https://github.com/ax2/zifile/releases/tag/v0.1.8",
-  "published_at": "2026-08-31T08:57:49Z",
+  "version": "0.1.9",
+  "tag": "v0.1.9",
+  "release_url": "https://github.com/ax2/zifile/releases/tag/v0.1.9",
+  "published_at": "2026-08-31T12:55:09Z",
   "assets": [
     {
-      "name": "ZiFile-0.1.8.0-windows.msixbundle",
-      "sha256": "5c3deefe2d5a71946c65b2b35de1e550f17b7e7aa3b038e7705795083f215dbb"
+      "name": "ZiFile-0.1.9.0-windows.msixbundle",
+      "sha256": "53877846b17f5af85f483ccd5df7f507184112bf1006d5492e9524a369e5c7ba"
     },
     {
       "name": "zifile-windows-x64.exe",
-      "sha256": "de74718b7accb0e4b10b07b289c74cf1630169fa3633bd34d077abc2f3688cfc"
+      "sha256": "ed1494102c4a76678a08527b36464f25d9a1368b0c0ba4c95b63706a7ac1eeeb"
     },
     {
       "name": "zifile-windows-arm64.exe",
-      "sha256": "ca7eb53d694080e8fdb642123ec6dfec670e5be7807ccc82d8fd485df2dada89"
+      "sha256": "518778b274da5800bfc9cceb5b7160872ade86fced5b504554332b04d2a2ab5c"
     },
     {
       "name": "SHA256SUMS.txt",
-      "sha256": "49985c1572f7b973c66b093023111a5a391f7949e65d50f0ae5dc248079b623c"
+      "sha256": "a9b9eca5ebf4043c3aa5b0050f50dbd6e9b9865af770717d141c43fd4ef606b7"
     }
   ]
 }
