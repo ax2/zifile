@@ -34,6 +34,8 @@ Goal: safely open, list, create, and extract common archives.
 - [x] TAR and gzip/zstd/xz/LZMA/bzip2 stream composition; standalone LZMA-alone creation is also available, while lz4/brotli remain single-stream formats.
 - [x] Signature-based format detection.
 - [x] Archive browser, selected extraction, destination and conflict policies.
+- [x] Add safe in-place updates for ZIP, 7z, and TAR-family multi-entry archives;
+  single streams, RAR, and CAB remain explicitly read-only.
 - [x] Background execution with cooperative cancellation.
 - [x] Determinate byte/entry progress for extraction and creation.
 - [ ] Queued multi-operation scheduling (bounded FIFO scheduler and both UI

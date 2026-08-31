@@ -97,7 +97,7 @@ pnpm --dir docs build
 | --- | --- |
 | Core model | Real create/list/test/extract operations with shared safety policy |
 | Desktop | Bilingual modern browser/creator, isolated archive worker and Windows taskbar progress |
-| CLI | `formats`, `detect`, `list`, `test`, `extract`, and `create` |
+| CLI | `formats`, `detect`, `list`, `test`, `extract`, `create`, and safe in-place `update` |
 | Archive providers | ZIP/ZIP64/AES, 7z/AES, read-only RAR 1.3 through RAR 7 with encryption, read-only Windows CAB, TAR compositions including TAR + LZMA, standalone LZMA, and common streams |
 | Packaging | Real x64/ARM64 build outputs combined into one all-in-one MSIX bundle for users |
 | Distribution | Tag workflow publishes one MSIX bundle, one standalone portable EXE per architecture and one checksum; SBOM, provenance, audits and WinGet candidates remain build evidence |

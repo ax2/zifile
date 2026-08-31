@@ -17,7 +17,7 @@ use zifile_core::{
     SafetyLimits,
 };
 
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u16 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Envelope<T> {
@@ -59,6 +59,13 @@ pub enum WorkerRequest {
         format: ArchiveFormat,
         compression_level: u8,
         password: Option<String>,
+    },
+    Update {
+        archive: PathBuf,
+        additions: Vec<PathBuf>,
+        compression_level: u8,
+        password: Option<String>,
+        limits: SafetyLimits,
     },
 }
 
@@ -108,7 +115,7 @@ mod tests {
     #[test]
     fn archive_entry_optional_metadata_is_backward_compatible() {
         let legacy = r#"{
-            "version": 1,
+            "version": 2,
             "payload": {
                 "event": "archive_entry",
                 "entry": {

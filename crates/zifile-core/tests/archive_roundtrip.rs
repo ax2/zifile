@@ -7,9 +7,10 @@ use std::time::UNIX_EPOCH;
 use tempfile::TempDir;
 use zifile_core::{
     ArchiveFormat, ArchiveTimestampOffset, CancellationToken, ConflictPolicy, CreateOptions,
-    ExtractOptions, ListOptions, OperationProgress, SafetyLimits, TestOptions, ZiFileError,
-    create_archive, detect_format, extract_archive, list_archive, list_archive_with_limits,
-    list_archive_with_options, test_archive, test_archive_with_limits, test_archive_with_options,
+    ExtractOptions, ListOptions, OperationProgress, SafetyLimits, TestOptions, UpdateOptions,
+    ZiFileError, create_archive, detect_format, extract_archive, list_archive,
+    list_archive_with_limits, list_archive_with_options, test_archive, test_archive_with_limits,
+    test_archive_with_options, update_archive,
 };
 
 fn fixture() -> (TempDir, PathBuf) {
@@ -318,6 +319,165 @@ fn assert_round_trip(format: ArchiveFormat) {
 #[test]
 fn zip_round_trip() {
     assert_round_trip(ArchiveFormat::Zip);
+}
+
+#[test]
+fn updating_zip_merges_a_matching_directory_and_replaces_colliding_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let initial = temp.path().join("initial/input");
+    fs::create_dir_all(&initial).unwrap();
+    fs::write(initial.join("hello.txt"), "old\n").unwrap();
+    let archive = temp.path().join("editable.zip");
+    create_archive(
+        std::slice::from_ref(&initial),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    let addition = temp.path().join("addition/input");
+    fs::create_dir_all(addition.join("nested")).unwrap();
+    fs::write(addition.join("hello.txt"), "updated\n").unwrap();
+    fs::write(addition.join("nested/new.txt"), "new\n").unwrap();
+    let progress = OperationProgress::default();
+    let summary = update_archive(
+        &archive,
+        std::slice::from_ref(&addition),
+        &UpdateOptions {
+            progress: progress.clone(),
+            ..UpdateOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(summary.files, 2);
+    assert_eq!(progress.snapshot().fraction(), 1.0);
+
+    let output = temp.path().join("updated-output");
+    extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
+    assert_eq!(
+        fs::read_to_string(output.join("input/hello.txt")).unwrap(),
+        "updated\n"
+    );
+    assert_eq!(
+        fs::read_to_string(output.join("input/nested/new.txt")).unwrap(),
+        "new\n"
+    );
+}
+
+#[test]
+fn updating_a_single_file_stream_is_explicitly_rejected() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("payload.txt");
+    fs::write(&source, "stream\n").unwrap();
+    let archive = temp.path().join("payload.gz");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Gzip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    let addition = temp.path().join("addition.txt");
+    fs::write(&addition, "addition\n").unwrap();
+
+    assert!(matches!(
+        update_archive(
+            &archive,
+            std::slice::from_ref(&addition),
+            &UpdateOptions::default(),
+        ),
+        Err(ZiFileError::UnsupportedOperation(ArchiveFormat::Gzip))
+    ));
+    assert!(!fs::read(&archive).unwrap().is_empty());
+}
+
+#[test]
+fn updating_seven_zip_and_tar_compositions_preserves_the_merge_contract() {
+    let formats = [
+        ArchiveFormat::SevenZip,
+        ArchiveFormat::Tar,
+        ArchiveFormat::TarGzip,
+        ArchiveFormat::TarZstd,
+        ArchiveFormat::TarXz,
+        ArchiveFormat::TarLzma,
+        ArchiveFormat::TarBzip2,
+    ];
+    let temp = tempfile::tempdir().unwrap();
+
+    for (index, format) in formats.into_iter().enumerate() {
+        let initial = temp.path().join(format!("initial-{index}/input"));
+        fs::create_dir_all(&initial).unwrap();
+        fs::write(initial.join("hello.txt"), "old\n").unwrap();
+        let archive = temp
+            .path()
+            .join(format!("editable-{index}.{}", format.canonical_extension()));
+        create_archive(
+            std::slice::from_ref(&initial),
+            &archive,
+            format,
+            &CreateOptions::default(),
+        )
+        .unwrap();
+
+        let addition = temp.path().join(format!("addition-{index}/input"));
+        fs::create_dir_all(addition.join("nested")).unwrap();
+        fs::write(addition.join("hello.txt"), "updated\n").unwrap();
+        fs::write(addition.join("nested/new.txt"), "new\n").unwrap();
+        update_archive(
+            &archive,
+            std::slice::from_ref(&addition),
+            &UpdateOptions::default(),
+        )
+        .unwrap();
+
+        let output = temp.path().join(format!("output-{index}"));
+        extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
+        assert_eq!(
+            fs::read_to_string(output.join("input/hello.txt")).unwrap(),
+            "updated\n",
+            "format {format:?} did not replace the colliding file"
+        );
+        assert_eq!(
+            fs::read_to_string(output.join("input/nested/new.txt")).unwrap(),
+            "new\n",
+            "format {format:?} did not add the nested file"
+        );
+    }
+}
+
+#[test]
+fn cancelled_update_leaves_the_original_archive_unchanged() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("input");
+    fs::create_dir_all(&source).unwrap();
+    fs::write(source.join("hello.txt"), "original\n").unwrap();
+    let archive = temp.path().join("editable.zip");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    let original = fs::read(&archive).unwrap();
+
+    let addition = temp.path().join("addition.txt");
+    fs::write(&addition, "new\n").unwrap();
+    let cancellation = CancellationToken::default();
+    cancellation.cancel();
+    assert!(matches!(
+        update_archive(
+            &archive,
+            std::slice::from_ref(&addition),
+            &UpdateOptions {
+                cancellation,
+                ..UpdateOptions::default()
+            },
+        ),
+        Err(ZiFileError::Cancelled)
+    ));
+    assert_eq!(fs::read(&archive).unwrap(), original);
 }
 
 #[test]

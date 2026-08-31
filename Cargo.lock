@@ -8486,6 +8486,7 @@ dependencies = [
  "thiserror 2.0.20",
  "time",
  "walkdir",
+ "windows-sys 0.61.2",
  "xz2",
  "zip",
  "zstd",

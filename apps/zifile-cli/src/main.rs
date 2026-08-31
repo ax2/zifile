@@ -16,8 +16,9 @@ use std::{
 
 use clap::{Parser, Subcommand, ValueEnum};
 use zifile_core::{
-    ArchiveFormat, ConflictPolicy, CreateInputKind, CreateOptions, ExtractOptions, create_archive,
-    detect_format, detect_format_from_path, extract_archive, list_archive, test_archive,
+    ArchiveFormat, ConflictPolicy, CreateInputKind, CreateOptions, ExtractOptions, UpdateOptions,
+    create_archive, detect_format, detect_format_from_path, extract_archive, list_archive,
+    test_archive, update_archive,
 };
 
 const RUNTIME_ERROR_EXIT_CODE: i32 = 1;
@@ -71,6 +72,18 @@ enum Command {
         #[arg(long, value_enum)]
         format: Option<FormatArg>,
         /// Compression level; defaults to 6 for adjustable formats (see `zifile formats`).
+        #[arg(long, value_parser = clap::value_parser!(u8).range(0..=22))]
+        level: Option<u8>,
+        /// Read the archive password from one line of standard input.
+        #[arg(long)]
+        password_stdin: bool,
+    },
+    /// Add files or directories to an existing multi-entry archive.
+    Update {
+        archive: PathBuf,
+        #[arg(required = true)]
+        additions: Vec<PathBuf>,
+        /// Compression level; defaults to 6 for adjustable formats.
         #[arg(long, value_parser = clap::value_parser!(u8).range(0..=22))]
         level: Option<u8>,
         /// Read the archive password from one line of standard input.
@@ -249,6 +262,36 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 summary.files, summary.directories, summary.bytes
             );
         }
+        Command::Update {
+            archive,
+            additions,
+            level,
+            password_stdin,
+        } => {
+            let password = read_password(password_stdin)?;
+            let format = detect_format(&archive)?;
+            if !format.supports_update() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("{format} archives cannot be updated"),
+                )
+                .into());
+            }
+            let compression_level = resolve_compression_level(format, level)?;
+            let summary = update_archive(
+                archive,
+                &additions,
+                &UpdateOptions {
+                    compression_level,
+                    password,
+                    ..UpdateOptions::default()
+                },
+            )?;
+            println!(
+                "Updated {format} with {} files and {} directories ({} total input bytes)",
+                summary.files, summary.directories, summary.bytes
+            );
+        }
     }
     Ok(())
 }
@@ -373,7 +416,9 @@ mod tests {
             .collect();
         assert_eq!(
             subcommands,
-            ["formats", "detect", "list", "test", "extract", "create"]
+            [
+                "formats", "detect", "list", "test", "extract", "create", "update"
+            ]
         );
         assert_eq!(command.get_version(), Some(env!("CARGO_PKG_VERSION")));
         assert_eq!(RUNTIME_ERROR_EXIT_CODE, 1);

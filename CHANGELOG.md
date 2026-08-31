@@ -6,7 +6,13 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
-No unreleased changes.
+### Added
+
+- Add safe in-place archive updates for ZIP, 7z, and TAR-family containers in
+  the core API, Worker, CLI, and both desktop UIs. Updates merge selected files
+  or folders in a sibling staging directory and replace the original only
+  after a complete rebuild succeeds; single-file streams, RAR, and CAB remain
+  read-only.
 
 ## [0.1.8] - 2026-08-31
 
