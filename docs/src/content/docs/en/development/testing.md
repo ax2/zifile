@@ -120,6 +120,8 @@ Create-page regressions also require the default Iced and accessible Dioxus UIs 
 
 Archive-list interaction regressions require only directory names to use actionable navigation buttons. Regular file names remain text, while each row's checkbox owns selection for both files and directories. This avoids presenting regular files as disabled pseudo-buttons or implying a name action that does not exist, while retaining a clear directory-navigation target.
 
+About-page link regressions require both UIs to expose actionable project, current-locale documentation, and current-locale privacy-policy destinations. The shared layer accepts only a compile-time `OfficialLink` enum: all five concrete destinations must use HTTPS and remain under the project GitHub or GitHub Pages paths, so arbitrary user strings never reach the system protocol launcher. Windows uses `ShellExecuteW` to invoke the default browser, and both success and failure update the application status region.
+
 Save-path regressions require both desktop variants to add the selected format's canonical suffix when the user omits an extension, while preserving an explicitly entered alternative suffix. Compound formats such as TAR + gzip must produce the complete `.tar.gz`, not only `.gz`.
 
 Sorting regressions cover folder-first order, ascending/descending direction, missing modified times last, first-page reset, and the 500-row cap. The Criterion suite also sorts all 100,000 entries by name descending before collecting one page; the initial Windows x64 measurement was 13.96–15.32 ms (6.53–7.17 million entries/s). Header helper tests require the visible arrow and Dioxus `aria-sort` value to agree.
