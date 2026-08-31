@@ -15,6 +15,14 @@ All notable changes to ZiFile are documented here. The format follows
 - Add the `rename` CLI command with repeated `FROM=TO` mappings and advance the
   Worker IPC contract to version 3 for the new request type.
 
+## [0.1.11] - 2026-09-01
+
+### Added
+
+- Add atomic archive-relative file and directory renaming for ZIP, 7z, and
+  TAR-family containers through the core API, Worker, CLI, and both desktop
+  UIs.
+
 ## [0.1.10] - 2026-08-31
 
 ### Added
