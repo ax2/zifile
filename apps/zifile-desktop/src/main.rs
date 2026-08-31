@@ -120,10 +120,12 @@ struct ZiFile {
     entry_sort: EntrySort,
     entry_sort_direction: SortDirection,
     password: String,
+    password_visible: bool,
     conflict: ConflictChoice,
     create_sources: Vec<PathBuf>,
     create_format: ArchiveFormat,
     create_password: String,
+    create_password_visible: bool,
     compression_level: u8,
     status: String,
     status_kind: StatusKind,
@@ -154,10 +156,12 @@ impl Default for ZiFile {
             entry_sort: EntrySort::default(),
             entry_sort_direction: SortDirection::default(),
             password: String::new(),
+            password_visible: false,
             conflict: ConflictChoice::Rename,
             create_sources: Vec::new(),
             create_format: ArchiveFormat::Zip,
             create_password: String::new(),
+            create_password_visible: false,
             compression_level: 6,
             status: settings.locale.text(Text::Ready).to_owned(),
             status_kind: StatusKind::Informational,
@@ -185,6 +189,7 @@ enum Message {
     ClearRecentArchives,
     ArchiveLoaded(u64, Result<ArchiveInfo, String>),
     PasswordChanged(String),
+    ArchivePasswordVisibilityChanged(bool),
     ReloadArchive,
     CloseArchive,
     RevealArchive,
@@ -216,6 +221,7 @@ enum Message {
     ClearSources,
     CreateFormatChanged(ArchiveFormat),
     CreatePasswordChanged(String),
+    CreatePasswordVisibilityChanged(bool),
     CompressionLevelChanged(u8),
     Create,
     CreateDialogFinished(Option<PathBuf>),
@@ -376,14 +382,14 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::OpenArchiveDialogFinished(path) => {
             state.dialog_open = false;
             if let Some(path) = path {
-                state.password.clear();
+                clear_archive_password(state);
                 state.automatic_extract_destination = None;
                 return begin_load(state, path);
             }
         }
         Message::OpenRecentArchive(path) => {
             if !state.busy {
-                state.password.clear();
+                clear_archive_password(state);
                 state.automatic_extract_destination = None;
                 return begin_load(state, path);
             }
@@ -480,6 +486,9 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             return continue_queue(state, id);
         }
         Message::PasswordChanged(password) => state.password = password,
+        Message::ArchivePasswordVisibilityChanged(visible) => {
+            state.password_visible = visible;
+        }
         Message::ReloadArchive => {
             if let Some(path) = state
                 .archive
@@ -805,6 +814,9 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             apply_create_format(state, format);
         }
         Message::CreatePasswordChanged(password) => state.create_password = password,
+        Message::CreatePasswordVisibilityChanged(visible) => {
+            state.create_password_visible = visible;
+        }
         Message::CompressionLevelChanged(level) => {
             state.compression_level = state.create_format.clamp_compression_level(level);
         }
@@ -927,7 +939,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::FileDropClassified(path, openable) => {
             if openable {
-                state.password.clear();
+                clear_archive_password(state);
                 state.automatic_extract_destination = None;
                 return begin_load(state, path);
             } else if path.exists() {
@@ -1048,7 +1060,7 @@ fn close_archive(state: &mut ZiFile) {
     state.entry_page = 0;
     state.entry_sort = EntrySort::default();
     state.entry_sort_direction = SortDirection::default();
-    state.password.clear();
+    clear_archive_password(state);
     state.page = Page::Home;
     set_status(state, state.locale.text(Text::ArchiveClosed));
 }
@@ -1174,11 +1186,21 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
     let kind = operation.kind;
     match state.operations.submit(operation) {
         Ok(Submission::Start(job)) => {
-            clear_submitted_create_password(&mut state.create_password, kind, true);
+            clear_submitted_create_password(
+                &mut state.create_password,
+                &mut state.create_password_visible,
+                kind,
+                true,
+            );
             start_operation(state, job)
         }
         Ok(Submission::Queued { position, .. }) => {
-            clear_submitted_create_password(&mut state.create_password, kind, true);
+            clear_submitted_create_password(
+                &mut state.create_password,
+                &mut state.create_password_visible,
+                kind,
+                true,
+            );
             set_status(
                 state,
                 match state.locale {
@@ -1191,7 +1213,12 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
             Task::none()
         }
         Err(error) => {
-            clear_submitted_create_password(&mut state.create_password, kind, false);
+            clear_submitted_create_password(
+                &mut state.create_password,
+                &mut state.create_password_visible,
+                kind,
+                false,
+            );
             set_error(
                 state,
                 match state.locale {
@@ -1204,10 +1231,21 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
     }
 }
 
-fn clear_submitted_create_password(password: &mut String, kind: OperationKind, accepted: bool) {
+fn clear_submitted_create_password(
+    password: &mut String,
+    visible: &mut bool,
+    kind: OperationKind,
+    accepted: bool,
+) {
     if accepted && kind == OperationKind::Create {
         password.clear();
+        *visible = false;
     }
+}
+
+fn clear_archive_password(state: &mut ZiFile) {
+    state.password.clear();
+    state.password_visible = false;
 }
 
 fn start_operation(state: &mut ZiFile, job: Job<QueuedOperation>) -> Task<Message> {
@@ -1638,9 +1676,12 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         let retry_controls: Element<'_, Message> = if requires_password {
             column![
                 text_input(state.locale.text(Text::PasswordEncrypted), &state.password)
-                    .secure(true)
+                    .secure(!state.password_visible)
                     .on_input(Message::PasswordChanged)
                     .width(280),
+                checkbox(state.password_visible)
+                    .label(state.locale.text(Text::ShowPassword))
+                    .on_toggle(Message::ArchivePasswordVisibilityChanged),
                 button(state.locale.text(Text::UnlockArchive))
                     .style(button::primary)
                     .on_press_maybe(
@@ -1780,10 +1821,16 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             .style(button::secondary)
             .on_press(Message::InvertSelection),
         space().width(Fill),
-        text_input(state.locale.text(Text::PasswordEncrypted), &state.password)
-            .secure(true)
-            .on_input(Message::PasswordChanged)
-            .width(220),
+        column![
+            text_input(state.locale.text(Text::PasswordEncrypted), &state.password)
+                .secure(!state.password_visible)
+                .on_input(Message::PasswordChanged)
+                .width(220),
+            checkbox(state.password_visible)
+                .label(state.locale.text(Text::ShowPassword))
+                .on_toggle(Message::ArchivePasswordVisibilityChanged),
+        ]
+        .spacing(6),
     ]
     .align_y(iced::Alignment::Center)
     .spacing(10);
@@ -2139,8 +2186,14 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
                         state.locale.text(Text::NoEncryption),
                         &state.create_password
                     )
-                    .secure(true)
+                    .secure(!state.create_password_visible)
                     .on_input_maybe(encryption_supported.then_some(Message::CreatePasswordChanged)),
+                    checkbox(state.create_password_visible)
+                        .label(state.locale.text(Text::ShowPassword))
+                        .on_toggle_maybe(
+                            encryption_supported
+                                .then_some(Message::CreatePasswordVisibilityChanged),
+                        ),
                 ]
                 .spacing(6),
             ]
@@ -2174,6 +2227,7 @@ fn apply_create_format(state: &mut ZiFile, format: ArchiveFormat) {
     state.compression_level = format.clamp_compression_level(state.compression_level);
     if !format.capabilities().encryption {
         state.create_password.clear();
+        state.create_password_visible = false;
     }
     set_status(state, create_input_help(state.locale, format));
 }
@@ -2526,15 +2580,48 @@ mod tests {
     #[test]
     fn accepted_create_submission_releases_the_form_password() {
         let mut password = "not-for-retention".to_owned();
-        clear_submitted_create_password(&mut password, OperationKind::Create, true);
+        let mut visible = true;
+        clear_submitted_create_password(&mut password, &mut visible, OperationKind::Create, true);
         assert!(password.is_empty());
+        assert!(!visible);
 
         password.push_str("retry-secret");
-        clear_submitted_create_password(&mut password, OperationKind::Create, false);
+        visible = true;
+        clear_submitted_create_password(&mut password, &mut visible, OperationKind::Create, false);
         assert_eq!(password, "retry-secret");
+        assert!(visible);
 
-        clear_submitted_create_password(&mut password, OperationKind::Extract, true);
+        clear_submitted_create_password(&mut password, &mut visible, OperationKind::Extract, true);
         assert_eq!(password, "retry-secret");
+        assert!(visible);
+    }
+
+    #[test]
+    fn clearing_an_archive_password_restores_masking() {
+        let mut state = ZiFile {
+            password: "not-for-retention".to_owned(),
+            password_visible: true,
+            ..ZiFile::default()
+        };
+
+        clear_archive_password(&mut state);
+
+        assert!(state.password.is_empty());
+        assert!(!state.password_visible);
+    }
+
+    #[test]
+    fn password_visibility_controls_cover_archive_and_create_fields() {
+        let state = ZiFile::default();
+        assert!(!state.password_visible);
+        assert!(!state.create_password_visible);
+
+        let source = include_str!("main.rs");
+        assert!(source.contains(".secure(!state.password_visible)"));
+        assert!(source.contains(".secure(!state.create_password_visible)"));
+        assert!(source.contains("Message::ArchivePasswordVisibilityChanged"));
+        assert!(source.contains("Message::CreatePasswordVisibilityChanged"));
+        assert!(source.contains("Text::ShowPassword"));
     }
 
     #[test]

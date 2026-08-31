@@ -110,6 +110,8 @@ Archive-browser regressions also require both UIs to show a bilingual empty stat
 
 Open-failure regressions distinguish password/encryption diagnostics from corruption, unknown formats, and ordinary I/O errors: only a likely password case presents password input and an Unlock retry. Both UIs also reject stale Worker completions before applying results, so an old task cannot overwrite the current archive or busy state.
 
+Password-visibility regressions cover default masking, archive/create field wiring in both UIs, and restoring masking whenever a password is released. The accessible candidate additionally locks three unique field IDs, native checkbox labels, dynamic `password`/`text` types, and matching `aria-controls`. This source and unit evidence does not replace a real screen-reader or foreground visual pass.
+
 Create-page regressions also require the default Iced and accessible Dioxus UIs to use the same bilingual status announcements for adding, removing, and clearing sources. The status includes the change and remaining total, so a list update cannot silently lose feedback for the user or assistive technology.
 
 Save-path regressions require both desktop variants to add the selected format's canonical suffix when the user omits an extension, while preserving an explicitly entered alternative suffix. Compound formats such as TAR + gzip must produce the complete `.tar.gz`, not only `.gz`.
