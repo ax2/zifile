@@ -12,6 +12,12 @@ All notable changes to ZiFile are documented here. The format follows
   archives in both desktop UIs. Mismatches are shown inline, block the save
   dialog, and both transient values are released after an accepted request.
 
+### Changed
+
+- Render regular archive names as text while keeping directory names as explicit
+  navigation buttons, so the file table no longer presents non-actions as
+  disabled controls.
+
 ## [0.1.7] - 2026-08-31
 
 ### Added
