@@ -20,6 +20,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Changed
 
+- Keep visible bilingual labels above the default archive password and search
+  inputs, so their purpose remains clear after placeholder text disappears.
+
 - Give the extraction conflict-policy selector a visible bilingual label in both
   desktop UIs instead of relying on option names or an accessibility-only name.
 

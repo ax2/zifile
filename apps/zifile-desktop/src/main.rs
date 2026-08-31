@@ -1904,6 +1904,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             .on_press(Message::InvertSelection),
         space().width(Fill),
         column![
+            text(state.locale.text(Text::PasswordEncrypted)).size(13),
             text_input(state.locale.text(Text::PasswordEncrypted), &state.password)
                 .secure(!state.password_visible)
                 .on_input(Message::PasswordChanged)
@@ -1957,19 +1958,23 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
         filtered_count,
         archive.entries.len(),
     );
-    let search_controls = row![
-        text_input(state.locale.text(Text::Search), &state.entry_filter)
-            .id(ARCHIVE_SEARCH_ID)
-            .on_input(Message::EntryFilterChanged)
-            .width(Fill),
-        button(state.locale.text(Text::ClearSearch))
-            .style(button::secondary)
-            .on_press_maybe(
-                (!state.entry_filter.is_empty()).then_some(Message::ClearArchiveFilter),
-            ),
+    let search_controls = column![
+        text(state.locale.text(Text::Search)).size(13),
+        row![
+            text_input(state.locale.text(Text::Search), &state.entry_filter)
+                .id(ARCHIVE_SEARCH_ID)
+                .on_input(Message::EntryFilterChanged)
+                .width(Fill),
+            button(state.locale.text(Text::ClearSearch))
+                .style(button::secondary)
+                .on_press_maybe(
+                    (!state.entry_filter.is_empty()).then_some(Message::ClearArchiveFilter),
+                ),
+        ]
+        .spacing(10)
+        .align_y(iced::Alignment::Center),
     ]
-    .spacing(10)
-    .align_y(iced::Alignment::Center);
+    .spacing(4);
     let pagination_controls = row![
         text(filter_summary).size(12),
         space().width(Fill),
@@ -3201,6 +3206,22 @@ mod tests {
         assert!(source.contains("Text::ExtractAll"));
         assert!(source.contains(".style(button::primary)"));
         assert!(source.contains("Message::ExtractAll"));
+    }
+
+    #[test]
+    fn archive_password_and_search_keep_visible_labels_after_input() {
+        let source = include_str!("main.rs");
+        let archive_view = source
+            .split_once("fn archive_view(state: &ZiFile)")
+            .expect("archive view")
+            .1
+            .split_once("fn create_view(state: &ZiFile)")
+            .expect("create view follows archive view")
+            .0;
+        assert!(archive_view.contains("text(state.locale.text(Text::PasswordEncrypted)).size(13)"));
+        assert!(archive_view.contains("text(state.locale.text(Text::Search)).size(13)"));
+        assert!(archive_view.contains(".id(ARCHIVE_SEARCH_ID)"));
+        assert!(archive_view.contains("Message::ClearArchiveFilter"));
     }
 
     #[test]
