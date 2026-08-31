@@ -16,7 +16,7 @@ Detection uses both signatures and extensions. If an extension disagrees with th
 
 ## Extract safely
 
-Select all or individual entries, choose a destination and conflict policy, then start extraction. ZiFile rejects traversal, absolute paths, Windows device names, case collisions, unsafe links, extraction destinations containing symbolic links, junctions, or reparse points, and content beyond entry-count, expanded-size, or compression-ratio limits. Treat such a rejection as a reason to verify the archive's source, not as a prompt to disable safety boundaries.
+Select all or individual entries, choose Rename, Overwrite, Skip, or Error under the visibly labelled **Conflict policy** field, choose a destination, then start extraction. ZiFile rejects traversal, absolute paths, Windows device names, case collisions, unsafe links, extraction destinations containing symbolic links, junctions, or reparse points, and content beyond entry-count, expanded-size, or compression-ratio limits. Treat such a rejection as a reason to verify the archive's source, not as a prompt to disable safety boundaries.
 
 Work runs in an isolated Worker. Pressing `Escape` or choosing **Cancel** requests cooperative cancellation and terminates the Worker when necessary. Files already completed are not presented as if extraction had transactional rollback.
 

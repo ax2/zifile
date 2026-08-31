@@ -699,8 +699,10 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 button { "aria-describedby": "archive-selection-summary", onclick: move |_| select_all(state, true), {locale.text(Text::SelectAll)} }
                 button { disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| select_all(state, false), {locale.text(Text::SelectNone)} }
                 button { "aria-describedby": "archive-selection-summary", "aria-keyshortcuts": ARIA_SHORTCUT_INVERT_SELECTION, onclick: move |_| invert_selection(state), {locale.text(Text::InvertSelection)} }
-                select { value: conflict_value(view.conflict), "aria-label": choose(locale, "Conflict policy", "文件冲突策略"), onchange: move |event| state.write().conflict = parse_conflict(&event.value()),
-                    for policy in [ConflictPolicy::Rename, ConflictPolicy::Overwrite, ConflictPolicy::Skip, ConflictPolicy::Error] { option { value: conflict_value(policy), {conflict_label(locale, policy)} } } }
+                label { span { {locale.text(Text::ConflictPolicy)} }
+                    select { value: conflict_value(view.conflict), onchange: move |event| state.write().conflict = parse_conflict(&event.value()),
+                        for policy in [ConflictPolicy::Rename, ConflictPolicy::Overwrite, ConflictPolicy::Skip, ConflictPolicy::Error] { option { value: conflict_value(policy), {conflict_label(locale, policy)} } } }
+                }
                 button { disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
                 button { "aria-describedby": "archive-selection-summary", onclick: move |_| extract_to_named_folder(state), {locale.text(Text::ExtractToNamedFolder)} }
                 button { class: "primary", "aria-describedby": "archive-selection-summary", onclick: move |_| extract_all(state), {locale.text(Text::ExtractAll)} }
@@ -2633,6 +2635,7 @@ mod tests {
     #[test]
     fn archive_actions_expose_selected_and_all_extraction_scopes() {
         let source = include_str!("accessible_main.rs");
+        assert!(source.contains("label { span { {locale.text(Text::ConflictPolicy)} }"));
         assert!(source.contains("onclick: move |_| extract_selected(state)"));
         assert!(source.contains("onclick: move |_| extract_to_named_folder(state)"));
         assert!(source.contains("onclick: move |_| extract_all(state)"));
