@@ -48,8 +48,8 @@ use zifile_desktop::entry_view::{
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 use zifile_desktop::{
-    append_unique_paths as append_unique, ensure_archive_extension, invert_archive_file_selection,
-    is_openable_archive_path, reveal_in_file_manager,
+    append_unique_paths as append_unique, create_passwords_match, ensure_archive_extension,
+    invert_archive_file_selection, is_openable_archive_path, reveal_in_file_manager,
 };
 
 const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
@@ -125,6 +125,7 @@ struct ZiFile {
     create_sources: Vec<PathBuf>,
     create_format: ArchiveFormat,
     create_password: String,
+    create_password_confirmation: String,
     create_password_visible: bool,
     compression_level: u8,
     status: String,
@@ -161,6 +162,7 @@ impl Default for ZiFile {
             create_sources: Vec::new(),
             create_format: ArchiveFormat::Zip,
             create_password: String::new(),
+            create_password_confirmation: String::new(),
             create_password_visible: false,
             compression_level: 6,
             status: settings.locale.text(Text::Ready).to_owned(),
@@ -221,6 +223,7 @@ enum Message {
     ClearSources,
     CreateFormatChanged(ArchiveFormat),
     CreatePasswordChanged(String),
+    CreatePasswordConfirmationChanged(String),
     CreatePasswordVisibilityChanged(bool),
     CompressionLevelChanged(u8),
     Create,
@@ -824,6 +827,9 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 state.create_password_visible = false;
             }
         }
+        Message::CreatePasswordConfirmationChanged(password) => {
+            state.create_password_confirmation = password;
+        }
         Message::CreatePasswordVisibilityChanged(visible) => {
             state.create_password_visible = visible;
         }
@@ -836,6 +842,11 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
             if let Some(issue) = create_source_issue(state.create_format, &state.create_sources) {
                 set_error(state, create_source_issue_text(state.locale, issue));
+                return Task::none();
+            }
+            if !create_passwords_match(&state.create_password, &state.create_password_confirmation)
+            {
+                set_error(state, state.locale.text(Text::PasswordMismatch));
                 return Task::none();
             }
             let extension = state.create_format.canonical_extension();
@@ -1198,6 +1209,7 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
         Ok(Submission::Start(job)) => {
             clear_submitted_create_password(
                 &mut state.create_password,
+                &mut state.create_password_confirmation,
                 &mut state.create_password_visible,
                 kind,
                 true,
@@ -1207,6 +1219,7 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
         Ok(Submission::Queued { position, .. }) => {
             clear_submitted_create_password(
                 &mut state.create_password,
+                &mut state.create_password_confirmation,
                 &mut state.create_password_visible,
                 kind,
                 true,
@@ -1225,6 +1238,7 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
         Err(error) => {
             clear_submitted_create_password(
                 &mut state.create_password,
+                &mut state.create_password_confirmation,
                 &mut state.create_password_visible,
                 kind,
                 false,
@@ -1243,12 +1257,14 @@ fn submit_operation(state: &mut ZiFile, operation: QueuedOperation) -> Task<Mess
 
 fn clear_submitted_create_password(
     password: &mut String,
+    confirmation: &mut String,
     visible: &mut bool,
     kind: OperationKind,
     accepted: bool,
 ) {
     if accepted && kind == OperationKind::Create {
         password.clear();
+        confirmation.clear();
         *visible = false;
     }
 }
@@ -2110,6 +2126,8 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
     }
     let encryption_supported = state.create_format.capabilities().encryption;
     let source_issue = create_source_issue(state.create_format, &state.create_sources);
+    let password_mismatch =
+        !create_passwords_match(&state.create_password, &state.create_password_confirmation);
     let single_file_format =
         state.create_format.create_input() == Some(CreateInputKind::SingleFile);
     let validation_notice: Element<'_, Message> = match source_issue {
@@ -2201,6 +2219,20 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
                     )
                     .secure(!state.create_password_visible)
                     .on_input_maybe(encryption_supported.then_some(Message::CreatePasswordChanged)),
+                    text(state.locale.text(Text::ConfirmPassword)).size(13),
+                    text_input(
+                        state.locale.text(Text::ConfirmPassword),
+                        &state.create_password_confirmation
+                    )
+                    .secure(!state.create_password_visible)
+                    .on_input_maybe(
+                        encryption_supported.then_some(Message::CreatePasswordConfirmationChanged),
+                    ),
+                    if password_mismatch {
+                        text(state.locale.text(Text::PasswordMismatch))
+                    } else {
+                        text("")
+                    },
                     checkbox(state.create_password_visible)
                         .label(state.locale.text(Text::ShowPassword))
                         .on_toggle_maybe(
@@ -2219,7 +2251,9 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
             space().width(Fill),
             button(state.locale.text(Text::CreateAction))
                 .style(button::primary)
-                .on_press_maybe(source_issue.is_none().then_some(Message::Create)),
+                .on_press_maybe(
+                    (source_issue.is_none() && !password_mismatch).then_some(Message::Create),
+                ),
         ],
     ]
     .spacing(14)
@@ -2240,6 +2274,7 @@ fn apply_create_format(state: &mut ZiFile, format: ArchiveFormat) {
     state.compression_level = format.clamp_compression_level(state.compression_level);
     if !format.capabilities().encryption {
         state.create_password.clear();
+        state.create_password_confirmation.clear();
         state.create_password_visible = false;
     }
     set_status(state, create_input_help(state.locale, format));
@@ -2593,19 +2628,42 @@ mod tests {
     #[test]
     fn accepted_create_submission_releases_the_form_password() {
         let mut password = "not-for-retention".to_owned();
+        let mut confirmation = "not-for-retention".to_owned();
         let mut visible = true;
-        clear_submitted_create_password(&mut password, &mut visible, OperationKind::Create, true);
+        clear_submitted_create_password(
+            &mut password,
+            &mut confirmation,
+            &mut visible,
+            OperationKind::Create,
+            true,
+        );
         assert!(password.is_empty());
+        assert!(confirmation.is_empty());
         assert!(!visible);
 
         password.push_str("retry-secret");
+        confirmation.push_str("retry-secret");
         visible = true;
-        clear_submitted_create_password(&mut password, &mut visible, OperationKind::Create, false);
+        clear_submitted_create_password(
+            &mut password,
+            &mut confirmation,
+            &mut visible,
+            OperationKind::Create,
+            false,
+        );
         assert_eq!(password, "retry-secret");
+        assert_eq!(confirmation, "retry-secret");
         assert!(visible);
 
-        clear_submitted_create_password(&mut password, &mut visible, OperationKind::Extract, true);
+        clear_submitted_create_password(
+            &mut password,
+            &mut confirmation,
+            &mut visible,
+            OperationKind::Extract,
+            true,
+        );
         assert_eq!(password, "retry-secret");
+        assert_eq!(confirmation, "retry-secret");
         assert!(visible);
     }
 

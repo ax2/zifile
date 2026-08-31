@@ -87,6 +87,15 @@ pub fn ensure_archive_extension(path: PathBuf, format: ArchiveFormat) -> PathBuf
     path
 }
 
+/// Requires both create-form password fields to match exactly.
+///
+/// Two empty values deliberately match and mean that encryption is disabled.
+/// Keeping this rule shared prevents the default and accessible UIs from
+/// diverging at the point where an unrecoverable archive password is chosen.
+pub fn create_passwords_match(password: &str, confirmation: &str) -> bool {
+    password == confirmation
+}
+
 /// Opens the containing folder and selects an archive when the host supports
 /// a native file manager. The Windows implementation is the shipping path;
 /// the other branches keep the desktop crate buildable for development.
@@ -163,6 +172,15 @@ mod tests {
         let plain = temporary.path().join("notes.txt");
         std::fs::write(&plain, b"plain text").expect("plain file");
         assert!(!is_openable_archive_path(&plain));
+    }
+
+    #[test]
+    fn archive_creation_requires_an_exact_password_confirmation() {
+        assert!(create_passwords_match("", ""));
+        assert!(create_passwords_match("correct horse", "correct horse"));
+        assert!(!create_passwords_match("correct horse", "correct Horse"));
+        assert!(!create_passwords_match("secret", ""));
+        assert!(!create_passwords_match("", "secret"));
     }
 
     #[test]

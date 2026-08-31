@@ -46,8 +46,8 @@ use zifile_desktop::entry_view::{
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
 use zifile_desktop::{
-    append_unique_paths as append_unique, ensure_archive_extension, invert_archive_file_selection,
-    is_openable_archive_path, reveal_in_file_manager,
+    append_unique_paths as append_unique, create_passwords_match, ensure_archive_extension,
+    invert_archive_file_selection, is_openable_archive_path, reveal_in_file_manager,
 };
 
 const STYLES: &str = include_str!("accessible_ui.css");
@@ -162,6 +162,7 @@ struct UiState {
     create_sources: Vec<PathBuf>,
     create_format: ArchiveFormat,
     create_password: String,
+    create_password_confirmation: String,
     create_password_visible: bool,
     compression_level: u8,
     status: String,
@@ -199,6 +200,7 @@ impl Default for UiState {
             create_sources: Vec::new(),
             create_format: ArchiveFormat::Zip,
             create_password: String::new(),
+            create_password_confirmation: String::new(),
             create_password_visible: false,
             compression_level: 6,
             status: settings.locale.text(Text::Ready).to_owned(),
@@ -224,6 +226,7 @@ impl UiState {
 
     fn clear_create_password(&mut self) {
         self.create_password.clear();
+        self.create_password_confirmation.clear();
         self.create_password_visible = false;
     }
 
@@ -239,6 +242,10 @@ impl UiState {
         if self.create_password.is_empty() {
             self.create_password_visible = false;
         }
+    }
+
+    fn set_create_password_confirmation(&mut self, password: String) {
+        self.create_password_confirmation = password;
     }
 
     fn set_status(&mut self, status: String) {
@@ -844,6 +851,8 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
     let single_file_format = view.create_format.create_input() == Some(CreateInputKind::SingleFile);
     let input_help = create_input_help(locale, view.create_format);
     let compression_range = view.create_format.compression_level_range();
+    let password_mismatch =
+        !create_passwords_match(&view.create_password, &view.create_password_confirmation);
     rsx! { section { class: "create-page", "aria-labelledby": "create-title",
         div { class: "page-heading", div { h2 { id: "create-title", {locale.text(Text::CreateHeading)} } p { {locale.text(Text::CreateHelp)} } }
             div { class: "button-row", button { onclick: move |_| add_files(state), {locale.text(Text::AddFiles)} }
@@ -869,14 +878,18 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
                 label { r#for: "create-password", span { if encrypted { {locale.text(Text::PasswordOptional)} } else { {locale.text(Text::PasswordUnavailable)} } }
                     input { id: "create-password", r#type: if view.create_password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: !encrypted, oninput: move |event| state.write().set_create_password(event.value()) }
                 }
+                label { r#for: "create-password-confirmation", span { {locale.text(Text::ConfirmPassword)} }
+                    input { id: "create-password-confirmation", r#type: if view.create_password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", value: view.create_password_confirmation.clone(), disabled: !encrypted, "aria-invalid": password_mismatch, "aria-describedby": if password_mismatch { "create-password-mismatch" } else { "" }, oninput: move |event| state.write().set_create_password_confirmation(event.value()) }
+                }
+                if password_mismatch { p { id: "create-password-mismatch", class: "field-error", role: "alert", {locale.text(Text::PasswordMismatch)} } }
                 label { class: "password-toggle",
-                    input { r#type: "checkbox", checked: view.create_password_visible, disabled: !encrypted, "aria-controls": "create-password", onchange: move |event| state.write().create_password_visible = event.checked() }
+                    input { r#type: "checkbox", checked: view.create_password_visible, disabled: !encrypted, "aria-controls": "create-password create-password-confirmation", onchange: move |event| state.write().create_password_visible = event.checked() }
                     span { {locale.text(Text::ShowPassword)} }
                 }
             }
         }
         output { id: "create-format-help", class: "muted", role: "status", "aria-live": "off", {input_help} }
-        div { class: "create-actions", button { class: "primary", disabled: source_issue.is_some(), "aria-describedby": "create-source-summary create-format-help", onclick: move |_| create_archive(state), {locale.text(Text::CreateAction)} } }
+        div { class: "create-actions", button { class: "primary", disabled: source_issue.is_some() || password_mismatch, "aria-describedby": "create-source-summary create-format-help create-password-mismatch", onclick: move |_| create_archive(state), {locale.text(Text::CreateAction)} } }
     } }
 }
 
@@ -1308,6 +1321,12 @@ fn create_archive(mut state: Signal<UiState>) {
     let value = state.read();
     if let Some(issue) = create_source_issue(value.create_format, &value.create_sources) {
         let message = create_source_issue_text(value.locale, issue).to_owned();
+        drop(value);
+        state.write().set_error(message);
+        return;
+    }
+    if !create_passwords_match(&value.create_password, &value.create_password_confirmation) {
+        let message = value.locale.text(Text::PasswordMismatch).to_owned();
         drop(value);
         state.write().set_error(message);
         return;
@@ -2308,35 +2327,41 @@ mod tests {
     fn accepted_create_submission_releases_the_form_password() {
         let mut state = UiState {
             create_password: "not-for-retention".to_owned(),
+            create_password_confirmation: "not-for-retention".to_owned(),
             create_password_visible: true,
             ..UiState::default()
         };
         clear_submitted_create_password(&mut state, OperationKind::Create, true);
         assert!(state.create_password.is_empty());
+        assert!(state.create_password_confirmation.is_empty());
         assert!(!state.create_password_visible);
 
         state.create_password.push_str("retry-secret");
+        state.create_password_confirmation.push_str("retry-secret");
         state.create_password_visible = true;
         clear_submitted_create_password(&mut state, OperationKind::Create, false);
         assert_eq!(state.create_password, "retry-secret");
+        assert_eq!(state.create_password_confirmation, "retry-secret");
         assert!(state.create_password_visible);
 
         clear_submitted_create_password(&mut state, OperationKind::Extract, true);
         assert_eq!(state.create_password, "retry-secret");
+        assert_eq!(state.create_password_confirmation, "retry-secret");
         assert!(state.create_password_visible);
     }
 
     #[test]
     fn password_visibility_controls_are_labeled_and_scoped() {
         let source = include_str!("accessible_main.rs");
-        for id in [
-            "pending-archive-password",
-            "archive-password",
-            "create-password",
-        ] {
+        for id in ["pending-archive-password", "archive-password"] {
             assert!(source.contains(&format!("id: \"{id}\"")));
             assert!(source.contains(&format!("\"aria-controls\": \"{id}\"")));
         }
+        assert!(source.contains("id: \"create-password\""));
+        assert!(source.contains("id: \"create-password-confirmation\""));
+        assert!(
+            source.contains("\"aria-controls\": \"create-password create-password-confirmation\"")
+        );
         assert!(source.contains("locale.text(Text::ShowPassword)"));
         assert!(source.contains("if view.password_visible { \"text\" } else { \"password\" }"));
         assert!(
