@@ -485,7 +485,12 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             }
             return continue_queue(state, id);
         }
-        Message::PasswordChanged(password) => state.password = password,
+        Message::PasswordChanged(password) => {
+            state.password = password;
+            if state.password.is_empty() {
+                state.password_visible = false;
+            }
+        }
         Message::ArchivePasswordVisibilityChanged(visible) => {
             state.password_visible = visible;
         }
@@ -813,7 +818,12 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::CreateFormatChanged(format) => {
             apply_create_format(state, format);
         }
-        Message::CreatePasswordChanged(password) => state.create_password = password,
+        Message::CreatePasswordChanged(password) => {
+            state.create_password = password;
+            if state.create_password.is_empty() {
+                state.create_password_visible = false;
+            }
+        }
         Message::CreatePasswordVisibilityChanged(visible) => {
             state.create_password_visible = visible;
         }
@@ -2622,6 +2632,26 @@ mod tests {
         assert!(source.contains("Message::ArchivePasswordVisibilityChanged"));
         assert!(source.contains("Message::CreatePasswordVisibilityChanged"));
         assert!(source.contains("Text::ShowPassword"));
+    }
+
+    #[test]
+    fn empty_password_input_restores_masking() {
+        let mut state = ZiFile {
+            password: "secret".to_owned(),
+            password_visible: true,
+            create_password: "secret".to_owned(),
+            create_password_visible: true,
+            ..ZiFile::default()
+        };
+
+        drop(update(&mut state, Message::PasswordChanged(String::new())));
+        assert!(!state.password_visible);
+
+        drop(update(
+            &mut state,
+            Message::CreatePasswordChanged(String::new()),
+        ));
+        assert!(!state.create_password_visible);
     }
 
     #[test]
