@@ -122,6 +122,8 @@ Archive-list interaction regressions require only directory names to use actiona
 
 Extraction-toolbar regressions require both UIs to show a visible bilingual **Conflict policy** field name above the Rename, Overwrite, Skip, and Error choices. The default Iced UI places text and selector in one column, while the accessible Dioxus UI wraps the selector in a native `label`; option text or an assistive-technology-only name cannot be the sole explanation of the field's purpose.
 
+The default Iced archive password and search fields must also retain persistent visible bilingual labels instead of relying only on placeholders; their purpose remains visible after the user enters text. The regression keeps the search ID, clear action, and existing password-masking wiring intact, so the layout change cannot silently break `Ctrl+F` focus, clearing, or password visibility. The accessible Dioxus UI already uses native labels and retains that semantic baseline.
+
 About-page link regressions require both UIs to expose actionable project, current-locale documentation, and current-locale privacy-policy destinations. The shared layer accepts only a compile-time `OfficialLink` enum: all five concrete destinations must use HTTPS and remain under the project GitHub or GitHub Pages paths, so arbitrary user strings never reach the system protocol launcher. Windows uses `ShellExecuteW` to invoke the default browser, and both success and failure update the application status region.
 
 Save-path regressions require both desktop variants to add the selected format's canonical suffix when the user omits an extension, while preserving an explicitly entered alternative suffix. Compound formats such as TAR + gzip must produce the complete `.tar.gz`, not only `.gz`.

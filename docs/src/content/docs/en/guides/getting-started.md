@@ -9,7 +9,7 @@ ZiFile is currently a Stage 4 public release and has not shipped through Microso
 
 1. Start ZiFile and choose **Open archive**, or press `Ctrl+O`.
 2. Select a ZIP, 7z, RAR, CAB, TAR, or supported compression stream. A known archive can also be dropped onto the window.
-3. Filter paths with search. Large archives are displayed in bounded pages of 500 rows.
+3. Filter paths with the persistently labelled **Search** field; its purpose remains visible after text is entered. Large archives are displayed in bounded pages of 500 rows.
 4. Run an integrity test before extraction when appropriate. If a 7z or RAR archive also encrypts its file list, the first failure retains the selected file and presents a password retry view. Passwords are never stored in settings and are cleared before another archive is opened.
 
 Detection uses both signatures and extensions. If an extension disagrees with the content, ZiFile reports a detection or parsing error instead of forcing the wrong decoder.
