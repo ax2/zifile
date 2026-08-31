@@ -2062,14 +2062,15 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                 }
                 .width(34),
                 if entry.is_directory {
-                    button(text(format!("▸ {display_path}")))
-                        .style(button::text)
-                        .on_press(Message::NavigateArchiveDirectory(path.clone()))
-                        .width(Fill)
+                    container(
+                        button(text(format!("▸ {display_path}")))
+                            .style(button::text)
+                            .on_press(Message::NavigateArchiveDirectory(path.clone()))
+                            .width(Fill),
+                    )
+                    .width(Fill)
                 } else {
-                    button(text(format!("• {display_path}")))
-                        .style(button::text)
-                        .width(Fill)
+                    container(text(format!("• {display_path}"))).width(Fill)
                 },
                 text(format_bytes(entry.size)).width(110),
                 text(format_bytes(entry.compressed_size)).width(110),
@@ -3130,6 +3131,26 @@ mod tests {
         assert!(source.contains("Text::ExtractAll"));
         assert!(source.contains(".style(button::primary)"));
         assert!(source.contains("Message::ExtractAll"));
+    }
+
+    #[test]
+    fn archive_view_uses_buttons_only_for_navigable_directory_names() {
+        let source = include_str!("main.rs");
+        let archive_view = source
+            .split_once("fn archive_view(state: &ZiFile)")
+            .expect("archive view")
+            .1
+            .split_once("fn create_view(state: &ZiFile)")
+            .expect("create view follows archive view")
+            .0;
+        assert!(archive_view.contains(r#"button(text(format!("▸ {display_path}")))"#));
+        assert!(
+            archive_view.contains(".on_press(Message::NavigateArchiveDirectory(path.clone()))")
+        );
+        assert!(
+            archive_view.contains(r#"container(text(format!("• {display_path}"))).width(Fill)"#)
+        );
+        assert!(!archive_view.contains(r#"button(text(format!("• {display_path}")))"#));
     }
 
     #[test]
