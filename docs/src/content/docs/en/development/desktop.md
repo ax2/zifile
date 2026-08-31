@@ -73,6 +73,8 @@ The Windows 11 Explorer extension is a pure-Rust COM DLL with two modern command
 
 When opening fails, the desktop distinguishes likely password-related archive errors from corruption, unknown formats, and ordinary I/O failures. Only the former presents password input and an Unlock retry, avoiding a misleading encryption diagnosis for every failure. Asynchronous Worker results also verify the active operation id before mutation, so an old task cannot overwrite the current UI state.
 
+Password fields for unlocking, testing/extracting, and creating encrypted archives provide a **Show password** checkbox and remain masked by default. Visibility is session-only and is never saved. It resets to masked when the archive or password is cleared, a create request is accepted, or the user selects a format without encryption. The accessible candidate uses native checkboxes, explicit labels, and `aria-controls` to scope each toggle to its password field.
+
 When a replacement archive is opened while another operation is active, the
 default Iced UI keeps the currently visible archive until the replacement list
 operation actually starts. A queued request or a request rejected because the

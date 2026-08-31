@@ -157,10 +157,12 @@ struct UiState {
     entry_sort: EntrySort,
     entry_sort_direction: SortDirection,
     password: String,
+    password_visible: bool,
     conflict: ConflictPolicy,
     create_sources: Vec<PathBuf>,
     create_format: ArchiveFormat,
     create_password: String,
+    create_password_visible: bool,
     compression_level: u8,
     status: String,
     status_kind: StatusKind,
@@ -192,10 +194,12 @@ impl Default for UiState {
             entry_sort: EntrySort::default(),
             entry_sort_direction: SortDirection::default(),
             password: String::new(),
+            password_visible: false,
             conflict: ConflictPolicy::Rename,
             create_sources: Vec::new(),
             create_format: ArchiveFormat::Zip,
             create_password: String::new(),
+            create_password_visible: false,
             compression_level: 6,
             status: settings.locale.text(Text::Ready).to_owned(),
             status_kind: StatusKind::Informational,
@@ -213,6 +217,16 @@ impl Default for UiState {
 }
 
 impl UiState {
+    fn clear_archive_password(&mut self) {
+        self.password.clear();
+        self.password_visible = false;
+    }
+
+    fn clear_create_password(&mut self) {
+        self.create_password.clear();
+        self.create_password_visible = false;
+    }
+
     fn set_status(&mut self, status: String) {
         self.status = status;
         self.status_kind = StatusKind::Informational;
@@ -485,8 +499,14 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
             p { {description} }
             div { class: "button-row",
                 if view.pending_archive_requires_password {
-                    label { span { {locale.text(Text::PasswordEncrypted)} }
-                        input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() }
+                    div { class: "password-field",
+                        label { r#for: "pending-archive-password", span { {locale.text(Text::PasswordEncrypted)} }
+                            input { id: "pending-archive-password", r#type: if view.password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() }
+                        }
+                        label { class: "password-toggle",
+                            input { r#type: "checkbox", checked: view.password_visible, "aria-controls": "pending-archive-password", onchange: move |event| state.write().password_visible = event.checked() }
+                            span { {locale.text(Text::ShowPassword)} }
+                        }
                     }
                     button { class: "primary", disabled: pending.is_none() || view.busy, "aria-keyshortcuts": ARIA_SHORTCUT_RELOAD, onclick: move |_| reload_archive(state), {locale.text(Text::UnlockArchive)} }
                 }
@@ -564,7 +584,15 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
             }
         }
         div { class: "toolbar",
-            label { span { {locale.text(Text::PasswordEncrypted)} } input { r#type: "password", autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() } }
+            div { class: "password-field",
+                label { r#for: "archive-password", span { {locale.text(Text::PasswordEncrypted)} }
+                    input { id: "archive-password", r#type: if view.password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", value: view.password.clone(), oninput: move |event| state.write().password = event.value() }
+                }
+                label { class: "password-toggle",
+                    input { r#type: "checkbox", checked: view.password_visible, "aria-controls": "archive-password", onchange: move |event| state.write().password_visible = event.checked() }
+                    span { {locale.text(Text::ShowPassword)} }
+                }
+            }
             button { "aria-keyshortcuts": ARIA_SHORTCUT_RELOAD, onclick: move |_| reload_archive(state), {locale.text(Text::Reload)} }
             div { class: "search-field",
                 div { class: "search-row",
@@ -809,8 +837,15 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
             } else {
                 p { class: "muted", {locale.text(Text::CompressionFixed)} }
             }
-            label { span { if encrypted { {locale.text(Text::PasswordOptional)} } else { {locale.text(Text::PasswordUnavailable)} } }
-                input { r#type: "password", autocomplete: "off", spellcheck: "false", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: !encrypted, oninput: move |event| state.write().create_password = event.value() } }
+            div { class: "password-field",
+                label { r#for: "create-password", span { if encrypted { {locale.text(Text::PasswordOptional)} } else { {locale.text(Text::PasswordUnavailable)} } }
+                    input { id: "create-password", r#type: if view.create_password_visible { "text" } else { "password" }, autocomplete: "off", spellcheck: "false", placeholder: locale.text(Text::NoEncryption), value: view.create_password.clone(), disabled: !encrypted, oninput: move |event| state.write().create_password = event.value() }
+                }
+                label { class: "password-toggle",
+                    input { r#type: "checkbox", checked: view.create_password_visible, disabled: !encrypted, "aria-controls": "create-password", onchange: move |event| state.write().create_password_visible = event.checked() }
+                    span { {locale.text(Text::ShowPassword)} }
+                }
+            }
         }
         output { id: "create-format-help", class: "muted", role: "status", "aria-live": "off", {input_help} }
         div { class: "create-actions", button { class: "primary", disabled: source_issue.is_some(), "aria-describedby": "create-source-summary create-format-help", onclick: move |_| create_archive(state), {locale.text(Text::CreateAction)} } }
@@ -831,7 +866,7 @@ fn open_archive_dialog(mut state: Signal<UiState>) {
         let mut value = state.write();
         value.dialog_open = false;
         if let Some(path) = path {
-            value.password.clear();
+            value.clear_archive_password();
             value.automatic_extract_destination = None;
             drop(value);
             begin_load(state, path);
@@ -917,7 +952,7 @@ fn clear_archive_session(value: &mut UiState) {
     value.entry_page = 0;
     value.entry_sort = EntrySort::default();
     value.entry_sort_direction = SortDirection::default();
-    value.password.clear();
+    value.clear_archive_password();
     value.page = Page::Home;
 }
 
@@ -960,7 +995,7 @@ fn handle_dropped_paths(state: Signal<UiState>, paths: Vec<PathBuf>) {
 fn handle_classified_drop(mut state: Signal<UiState>, paths: Vec<PathBuf>, openable: bool) {
     if let Some(path) = single_openable_archive(&paths, openable).map(Path::to_path_buf) {
         let mut value = state.write();
-        value.password.clear();
+        value.clear_archive_password();
         value.automatic_extract_destination = None;
         drop(value);
         begin_load(state, path);
@@ -1299,7 +1334,7 @@ fn set_create_format(state: &mut UiState, format: ArchiveFormat) {
     state.create_format = format;
     state.compression_level = format.clamp_compression_level(state.compression_level);
     if !format.capabilities().encryption {
-        state.create_password.clear();
+        state.clear_create_password();
     }
     state.set_status(create_input_help(state.locale, format).to_owned());
 }
@@ -1363,7 +1398,7 @@ fn launch_worker(
 
 fn clear_submitted_create_password(state: &mut UiState, kind: OperationKind, accepted: bool) {
     if accepted && kind == OperationKind::Create {
-        state.create_password.clear();
+        state.clear_create_password();
     }
 }
 
@@ -1828,7 +1863,7 @@ fn open_recent_archive(mut state: Signal<UiState>, path: PathBuf) {
         return;
     }
     let mut value = state.write();
-    value.password.clear();
+    value.clear_archive_password();
     value.automatic_extract_destination = None;
     drop(value);
     begin_load(state, path);
@@ -2090,6 +2125,7 @@ mod tests {
             entry_filter: "secret".to_owned(),
             entry_page: 3,
             password: "not-retained".to_owned(),
+            password_visible: true,
             locale: Locale::En,
             ..UiState::default()
         };
@@ -2106,6 +2142,7 @@ mod tests {
         assert!(state.entry_filter.is_empty());
         assert_eq!(state.entry_page, 0);
         assert!(state.password.is_empty());
+        assert!(!state.password_visible);
     }
 
     #[test]
@@ -2236,17 +2273,41 @@ mod tests {
     fn accepted_create_submission_releases_the_form_password() {
         let mut state = UiState {
             create_password: "not-for-retention".to_owned(),
+            create_password_visible: true,
             ..UiState::default()
         };
         clear_submitted_create_password(&mut state, OperationKind::Create, true);
         assert!(state.create_password.is_empty());
+        assert!(!state.create_password_visible);
 
         state.create_password.push_str("retry-secret");
+        state.create_password_visible = true;
         clear_submitted_create_password(&mut state, OperationKind::Create, false);
         assert_eq!(state.create_password, "retry-secret");
+        assert!(state.create_password_visible);
 
         clear_submitted_create_password(&mut state, OperationKind::Extract, true);
         assert_eq!(state.create_password, "retry-secret");
+        assert!(state.create_password_visible);
+    }
+
+    #[test]
+    fn password_visibility_controls_are_labeled_and_scoped() {
+        let source = include_str!("accessible_main.rs");
+        for id in [
+            "pending-archive-password",
+            "archive-password",
+            "create-password",
+        ] {
+            assert!(source.contains(&format!("id: \"{id}\"")));
+            assert!(source.contains(&format!("\"aria-controls\": \"{id}\"")));
+        }
+        assert!(source.contains("locale.text(Text::ShowPassword)"));
+        assert!(source.contains("if view.password_visible { \"text\" } else { \"password\" }"));
+        assert!(
+            source.contains("if view.create_password_visible { \"text\" } else { \"password\" }")
+        );
+        assert!(STYLES.contains(".password-toggle"));
     }
 
     #[test]
