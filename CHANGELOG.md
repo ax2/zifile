@@ -6,6 +6,8 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-08-31
+
 ### Added
 
 - Add safe in-place archive updates for ZIP, 7z, and TAR-family containers in
