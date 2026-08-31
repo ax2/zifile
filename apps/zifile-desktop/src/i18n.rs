@@ -126,6 +126,7 @@ impl Locale {
             Text::ExtractSelected => ("Extract selected", "解压所选项目"),
             Text::ExtractAll => ("Extract all", "解压全部"),
             Text::ExtractToNamedFolder => ("Extract to named folder", "解压到同名文件夹"),
+            Text::ConflictPolicy => ("Conflict policy", "文件冲突策略"),
             Text::Name => ("Name", "名称"),
             Text::Original => ("Original", "原始大小"),
             Text::Packed => ("Packed", "压缩大小"),
@@ -465,6 +466,7 @@ pub enum Text {
     OpenDialog,
     SupportedArchives,
     AllFiles,
+    ConflictPolicy,
     ConflictOverwrite,
     ConflictSkip,
     ConflictRename,
@@ -499,6 +501,8 @@ mod tests {
         assert_eq!(Locale::ZhCn.text(Text::Home), "首页");
         assert_eq!(Locale::En.text(Text::ClearSearch), "Clear search");
         assert_eq!(Locale::ZhCn.text(Text::ClearSearch), "清除搜索");
+        assert_eq!(Locale::En.text(Text::ConflictPolicy), "Conflict policy");
+        assert_eq!(Locale::ZhCn.text(Text::ConflictPolicy), "文件冲突策略");
         assert_eq!(
             Locale::En.text(Text::OpeningArchiveDescription),
             "Opening this archive…"

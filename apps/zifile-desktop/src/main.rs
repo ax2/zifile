@@ -1919,17 +1919,21 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
 
     let operation_controls = row![
         button(state.locale.text(Text::Reload)).on_press(Message::ReloadArchive),
-        pick_list(
-            ConflictChoice::ALL.map(|choice| LocalizedConflict {
-                choice,
-                locale: state.locale
-            }),
-            Some(LocalizedConflict {
-                choice: state.conflict,
-                locale: state.locale
-            }),
-            |value| Message::ConflictChanged(value.choice)
-        ),
+        column![
+            text(state.locale.text(Text::ConflictPolicy)).size(13),
+            pick_list(
+                ConflictChoice::ALL.map(|choice| LocalizedConflict {
+                    choice,
+                    locale: state.locale
+                }),
+                Some(LocalizedConflict {
+                    choice: state.conflict,
+                    locale: state.locale
+                }),
+                |value| Message::ConflictChanged(value.choice)
+            ),
+        ]
+        .spacing(4),
         button(state.locale.text(Text::ExtractSelected))
             .style(button::secondary)
             .on_press_maybe((!state.selected.is_empty()).then_some(Message::Extract)),
@@ -3189,6 +3193,7 @@ mod tests {
     #[test]
     fn archive_view_exposes_separate_selected_and_all_extraction_actions() {
         let source = include_str!("main.rs");
+        assert!(source.contains("text(state.locale.text(Text::ConflictPolicy)).size(13)"));
         assert!(source.contains("Text::ExtractSelected"));
         assert!(source.contains(".style(button::secondary)"));
         assert!(source.contains("Text::ExtractToNamedFolder"));

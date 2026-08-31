@@ -20,6 +20,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Changed
 
+- Give the extraction conflict-policy selector a visible bilingual label in both
+  desktop UIs instead of relying on option names or an accessibility-only name.
+
 - Render regular archive names as text while keeping directory names as explicit
   navigation buttons, so the file table no longer presents non-actions as
   disabled controls.
