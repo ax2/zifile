@@ -8,6 +8,10 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Add batch rename controls to both desktop archive views. Select at least two
+  regular files, then combine find/replace with optional prefix and suffix
+  rules; unchanged entries are skipped and the resulting mappings use the same
+  atomic update and collision checks as single-entry rename.
 - Add atomic archive-relative file and directory renaming for ZIP, 7z, and
   TAR-family containers through the core API, Worker, CLI, and both desktop
   UIs. Directory mappings move their complete subtree, batch swaps are staged

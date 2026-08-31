@@ -40,6 +40,8 @@ The archive selection bar provides explicit `Select all`, `Select none`, and `In
 
 For ZIP, 7z, and TAR-family containers, the archive page also provides `Add to archive`, `Add folder to archive`, and `Remove selected`. ZiFile creates a bounded temporary workspace beside the original, fully extracts the archive, then merges new sources or removes the selected archive-relative paths and their descendants before rebuilding the same format. The original is replaced only after rebuilding, validation, and cancellation checks succeed. A new regular file with the same relative path updates the previous file; file/directory type collisions, links, RAR/CAB, and single-file streams are rejected explicitly, and a failure leaves the original archive intact.
 
+When at least two regular files are selected, the archive page also enables `Batch rename`. Find/replace, prefix, and suffix rules affect filenames while preserving their containing directories. Unchanged entries are removed before submission, and the core archive-relative validation, collision checks, and atomic replacement protection are reused. Changing directories, reloading, changing the selection, or closing the archive clears unsubmitted batch rules.
+
 Search is immediate and results are paged at 500 rows, keeping 100,000-entry archives bounded. Safety limits still apply during listing. Worker byte progress, or entry progress when bytes are unavailable, is mirrored to the Windows taskbar.
 
 ## Integrity-test checksums

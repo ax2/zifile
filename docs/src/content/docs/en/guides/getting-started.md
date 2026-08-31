@@ -32,6 +32,8 @@ ZIP, 7z, and TAR compositions accept multiple files and folders. gzip, Zstandard
 
 After opening a ZIP, 7z, or TAR-family archive, use `Add to archive` or `Add folder to archive` to update it in place, or select entries and choose `Remove selected`. Updates and removals extract, merge or delete, and rebuild in a temporary workspace beside the original, replacing the original only after success; single-file streams, RAR, and CAB cannot be updated.
 
+In the same updateable archive types, select at least two regular files and choose `Batch rename`. Enter optional find/replace text plus an optional prefix and suffix. An empty find value disables replacement. ZiFile builds the mappings first, skips unchanged entries, and then applies the same archive-relative validation, collision checks, and atomic rebuild protection used by single-entry rename.
+
 ## Queue and settings
 
 Open, test, extract, create, or update requests can be submitted while another operation runs. ZiFile keeps at most 32 operations and executes them in order. **Clear queue** removes only waiting work; **Cancel** affects only the active operation. Language and light/dark theme are stored in `%LOCALAPPDATA%\ZiFile\settings.conf`; paths, recent history, and passwords are not stored.

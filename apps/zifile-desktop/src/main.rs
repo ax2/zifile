@@ -41,9 +41,9 @@ use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
 use zifile_desktop::entry_view::{
-    DirectorySelection, ENTRIES_PER_PAGE, EntrySort, SortDirection, browser_entry_count,
-    browser_entry_page, child_directory_selections, descendant_file_paths, directory_breadcrumbs,
-    next_sort,
+    BatchRenameError, DirectorySelection, ENTRIES_PER_PAGE, EntrySort, SortDirection,
+    batch_rename_mappings, browser_entry_count, browser_entry_page, child_directory_selections,
+    descendant_file_paths, directory_breadcrumbs, next_sort,
 };
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
@@ -140,6 +140,11 @@ struct ZiFile {
     confirm_remove: bool,
     rename_source: Option<PathBuf>,
     rename_target: String,
+    batch_rename_open: bool,
+    batch_rename_find: String,
+    batch_rename_replace: String,
+    batch_rename_prefix: String,
+    batch_rename_suffix: String,
     recent_archives: Vec<PathBuf>,
     dark: bool,
     locale: Locale,
@@ -181,6 +186,11 @@ impl Default for ZiFile {
             confirm_remove: false,
             rename_source: None,
             rename_target: String::new(),
+            batch_rename_open: false,
+            batch_rename_find: String::new(),
+            batch_rename_replace: String::new(),
+            batch_rename_prefix: String::new(),
+            batch_rename_suffix: String::new(),
             recent_archives: settings.recent_archives,
             dark: settings.dark,
             locale: settings.locale,
@@ -236,6 +246,13 @@ enum Message {
     RenameTargetChanged(String),
     ConfirmRenameSelected,
     CancelRenameSelected,
+    RequestBatchRenameSelected,
+    BatchRenameFindChanged(String),
+    BatchRenameReplaceChanged(String),
+    BatchRenamePrefixChanged(String),
+    BatchRenameSuffixChanged(String),
+    ConfirmBatchRenameSelected,
+    CancelBatchRenameSelected,
     UpdateFinished(u64, Result<OperationSummary, String>),
     RenameFinished(u64, Result<OperationSummary, String>),
     AddFiles,
@@ -373,6 +390,14 @@ fn clear_rename(state: &mut ZiFile) {
     state.rename_target.clear();
 }
 
+fn clear_batch_rename(state: &mut ZiFile) {
+    state.batch_rename_open = false;
+    state.batch_rename_find.clear();
+    state.batch_rename_replace.clear();
+    state.batch_rename_prefix.clear();
+    state.batch_rename_suffix.clear();
+}
+
 fn set_error(state: &mut ZiFile, status: impl Into<String>) {
     state.status = status.into();
     state.status_kind = StatusKind::Error;
@@ -492,6 +517,8 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     state.entry_page = 0;
                     state.entry_sort = EntrySort::Name;
                     state.entry_sort_direction = SortDirection::Ascending;
+                    clear_rename(state);
+                    clear_batch_rename(state);
                     let status = if state.locale == Locale::ZhCn {
                         format!(
                             "已打开 {} 个项目 · 展开后 {}",
@@ -577,6 +604,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::ToggleEntry(path, selected) => {
             state.confirm_remove = false;
             clear_rename(state);
+            clear_batch_rename(state);
             if selected {
                 state.selected.insert(path);
             } else {
@@ -586,6 +614,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::ToggleDirectory(directory, selected) => {
             state.confirm_remove = false;
             clear_rename(state);
+            clear_batch_rename(state);
             if let Some(archive) = &state.archive {
                 let descendants = descendant_file_paths(archive, &directory);
                 if selected {
@@ -600,6 +629,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::SelectAll(selected) => {
             state.confirm_remove = false;
             clear_rename(state);
+            clear_batch_rename(state);
             state.selected.clear();
             if selected && let Some(archive) = &state.archive {
                 state.selected.extend(
@@ -623,6 +653,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::InvertSelection => {
             state.confirm_remove = false;
             clear_rename(state);
+            clear_batch_rename(state);
             if let Some(archive) = &state.archive {
                 let selected = invert_archive_file_selection(archive, &mut state.selected);
                 set_status(
@@ -867,6 +898,79 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::CancelRenameSelected => {
             clear_rename(state);
             set_status(state, state.locale.text(Text::Ready));
+        }
+        Message::RequestBatchRenameSelected => {
+            if state.busy || state.selected.len() < 2 {
+                return Task::none();
+            }
+            let can_update = state
+                .archive
+                .as_ref()
+                .is_some_and(|archive| archive.format.supports_update());
+            if !can_update {
+                set_error(
+                    state,
+                    choose(
+                        state.locale,
+                        "This archive format cannot be renamed",
+                        "此压缩格式不支持重命名",
+                    ),
+                );
+                return Task::none();
+            }
+            clear_rename(state);
+            state.batch_rename_open = true;
+            set_status(state, state.locale.text(Text::BatchRenamePrompt));
+        }
+        Message::BatchRenameFindChanged(value) => state.batch_rename_find = value,
+        Message::BatchRenameReplaceChanged(value) => state.batch_rename_replace = value,
+        Message::BatchRenamePrefixChanged(value) => state.batch_rename_prefix = value,
+        Message::BatchRenameSuffixChanged(value) => state.batch_rename_suffix = value,
+        Message::CancelBatchRenameSelected => {
+            clear_batch_rename(state);
+            set_status(state, state.locale.text(Text::Ready));
+        }
+        Message::ConfirmBatchRenameSelected => {
+            if state.busy || !state.batch_rename_open {
+                return Task::none();
+            }
+            let Some(archive) = state.archive.as_ref() else {
+                return Task::none();
+            };
+            let result = batch_rename_mappings(
+                archive,
+                &state.selected,
+                &state.batch_rename_find,
+                &state.batch_rename_replace,
+                &state.batch_rename_prefix,
+                &state.batch_rename_suffix,
+            );
+            let mappings = match result {
+                Ok(mappings) => mappings,
+                Err(error) => {
+                    let message = match error {
+                        BatchRenameError::NoSelection => choose(
+                            state.locale,
+                            "Select at least two archive files",
+                            "请至少选择两个归档文件",
+                        ),
+                        BatchRenameError::NoChanges => choose(
+                            state.locale,
+                            "The batch rule does not change any selected filename",
+                            "批量规则不会改变任何所选文件名",
+                        ),
+                        BatchRenameError::InvalidSelection(_) => choose(
+                            state.locale,
+                            "A selected archive file is no longer available",
+                            "所选归档文件已不可用",
+                        ),
+                    };
+                    set_error(state, message);
+                    return Task::none();
+                }
+            };
+            clear_batch_rename(state);
+            return submit_archive_renames(state, mappings);
         }
         Message::ConfirmRenameSelected => {
             if state.busy {
@@ -1545,6 +1649,16 @@ fn submit_archive_update(
 }
 
 fn submit_archive_rename(state: &mut ZiFile, source: PathBuf, target: PathBuf) -> Task<Message> {
+    submit_archive_renames(
+        state,
+        vec![ArchiveRename {
+            from: source,
+            to: target,
+        }],
+    )
+}
+
+fn submit_archive_renames(state: &mut ZiFile, renames: Vec<ArchiveRename>) -> Task<Message> {
     let Some(archive) = state.archive.as_ref() else {
         return Task::none();
     };
@@ -1562,10 +1676,7 @@ fn submit_archive_rename(state: &mut ZiFile, source: PathBuf, target: PathBuf) -
     let path = archive.path.clone();
     let request = WorkerRequest::Rename {
         archive: path.clone(),
-        renames: vec![ArchiveRename {
-            from: source,
-            to: target,
-        }],
+        renames,
         compression_level: archive.format.clamp_compression_level(6),
         password: non_empty(&state.password),
         limits: SafetyLimits::default(),
@@ -2348,6 +2459,60 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             )
             .into()
     };
+    let batch_rename_control: Element<'_, Message> = if state.batch_rename_open {
+        column![
+            text(format!(
+                "{} ({} {})",
+                state.locale.text(Text::BatchRenamePrompt),
+                state.selected.len(),
+                state.locale.text(Text::Selected)
+            ))
+            .size(13),
+            row![
+                text_input(
+                    state.locale.text(Text::BatchRenameFind),
+                    &state.batch_rename_find
+                )
+                .on_input(Message::BatchRenameFindChanged)
+                .width(155),
+                text_input(
+                    state.locale.text(Text::BatchRenameReplace),
+                    &state.batch_rename_replace
+                )
+                .on_input(Message::BatchRenameReplaceChanged)
+                .width(155),
+                text_input(
+                    state.locale.text(Text::BatchRenamePrefix),
+                    &state.batch_rename_prefix
+                )
+                .on_input(Message::BatchRenamePrefixChanged)
+                .width(110),
+                text_input(
+                    state.locale.text(Text::BatchRenameSuffix),
+                    &state.batch_rename_suffix
+                )
+                .on_input(Message::BatchRenameSuffixChanged)
+                .width(110),
+                button(state.locale.text(Text::ConfirmBatchRenameSelected))
+                    .style(button::primary)
+                    .on_press(Message::ConfirmBatchRenameSelected),
+                button(state.locale.text(Text::CancelBatchRenameSelected))
+                    .style(button::secondary)
+                    .on_press(Message::CancelBatchRenameSelected),
+            ]
+            .spacing(6),
+        ]
+        .spacing(4)
+        .into()
+    } else {
+        button(state.locale.text(Text::BatchRenameSelected))
+            .style(button::secondary)
+            .on_press_maybe(
+                (archive.format.supports_update() && !state.busy && state.selected.len() >= 2)
+                    .then_some(Message::RequestBatchRenameSelected),
+            )
+            .into()
+    };
     let operation_controls = row![
         button(state.locale.text(Text::Reload)).on_press(Message::ReloadArchive),
         button(state.locale.text(Text::AddToArchive))
@@ -2363,6 +2528,7 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             ),
         remove_control,
         rename_control,
+        batch_rename_control,
         column![
             text(state.locale.text(Text::ConflictPolicy)).size(13),
             pick_list(
@@ -3651,6 +3817,25 @@ mod tests {
         assert!(source.contains("Text::ExtractAll"));
         assert!(source.contains(".style(button::primary)"));
         assert!(source.contains("Message::ExtractAll"));
+    }
+
+    #[test]
+    fn archive_view_exposes_the_batch_rename_rule_editor() {
+        let source = include_str!("main.rs");
+        let archive_view = source
+            .split_once("fn archive_view(state: &ZiFile)")
+            .expect("archive view")
+            .1
+            .split_once("fn create_view(state: &ZiFile)")
+            .expect("create view follows archive view")
+            .0;
+        assert!(archive_view.contains("Text::BatchRenameSelected"));
+        assert!(archive_view.contains("Text::BatchRenameFind"));
+        assert!(archive_view.contains("Text::BatchRenameReplace"));
+        assert!(archive_view.contains("Text::BatchRenamePrefix"));
+        assert!(archive_view.contains("Text::BatchRenameSuffix"));
+        assert!(archive_view.contains("Message::ConfirmBatchRenameSelected"));
+        assert!(archive_view.contains("Message::CancelBatchRenameSelected"));
     }
 
     #[test]
