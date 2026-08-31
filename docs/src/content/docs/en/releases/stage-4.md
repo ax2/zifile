@@ -29,6 +29,13 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 Stable 1.0 has not been published; `v0.1.10` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
 
+## 2026-09-01 — archive-entry rename
+
+- The core now exposes `ArchiveRename` and `rename_archive`. ZIP, 7z, and TAR-family archives are rebuilt in a sibling staging directory and replace the original only after the rename succeeds; directory mappings move the complete subtree, while single-file streams, RAR, and CAB remain read-only.
+- Mappings are validated before staging content changes: archive-relative path policy, case-collision, duplicate/overlapping source and destination, type conflicts, existing targets, links/reparse points, and cancellation are covered. A temporary move phase makes batch swaps deterministic and failed work cannot commit the original archive.
+- Worker IPC advances to `PROTOCOL_VERSION = 3`; the CLI adds repeatable `rename <archive> --rename <FROM=TO>`. The default Iced UI and the Dioxus/WebView2 accessibility candidate both expose bilingual single-selection rename editors and reload the archive after success.
+- Verification: 54/54 core integration tests, 10/10 CLI unit tests, 4/4 Worker protocol tests, and desktop `cargo check --all-targets --all-features` passed. Real foreground UI, signing, Store, and WACK gates remain explicitly unclaimed.
+
 ## 2026-08-31 — 0.1.10 public release result
 
 - PR [#92](https://github.com/ax2/zifile/pull/92) merged as commit `b778ba5c2095aa19ccdd03500a5aacae59ae75e8`; annotated tag `v0.1.10` points to the release commit.

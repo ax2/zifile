@@ -134,6 +134,11 @@ label > span { display: block; margin-bottom: 6px; color: var(--muted); font-siz
 .selection-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
 .selection-bar > label { display: flex; align-items: center; gap: 7px; }
 .selection-bar select { min-width: 220px; }
+.rename-editor { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 6px 8px; border: 1px solid var(--accent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.rename-editor label { display: flex; align-items: center; gap: 7px; }
+.rename-editor label span { color: var(--muted); font-size: .82rem; white-space: nowrap; }
+.rename-editor input { width: min(280px, 32vw); min-width: 160px; }
+.rename-source { max-width: 260px; overflow: hidden; color: var(--muted); font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumbs { display: flex; align-items: center; gap: 3px; min-height: 38px; margin-bottom: 10px; overflow-x: auto; color: var(--muted); }
 .breadcrumbs button, .folder-link { border: 0; background: transparent; color: var(--text); padding: 6px 8px; white-space: nowrap; }
 .breadcrumbs button:hover, .folder-link:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--accent); }

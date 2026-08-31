@@ -19,7 +19,7 @@ use dioxus::prelude::*;
 use dioxus_html::HasFileData;
 use rfd::AsyncFileDialog;
 use zifile_core::{
-    ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy, CreateInputKind,
+    ArchiveFormat, ArchiveInfo, ArchiveRename, CancellationToken, ConflictPolicy, CreateInputKind,
     OPEN_ARCHIVE_EXTENSIONS, OperationProgress, OperationSummary, ProgressSnapshot, SafetyLimits,
 };
 use zifile_worker_protocol::WorkerRequest;
@@ -107,6 +107,7 @@ enum OperationKind {
     Extract,
     Create,
     Update,
+    Rename,
 }
 
 struct QueuedOperation {
@@ -176,6 +177,8 @@ struct UiState {
     progress: Option<OperationProgress>,
     operations: SharedOperationQueue,
     confirm_remove: bool,
+    rename_source: Option<PathBuf>,
+    rename_target: String,
     recent_archives: Vec<PathBuf>,
     dark: bool,
     locale: Locale,
@@ -216,6 +219,8 @@ impl Default for UiState {
             progress: None,
             operations: Arc::new(Mutex::new(OperationQueue::default())),
             confirm_remove: false,
+            rename_source: None,
+            rename_target: String::new(),
             recent_archives: settings.recent_archives,
             dark: settings.dark,
             locale: settings.locale,
@@ -235,6 +240,11 @@ impl UiState {
         self.create_password_confirmation.clear();
         self.create_password_confirmation_touched = false;
         self.create_password_visible = false;
+    }
+
+    fn clear_rename(&mut self) {
+        self.rename_source = None;
+        self.rename_target.clear();
     }
 
     fn set_archive_password(&mut self, password: String) {
@@ -715,6 +725,18 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 } else {
                     button { class: "danger", disabled: selected_count == 0 || view.busy || !archive.format.supports_update(), "aria-describedby": "archive-selection-summary", onclick: move |_| request_remove_selected(state), {locale.text(Text::RemoveSelected)} }
                 }
+                if let Some(source) = view.rename_source.clone() {
+                    div { class: "rename-editor", "aria-label": locale.text(Text::RenameTarget),
+                        label { span { {locale.text(Text::RenameTarget)} }
+                            input { r#type: "text", value: view.rename_target.clone(), placeholder: locale.text(Text::RenameTarget), autocomplete: "off", spellcheck: "false", oninput: move |event| state.write().rename_target = event.value() }
+                        }
+                        span { class: "rename-source", "{source.display()}" }
+                        button { class: "primary", disabled: view.rename_target.trim().is_empty() || view.busy, onclick: move |_| confirm_rename_selected(state), {locale.text(Text::ConfirmRenameSelected)} }
+                        button { onclick: move |_| cancel_rename_selected(state), {locale.text(Text::CancelRename)} }
+                    }
+                } else {
+                    button { disabled: selected_count != 1 || view.busy || !archive.format.supports_update(), "aria-describedby": "archive-selection-summary", onclick: move |_| request_rename_selected(state), {locale.text(Text::RenameSelected)} }
+                }
                 button { "aria-describedby": "archive-selection-summary", onclick: move |_| extract_to_named_folder(state), {locale.text(Text::ExtractToNamedFolder)} }
                 button { class: "primary", "aria-describedby": "archive-selection-summary", onclick: move |_| extract_all(state), {locale.text(Text::ExtractAll)} }
             }
@@ -776,6 +798,7 @@ fn set_entry_sort(mut state: Signal<UiState>, sort: EntrySort) {
 fn navigate_archive_directory(mut state: Signal<UiState>, directory: PathBuf) {
     let mut value = state.write();
     value.confirm_remove = false;
+    value.clear_rename();
     value.entry_directory = directory;
     value.entry_filter.clear();
     value.entry_page = 0;
@@ -1055,6 +1078,7 @@ fn clear_archive_session(value: &mut UiState) {
     value.pending_archive_requires_password = false;
     value.automatic_extract_destination = None;
     value.selected.clear();
+    value.clear_rename();
     value.entry_directory.clear();
     value.entry_filter.clear();
     value.entry_page = 0;
@@ -1317,6 +1341,73 @@ fn cancel_remove_selected(mut state: Signal<UiState>) {
     value.set_status(locale.text(Text::Ready).to_owned());
 }
 
+fn request_rename_selected(mut state: Signal<UiState>) {
+    let mut value = state.write();
+    let locale = value.locale;
+    if value.busy || value.selected.len() != 1 {
+        return;
+    }
+    let can_update = value
+        .archive
+        .as_ref()
+        .is_some_and(|archive| archive.format.supports_update());
+    if !can_update {
+        value.set_error(
+            choose(
+                locale,
+                "This archive format cannot be renamed",
+                "此压缩格式不支持重命名",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    let Some(source) = value.selected.iter().next().cloned() else {
+        return;
+    };
+    value.rename_source = Some(source);
+    value.rename_target.clear();
+    value.set_status(locale.text(Text::RenamePrompt).to_owned());
+}
+
+fn cancel_rename_selected(mut state: Signal<UiState>) {
+    let locale = state.read().locale;
+    state.write().clear_rename();
+    state
+        .write()
+        .set_status(locale.text(Text::Ready).to_owned());
+}
+
+fn confirm_rename_selected(mut state: Signal<UiState>) {
+    let (source, target, busy, locale) = {
+        let value = state.read();
+        (
+            value.rename_source.clone(),
+            value.rename_target.trim().to_owned(),
+            value.busy,
+            value.locale,
+        )
+    };
+    if busy || source.is_none() {
+        return;
+    }
+    if target.is_empty() {
+        state.write().set_error(
+            choose(
+                locale,
+                "Enter a new archive-relative path",
+                "请输入新的归档相对路径",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    state.write().clear_rename();
+    if let Some(source) = source {
+        submit_archive_rename(state, source, PathBuf::from(target));
+    }
+}
+
 fn confirm_remove_selected(mut state: Signal<UiState>) {
     let paths = state.read().selected.iter().cloned().collect::<Vec<_>>();
     if paths.is_empty() || state.read().busy {
@@ -1368,6 +1459,48 @@ fn submit_archive_update(
         format!(
             "{} {}…",
             choose(locale, "Updating", "正在更新"),
+            path.display()
+        ),
+    );
+}
+
+fn submit_archive_rename(mut state: Signal<UiState>, source: PathBuf, target: PathBuf) {
+    let value = state.read();
+    let Some(archive) = value.archive.as_ref() else {
+        return;
+    };
+    let format = archive.format;
+    let path = archive.path.clone();
+    let locale = value.locale;
+    let password = non_empty(&value.password);
+    drop(value);
+    if !format.supports_update() {
+        state.write().set_error(
+            choose(
+                locale,
+                "This archive format cannot be renamed",
+                "此压缩格式不支持重命名",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    launch_worker(
+        state,
+        WorkerRequest::Rename {
+            archive: path.clone(),
+            renames: vec![ArchiveRename {
+                from: source,
+                to: target,
+            }],
+            compression_level: format.clamp_compression_level(6),
+            password,
+            limits: SafetyLimits::default(),
+        },
+        OperationKind::Rename,
+        format!(
+            "{} {}…",
+            choose(locale, "Renaming", "正在重命名"),
             path.display()
         ),
     );
@@ -1827,6 +1960,22 @@ fn finish_worker(
             },
             StatusKind::Informational,
         ),
+        (OperationKind::Rename, Ok(WorkerOutput::Summary(summary))) => (
+            if locale == Locale::ZhCn {
+                format!(
+                    "归档项目已重命名 · {} 个文件 · {}",
+                    summary.files,
+                    format_bytes(summary.bytes)
+                )
+            } else {
+                format!(
+                    "Archive entries renamed · {} files · {}",
+                    summary.files,
+                    format_bytes(summary.bytes)
+                )
+            },
+            StatusKind::Informational,
+        ),
         (_, Ok(_)) => (
             choose(
                 locale,
@@ -1847,6 +1996,7 @@ fn finish_worker(
                     OperationKind::Extract => choose(locale, "Extraction failed", "解压失败"),
                     OperationKind::Create => choose(locale, "Creation failed", "创建失败"),
                     OperationKind::Update => choose(locale, "Update failed", "更新失败"),
+                    OperationKind::Rename => choose(locale, "Rename failed", "重命名失败"),
                 },
                 format_worker_error(locale, &error)
             ),
@@ -1859,7 +2009,10 @@ fn finish_worker(
     {
         state.write().completed_output = completed_output;
     }
-    if kind == OperationKind::Update && succeeded && status_kind == StatusKind::Informational {
+    if matches!(kind, OperationKind::Update | OperationKind::Rename)
+        && succeeded
+        && status_kind == StatusKind::Informational
+    {
         let path = state
             .read()
             .archive
@@ -1898,9 +2051,10 @@ fn operation_output_path(request: &WorkerRequest) -> Option<PathBuf> {
         WorkerRequest::Extract { destination, .. } | WorkerRequest::Create { destination, .. } => {
             Some(destination.clone())
         }
-        WorkerRequest::List { .. } | WorkerRequest::Test { .. } | WorkerRequest::Update { .. } => {
-            None
-        }
+        WorkerRequest::List { .. }
+        | WorkerRequest::Test { .. }
+        | WorkerRequest::Update { .. }
+        | WorkerRequest::Rename { .. } => None,
     }
 }
 
@@ -1950,6 +2104,7 @@ fn select_all(mut state: Signal<UiState>, selected: bool) {
         .unwrap_or_default();
     let count = paths.len();
     let mut value = state.write();
+    value.clear_rename();
     value.selected = if selected { paths } else { HashSet::new() };
     let status = if selected {
         match value.locale {
@@ -1965,6 +2120,7 @@ fn select_all(mut state: Signal<UiState>, selected: bool) {
 fn invert_selection(mut state: Signal<UiState>) {
     let mut value = state.write();
     value.confirm_remove = false;
+    value.clear_rename();
     let UiState {
         archive, selected, ..
     } = &mut *value;
@@ -1982,6 +2138,7 @@ fn invert_selection(mut state: Signal<UiState>) {
 fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected: bool) {
     let mut value = state.write();
     value.confirm_remove = false;
+    value.clear_rename();
     if selected {
         value.selected.insert(path.clone());
     } else {
@@ -1998,7 +2155,11 @@ fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected:
 }
 
 fn toggle_archive_directory(mut state: Signal<UiState>, directory: PathBuf, selected: bool) {
-    state.write().confirm_remove = false;
+    {
+        let mut value = state.write();
+        value.confirm_remove = false;
+        value.clear_rename();
+    }
     let descendants = state
         .read()
         .archive

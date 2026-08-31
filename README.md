@@ -24,6 +24,11 @@ reopened, removed one item at a time, or cleared from the home page; passwords
 and archive contents are never persisted. Archive rows are searchable and paged in bounded groups of 500 so very
 large listings do not create an unbounded widget tree.
 
+For ZIP, 7z, and TAR-family archives, entries can be added, removed, or renamed
+through an atomic sibling-staging rebuild. The desktop surfaces expose a
+single-entry rename editor, while the CLI supports repeated mappings such as
+`zifile rename archive.zip --rename old.txt=new.txt`.
+
 The packaged Windows 11 Explorer integration adds a create command for selected
 files, selected folders, and a folder's background, plus an extract command for
 supported archive files. The extension only forwards local paths to the desktop;
@@ -59,6 +64,7 @@ cargo run -p zifile-cli -- formats
 cargo run -p zifile-cli -- list archive.zip
 cargo run -p zifile-cli -- extract archive.zip output --conflict rename
 cargo run -p zifile-cli -- create output.7z files --format seven-zip
+cargo run -p zifile-cli -- rename archive.zip --rename old.txt=new.txt
 cargo run -p zifile-desktop
 ```
 
@@ -97,7 +103,7 @@ pnpm --dir docs build
 | --- | --- |
 | Core model | Real create/list/test/extract operations with shared safety policy |
 | Desktop | Bilingual modern browser/creator, isolated archive worker and Windows taskbar progress |
-| CLI | `formats`, `detect`, `list`, `test`, `extract`, `create`, and safe in-place `update` |
+| CLI | `formats`, `detect`, `list`, `test`, `extract`, `create`, `update`, and safe in-place `rename` |
 | Archive providers | ZIP/ZIP64/AES, 7z/AES, read-only RAR 1.3 through RAR 7 with encryption, read-only Windows CAB, TAR compositions including TAR + LZMA, standalone LZMA, and common streams |
 | Packaging | Real x64/ARM64 build outputs combined into one all-in-one MSIX bundle for users |
 | Distribution | Tag workflow publishes one MSIX bundle, one standalone portable EXE per architecture and one checksum; SBOM, provenance, audits and WinGet candidates remain build evidence |

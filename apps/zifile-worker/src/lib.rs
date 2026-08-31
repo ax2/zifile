@@ -154,6 +154,30 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             })?;
             emit(&writer, WorkerEvent::Summary { summary })?;
         }
+        WorkerRequest::Rename {
+            archive,
+            renames,
+            compression_level,
+            password,
+            limits,
+        } => {
+            let progress = OperationProgress::default();
+            let cancellation = zifile_core::CancellationToken::default();
+            listen_for_cancel(cancellation.clone());
+            wait_for_test_delay(&cancellation);
+            let options = zifile_core::UpdateOptions {
+                compression_level,
+                password,
+                limits,
+                cancellation,
+                progress: progress.clone(),
+                ..Default::default()
+            };
+            let summary = with_progress(writer.clone(), progress, move || {
+                zifile_core::rename_archive(archive, &renames, &options)
+            })?;
+            emit(&writer, WorkerEvent::Summary { summary })?;
+        }
     }
     Ok(())
 }

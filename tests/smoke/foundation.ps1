@@ -209,7 +209,7 @@ try {
         throw 'Worker executable was not produced.'
     }
     $workerRequest = @{
-        version = 2
+        version = 3
         payload = @{
             operation = 'list'
             archive = $archivePath
@@ -239,7 +239,7 @@ try {
     }
 
     $workerTestRequest = @{
-        version = 2
+        version = 3
         payload = @{
             operation = 'test'
             archive = $archivePath
@@ -264,6 +264,38 @@ try {
         throw 'Worker integrity test did not emit a complete final progress snapshot before its archive result.'
     }
 
+    $workerRenameArchive = Join-Path $smokeRoot 'worker-rename.tar.gz'
+    Copy-Item -LiteralPath $archivePath -Destination $workerRenameArchive
+    $workerRenameRequest = @{
+        version = 3
+        payload = @{
+            operation = 'rename'
+            archive = $workerRenameArchive
+            renames = @(@{ from = 'input/hello.txt'; to = 'input/renamed.txt' })
+            compression_level = 6
+            password = $null
+            limits = @{
+                max_entries = 1000000
+                max_expanded_bytes = 549755813888
+                max_expansion_ratio = 1000
+                max_path_depth = 128
+            }
+        }
+    } | ConvertTo-Json -Depth 8 -Compress
+    $workerRenameLines = @($workerRenameRequest | & $workerPath)
+    $workerRenameOutput = $workerRenameLines -join "`n"
+    if ($LASTEXITCODE -ne 0 -or
+        $workerRenameOutput -notmatch '"event":"summary"' -or
+        $workerRenameOutput -match '"event":"error"') {
+        throw "Worker archive rename smoke test failed: $workerRenameOutput"
+    }
+    $renamedListing = (& $cliPath list $workerRenameArchive 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or
+        $renamedListing -notmatch 'renamed.txt' -or
+        $renamedListing -match 'hello.txt') {
+        throw 'Worker archive rename did not persist the expected archive-relative path.'
+    }
+
     $cancelRoot = Join-Path $smokeRoot 'worker-cancel'
     New-Item -ItemType Directory -Path $cancelRoot | Out-Null
     $cancelSource = Join-Path $cancelRoot 'random.bin'
@@ -280,7 +312,7 @@ try {
         $sourceStream.Dispose()
     }
     $createRequest = @{
-        version = 2
+        version = 3
         payload = @{
             operation = 'create'
             sources = @($cancelSource)
@@ -291,7 +323,7 @@ try {
         }
     } | ConvertTo-Json -Depth 6 -Compress
     $cancelRequest = @{
-        version = 2
+        version = 3
         payload = @{ control = 'cancel' }
     } | ConvertTo-Json -Depth 4 -Compress
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
