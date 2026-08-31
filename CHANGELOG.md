@@ -6,6 +6,10 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [0.1.8] - 2026-08-31
+
 ### Added
 
 - Expose an explicit, busy-safe retry action after a non-password archive-open
