@@ -2513,7 +2513,22 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
             )
             .into()
     };
-    let operation_controls = row![
+    let conflict_control = column![
+        text(state.locale.text(Text::ConflictPolicy)).size(13),
+        pick_list(
+            ConflictChoice::ALL.map(|choice| LocalizedConflict {
+                choice,
+                locale: state.locale
+            }),
+            Some(LocalizedConflict {
+                choice: state.conflict,
+                locale: state.locale
+            }),
+            |value| Message::ConflictChanged(value.choice)
+        ),
+    ]
+    .spacing(4);
+    let archive_management_controls = row![
         button(state.locale.text(Text::Reload)).on_press(Message::ReloadArchive),
         button(state.locale.text(Text::AddToArchive))
             .style(button::secondary)
@@ -2526,24 +2541,18 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
                 (archive.format.supports_update() && !state.busy)
                     .then_some(Message::AddFolderToArchive),
             ),
-        remove_control,
-        rename_control,
-        batch_rename_control,
-        column![
-            text(state.locale.text(Text::ConflictPolicy)).size(13),
-            pick_list(
-                ConflictChoice::ALL.map(|choice| LocalizedConflict {
-                    choice,
-                    locale: state.locale
-                }),
-                Some(LocalizedConflict {
-                    choice: state.conflict,
-                    locale: state.locale
-                }),
-                |value| Message::ConflictChanged(value.choice)
-            ),
-        ]
-        .spacing(4),
+        space().width(Fill),
+        conflict_control,
+    ]
+    .align_y(iced::Alignment::Center)
+    .spacing(10);
+    let archive_edit_controls = row![remove_control, rename_control]
+        .align_y(iced::Alignment::Center)
+        .spacing(10);
+    let archive_batch_rename_controls = row![batch_rename_control]
+        .align_y(iced::Alignment::Center)
+        .spacing(10);
+    let archive_extract_controls = row![
         button(state.locale.text(Text::ExtractSelected))
             .style(button::secondary)
             .on_press_maybe((!state.selected.is_empty()).then_some(Message::Extract)),
@@ -2556,7 +2565,24 @@ fn archive_view(state: &ZiFile) -> Element<'_, Message> {
     ]
     .spacing(10);
 
-    let controls = column![selection_controls, operation_controls].spacing(10);
+    let controls = column![
+        container(selection_controls)
+            .padding(12)
+            .style(container::rounded_box),
+        container(archive_management_controls)
+            .padding(12)
+            .style(container::rounded_box),
+        container(archive_edit_controls)
+            .padding(12)
+            .style(container::rounded_box),
+        container(archive_batch_rename_controls)
+            .padding(12)
+            .style(container::rounded_box),
+        container(archive_extract_controls)
+            .padding(12)
+            .style(container::rounded_box),
+    ]
+    .spacing(8);
 
     let filtered_count = browser_entry_count(archive, &state.entry_directory, &state.entry_filter);
     let last_page = filtered_count.saturating_sub(1) / ENTRIES_PER_PAGE;
@@ -3817,6 +3843,28 @@ mod tests {
         assert!(source.contains("Text::ExtractAll"));
         assert!(source.contains(".style(button::primary)"));
         assert!(source.contains("Message::ExtractAll"));
+    }
+
+    #[test]
+    fn archive_action_toolbar_keeps_management_and_extraction_groups_separate() {
+        let source = include_str!("main.rs");
+        let archive_view = source
+            .split_once("fn archive_view(state: &ZiFile)")
+            .expect("archive view")
+            .1
+            .split_once("fn create_view(state: &ZiFile)")
+            .expect("create view follows archive view")
+            .0;
+        assert!(archive_view.contains("let archive_management_controls = row!["));
+        assert!(
+            archive_view
+                .contains("let archive_edit_controls = row![remove_control, rename_control]")
+        );
+        assert!(
+            archive_view.contains("let archive_batch_rename_controls = row![batch_rename_control]")
+        );
+        assert!(archive_view.contains("let archive_extract_controls = row!["));
+        assert!(archive_view.contains("container(selection_controls)"));
     }
 
     #[test]
