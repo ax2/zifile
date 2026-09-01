@@ -152,7 +152,7 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: artifacts-${{ matrix.architecture }}/*
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-${{ matrix.architecture }}
           path: artifacts-${{ matrix.architecture }}/*
@@ -190,7 +190,7 @@ jobs:
           Get-FileHash -LiteralPath (Get-ChildItem -LiteralPath $output -Filter '*.msixbundle').FullName -Algorithm SHA256 |
             ForEach-Object { "{0}  {1}" -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf) } |
             Set-Content -LiteralPath "$output/SHA256SUMS.txt"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-all-in-one
           path: all-in-one/*
@@ -325,7 +325,7 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: artifacts-${{ matrix.architecture }}/*
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: signed-windows-${{ matrix.architecture }}
           path: artifacts-${{ matrix.architecture }}/*
@@ -355,7 +355,7 @@ jobs:
             cp "$file" "sbom/${name}.cdx.json"
           done
           test -n "$(find sbom -type f -print -quit)"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom/*
@@ -403,7 +403,7 @@ jobs:
           New-Item -ItemType Directory -Path release-support -Force | Out-Null
           Copy-Item -Path "$manifestDirectory/*.yaml" -Destination release-support
       - name: Upload WinGet submission candidate
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: winget-manifest-candidate
           path: release-support/*.yaml

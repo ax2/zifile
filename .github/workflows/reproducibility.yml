@@ -44,7 +44,7 @@ jobs:
           ./tests/reproducibility/windows-build.ps1 `
             -Architecture '${{ matrix.architecture }}' `
             -EvidencePath "$env:RUNNER_TEMP\reproducibility-${{ matrix.architecture }}.json"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: reproducibility-${{ matrix.architecture }}

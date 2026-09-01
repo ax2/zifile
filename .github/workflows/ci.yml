@@ -106,38 +106,38 @@ jobs:
           ./tests/interoperability/zip-zstd-corpus.ps1 -SkipBuild
       - name: Upload Windows reference-tool interoperability evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: windows-tools-interoperability
           path: target/windows-tools-interoperability.json
           if-no-files-found: warn
           retention-days: 30
       - name: Upload CAB interoperability evidence
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: cab-interoperability
           path: target/cab-interoperability.json
           retention-days: 30
       - name: Upload 7-Zip interoperability evidence
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sevenzip-corpus
           path: target/sevenzip-corpus.json
           retention-days: 30
       - name: Upload ZIP method interoperability evidence
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: zip-method-corpus
           path: target/zip-method-corpus.json
           retention-days: 30
       - name: Upload ZIP legacy interoperability evidence
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: zip-legacy-corpus
           path: target/zip-legacy-corpus.json
           retention-days: 30
       - name: Upload ZIP Zstandard interoperability evidence
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: zip-zstd-corpus
           path: target/zip-zstd-corpus.json
@@ -160,7 +160,7 @@ jobs:
         run: ./tests/interoperability/rar-corpus.ps1 -SkipBuild
       - name: Upload RAR interoperability evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: rar-corpus
           path: target/rar-corpus.json
@@ -192,7 +192,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Upload performance evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: rust-performance
           path: |

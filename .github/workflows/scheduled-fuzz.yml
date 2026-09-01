@@ -42,7 +42,7 @@ jobs:
         run: cargo +nightly fuzz run --fuzz-dir fuzz --target x86_64-unknown-linux-gnu archive_parsers -- -max_total_time=180 -timeout=10 -max_len=262144 -rss_limit_mb=2048
       - name: Preserve crash artifacts
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-crash-artifacts
           path: fuzz/artifacts
