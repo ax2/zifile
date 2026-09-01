@@ -19,6 +19,9 @@ use lzma_rust2::{LzmaOptions, LzmaReader, LzmaWriter};
 use rars::{
     Archive as RarArchive, ArchiveMemberDetail as RarMemberDetail,
     ArchiveReadOptions as RarReadOptions, ArchiveReader as RarReader,
+    ArchiveVersion as RarArchiveVersion, Builder as RarBuilder, EntrySource as RarEntrySource,
+    WriteOperation as RarWriteOperation, WriteProgress as RarWriteProgress,
+    WriteProgressEvent as RarWriteProgressEvent, WriterResources as RarWriterResources,
 };
 use serde::{Deserialize, Serialize};
 use sevenz_rust2::{ArchiveReader as SevenZReader, ArchiveWriter as SevenZWriter, Password};
@@ -597,8 +600,8 @@ fn create_archive_inner(
         | ArchiveFormat::Bzip2
         | ArchiveFormat::Lz4
         | ArchiveFormat::Brotli => create_stream(sources, destination, format, options),
+        ArchiveFormat::Rar => create_rar(sources, destination, options),
         ArchiveFormat::Cab => create_cab(sources, destination, options),
-        ArchiveFormat::Rar => Err(ZiFileError::UnsupportedOperation(format)),
     }
 }
 
@@ -2150,6 +2153,138 @@ fn create_tar(
     Ok(summary)
 }
 
+struct RarCreateProgress {
+    cancellation: CancellationToken,
+    progress: OperationProgress,
+    compression_bytes: Mutex<u64>,
+}
+
+impl RarCreateProgress {
+    fn new(cancellation: CancellationToken, progress: OperationProgress) -> Self {
+        Self {
+            cancellation,
+            progress,
+            compression_bytes: Mutex::new(0),
+        }
+    }
+}
+
+impl RarWriteProgress for RarCreateProgress {
+    fn report(&self, event: RarWriteProgressEvent<'_>) {
+        match event {
+            RarWriteProgressEvent::OperationStarted {
+                operation: RarWriteOperation::Compression,
+                ..
+            } => {
+                if let Ok(mut completed) = self.compression_bytes.lock() {
+                    *completed = 0;
+                }
+            }
+            RarWriteProgressEvent::Advanced {
+                operation: RarWriteOperation::Compression,
+                completed_bytes,
+                ..
+            } => {
+                if let Ok(mut previous) = self.compression_bytes.lock() {
+                    let delta = completed_bytes.saturating_sub(*previous);
+                    *previous = (*previous).max(completed_bytes);
+                    self.progress.advance_bytes(delta);
+                }
+            }
+            RarWriteProgressEvent::EntryFinished {
+                operation: RarWriteOperation::Compression,
+                ..
+            } => self.progress.advance_entry(),
+            _ => {}
+        }
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancellation.is_cancelled()
+    }
+}
+
+fn create_rar(
+    sources: &[PathBuf],
+    destination: &Path,
+    options: &CreateOptions,
+) -> ZiFileResult<OperationSummary> {
+    let entries = collect_sources(sources, destination)?;
+    let files: Vec<&SourceEntry> = entries.iter().filter(|entry| !entry.is_directory).collect();
+    if files.is_empty() {
+        return Err(ZiFileError::InvalidInput(
+            "RAR requires at least one file; empty directories cannot be represented".to_owned(),
+        ));
+    }
+    for directory in entries.iter().filter(|entry| entry.is_directory) {
+        if !files.iter().any(|file| {
+            file.archive_path.starts_with(&directory.archive_path)
+                && file.archive_path != directory.archive_path
+        }) {
+            return Err(ZiFileError::InvalidInput(format!(
+                "RAR cannot preserve empty directory: {}",
+                archive_name(&directory.archive_path)
+            )));
+        }
+    }
+
+    set_source_totals(&entries, &options.progress);
+    let password = options
+        .password
+        .as_deref()
+        .filter(|value| !value.is_empty())
+        .map(|value| value.as_bytes().to_vec());
+    let encrypt_headers = password.is_some();
+    let mut builder = RarBuilder::new(RarArchiveVersion::Rar50)
+        .compression_level(Some(options.compression_level.min(5)))
+        .password(password)
+        .header_encryption(encrypt_headers);
+    for source in &files {
+        options.cancellation.check()?;
+        builder
+            .add_source(
+                source
+                    .archive_path
+                    .to_string_lossy()
+                    .replace('\\', "/")
+                    .into_bytes(),
+                RarEntrySource::from_path(&source.disk_path),
+                source.modified.and_then(rar_dos_time),
+                None,
+            )
+            .map_err(map_rar_error)?;
+    }
+
+    let mut temporary = temporary_archive(destination)?;
+    let resources = RarWriterResources::default().with_temp_dir(
+        destination
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new(".")),
+    );
+    let writer_progress =
+        RarCreateProgress::new(options.cancellation.clone(), options.progress.clone());
+    builder
+        .write_to(temporary.as_file_mut(), &resources, Some(&writer_progress))
+        .map_err(map_rar_error)?;
+    options.cancellation.check()?;
+    persist_archive(temporary, destination)?;
+
+    let bytes = files.iter().map(|source| source.size).sum();
+    options.progress.update(ProgressSnapshot {
+        processed_entries: files.len() as u64,
+        total_entries: files.len() as u64,
+        processed_bytes: bytes,
+        total_bytes: bytes,
+    });
+    Ok(OperationSummary {
+        files: files.len() as u64,
+        directories: entries.iter().filter(|entry| entry.is_directory).count() as u64,
+        bytes,
+        ..OperationSummary::default()
+    })
+}
+
 fn create_cab(
     sources: &[PathBuf],
     destination: &Path,
@@ -3294,6 +3429,20 @@ fn zip_datetime_to_system_time(value: zip::DateTime) -> Option<SystemTime> {
 fn system_time_to_zip_datetime(value: SystemTime) -> Option<zip::DateTime> {
     let value = time::OffsetDateTime::from(value);
     zip::DateTime::try_from(time::PrimitiveDateTime::new(value.date(), value.time())).ok()
+}
+
+fn rar_dos_time(value: SystemTime) -> Option<u32> {
+    let value = system_time_to_zip_datetime(value)?;
+    let year = value.year();
+    if !(1980..=2107).contains(&year) {
+        return None;
+    }
+    let date =
+        (u32::from(year - 1980) << 9) | (u32::from(value.month()) << 5) | u32::from(value.day());
+    let time = (u32::from(value.hour()) << 11)
+        | (u32::from(value.minute()) << 5)
+        | u32::from(value.second() / 2);
+    Some((date << 16) | time)
 }
 
 fn rar_modified_time(value: u32, refinement: Option<rars::TimeRefinement>) -> Option<SystemTime> {

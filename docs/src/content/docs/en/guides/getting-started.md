@@ -28,7 +28,7 @@ Work runs in an isolated Worker. Pressing `Escape` or choosing **Cancel** reques
 2. Add files or folders, or drop sources onto the window.
 3. Choose a format, compression level, optional password, and output path.
 
-ZIP, 7z, CAB, and TAR compositions accept multiple files and folders; CAB uses fixed MSZIP compression and cannot preserve empty directories. gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli are single-file streams and require exactly one existing file; use the matching TAR composition for a directory. RAR is read-only and cannot be created.
+ZIP, 7z, RAR, CAB, and TAR compositions accept multiple files and folders. RAR creates RAR 5 archives at levels 0–5 and can encrypt headers, but cannot preserve empty directories or be updated in place; CAB uses fixed MSZIP compression and cannot preserve empty directories. gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli are single-file streams and require exactly one existing file; use the matching TAR composition for a directory.
 
 After opening a ZIP, 7z, or TAR-family archive, use `Add to archive` or `Add folder to archive` to update it in place, or select entries and choose `Remove selected`. Updates and removals extract, merge or delete, and rebuild in a temporary workspace beside the original, replacing the original only after success; single-file streams, RAR, and CAB cannot be updated.
 

@@ -9,7 +9,7 @@ description: Common ZiFile open, extraction, creation, Worker, and installation 
 - The extension may not match the real format. ZiFile fails safely instead of guessing the wrong decoder.
 - Encrypted archives require the correct password. The CLI uses `--password-stdin`; an empty password is rejected.
 - If a file was still being written or a transient I/O fault occurred, the failed-open view retains its path and offers one **Reload** attempt; an encrypted file list instead presents password entry and **Unlock**. Do not repeatedly retry an untrusted archive or one rejected by a safety limit.
-- Volumes, recovery records, or uncommon encodings may be outside the current scope. RAR reading is Beta and RAR creation is unsupported.
+- RAR volumes, recovery records, or uncommon encodings may be outside the current scope. RAR reading and RAR 5 creation are Beta.
 
 For a compatibility report, provide the creating tool and version, format options, ZiFile version, and a public minimal reproducer when possible. Never upload customer data, passwords, or private archives.
 
@@ -24,7 +24,7 @@ ZiFile also rejects an extraction root or existing parent directory that is a sy
 - A gzip, zstd, xz, lzma, bzip2, lz4, or Brotli stream requires exactly one existing file and cannot accept a directory.
 - ZIP, 7z, and TAR compositions accept multiple files and folders.
 - Creation is blocked before the save dialog when sources are empty, no longer exist, are symbolic links, or the output is invalid.
-- RAR is read-only and cannot be selected as a creation format.
+- RAR creation emits RAR 5 archives at levels 0–5; RAR update and rename are not supported.
 
 ## An operation is slow or cancelled
 

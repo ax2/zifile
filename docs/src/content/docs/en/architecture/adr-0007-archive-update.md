@@ -13,7 +13,7 @@ Users need to add files or folders from the archive browser and remove selected 
 
 ## Decision
 
-- Expose updates only for ZIP, 7z, and TAR-family multi-entry containers. gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli are single-file streams; RAR and CAB remain read-only.
+- Expose updates only for ZIP, 7z, and TAR-family multi-entry containers. gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli are single-file streams; RAR and CAB can be created but do not support update or rename.
 - The core fully lists and safely extracts the original into a sibling staging workspace, then merges additions by source root or removes selected archive-relative paths and their descendants. Colliding regular files are replaced; file/directory type collisions, links, and reparse points are rejected.
 - The rebuild reuses the same safety limits, password, cancellation token, and progress channel. Any failure or cancellation leaves the original archive untouched.
 - Commit uses platform atomic replacement semantics: Windows calls `MoveFileExW` with replace/write-through flags, while other platforms use `rename`. RAII removes the staging workspace; it is never a release asset.

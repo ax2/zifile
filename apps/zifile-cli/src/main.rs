@@ -145,6 +145,7 @@ enum FormatArg {
     Bzip2,
     Lz4,
     Brotli,
+    Rar,
     Cab,
 }
 
@@ -167,6 +168,7 @@ impl From<FormatArg> for ArchiveFormat {
             FormatArg::Bzip2 => Self::Bzip2,
             FormatArg::Lz4 => Self::Lz4,
             FormatArg::Brotli => Self::Brotli,
+            FormatArg::Rar => Self::Rar,
             FormatArg::Cab => Self::Cab,
         }
     }
@@ -434,7 +436,11 @@ fn resolve_compression_level(format: ArchiveFormat, requested: Option<u8>) -> io
     let default = CreateOptions::default().compression_level;
     match (format.compression_level_range(), requested) {
         (Some((minimum, maximum)), requested) => {
-            let level = requested.unwrap_or(default);
+            let level = requested.unwrap_or(if format == ArchiveFormat::Rar {
+                5
+            } else {
+                default
+            });
             if (minimum..=maximum).contains(&level) {
                 Ok(level)
             } else {
@@ -543,6 +549,7 @@ mod tests {
                 "bzip2",
                 "lz4",
                 "brotli",
+                "rar",
                 "cab",
             ]
         );
@@ -620,7 +627,7 @@ mod tests {
         assert!(matrix.contains("Brotli\tyes\tyes\tyes\tsingle-file\t0-11\tno\tAlpha"));
         assert!(matrix.contains("TAR\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha"));
         assert!(matrix.contains("LZ4\tyes\tyes\tyes\tsingle-file\tfixed\tno\tAlpha"));
-        assert!(matrix.contains("RAR\tyes\tyes\tno\tnone\tnone\tyes\tBeta"));
+        assert!(matrix.contains("RAR\tyes\tyes\tyes\tfiles-or-directories\t0-5\tyes\tBeta"));
         assert!(matrix.contains("CAB\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tBeta"));
     }
 
@@ -629,6 +636,10 @@ mod tests {
         assert_eq!(
             resolve_compression_level(ArchiveFormat::Zip, None).unwrap(),
             6
+        );
+        assert_eq!(
+            resolve_compression_level(ArchiveFormat::Rar, None).unwrap(),
+            5
         );
         assert_eq!(
             resolve_compression_level(ArchiveFormat::Zip, Some(9)).unwrap(),

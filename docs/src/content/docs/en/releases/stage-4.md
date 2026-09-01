@@ -13,12 +13,12 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 ## Current Unreleased increment
 
-There is one pending release increment: Windows CAB now supports fixed-MSZIP creation across the core, CLI, both desktop format menus, list/test/selective-extract round trips, and bilingual documentation; empty-directory, password, update, and rename limits are explicit. v0.1.14 ships the professional grouped archive toolbar; TAR + LZ4 ships in v0.1.13 across the core, CLI, both desktop format menus, the update path, format detection, round-trip/smoke/performance tests, and bilingual documentation.
+There is one pending release increment: RAR 5 creation now supports levels 0–5, password-protected headers, progress, cancellation and atomic output across the core, CLI, both desktop format menus, core round trips, Windows smoke tests and bilingual documentation; RAR volumes, recovery records, update and rename limits are explicit. Windows CAB now supports fixed-MSZIP creation across the core, CLI, both desktop format menus, list/test/selective-extract round trips, and bilingual documentation; empty-directory, password, update, and rename limits are explicit. v0.1.14 ships the professional grouped archive toolbar; TAR + LZ4 ships in v0.1.13 across the core, CLI, both desktop format menus, the update path, format detection, round-trip/smoke/performance tests, and bilingual documentation.
 
 ## Prepared
 
 - `docs/src/content/docs/en/development/contracts.md` defines CLI commands, format values, conflict policies, password input, exit codes, core-provider boundaries, and Worker protocol compatibility.
-- `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, seventeen creation formats, eighteen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
+- `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, eighteen creation formats, eighteen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
 - `release/readiness.json` binds stable tags to accessibility, queue, trusted-install, ARM64, screenshot, WACK, WinGet, Store, Partner Center, and signing evidence.
 - The Release workflow derives dual-architecture builds, audits, checksums, SBOMs, provenance, and GitHub Releases from the workspace version; ordinary public releases use unsigned artifacts, while formal signing can be enabled explicitly through workflow inputs.
 - `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, `v0.1.8`, `v0.1.9`, `v0.1.10`, `v0.1.11`, `v0.1.12`, `v0.1.13`, and `v0.1.14` have been published as public GitHub Releases from matching tags.

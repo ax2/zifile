@@ -8,6 +8,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Add RAR 5 creation through the pure-Rust `rars` backend, including levels
+  0–5, optional encrypted headers, source metadata, progress/cancellation and
+  atomic output. RAR update and rename remain explicitly unsupported.
 - Add Windows CAB creation with fixed MSZIP compression, shared format-menu
   coverage, safe listing/testing/extraction verification, and explicit limits
   for passwords, empty directories, file names, file counts, and file sizes.

@@ -95,14 +95,10 @@ mod tests {
     }
 
     #[test]
-    fn missing_and_read_only_inputs_are_reported() {
+    fn missing_inputs_are_reported() {
         assert_eq!(
             create_source_issue(ArchiveFormat::Zip, &[]),
             Some(CreateSourceIssue::MissingSources)
-        );
-        assert_eq!(
-            create_source_issue(ArchiveFormat::Rar, &[PathBuf::from("source")]),
-            Some(CreateSourceIssue::UnsupportedFormat)
         );
         assert_eq!(
             create_source_issue(ArchiveFormat::Zip, &[PathBuf::from("missing-source")]),

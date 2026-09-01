@@ -8,7 +8,7 @@ description: Isolating archive implementations behind capability-driven interfac
 
 ## Decision
 
-Every archive format is integrated through one Provider boundary. A Provider explicitly reports its browse, extract, create, test, encryption, multipart, and create-input-shape capabilities. Create input distinguishes files-and-directories from exactly one file; read-only formats such as RAR report that creation is unavailable, while CAB reports fixed-MSZIP creation without encryption.
+Every archive format is integrated through one Provider boundary. A Provider explicitly reports its browse, extract, create, test, encryption, multipart, and create-input-shape capabilities. Create input distinguishes files-and-directories from exactly one file; RAR reports RAR 5 creation, while CAB reports fixed-MSZIP creation without encryption.
 
 ## Consequences
 
