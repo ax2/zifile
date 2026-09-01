@@ -27,11 +27,12 @@ mod archive;
 mod path_policy;
 
 pub use archive::{
-    ArchiveEntryInfo, ArchiveInfo, ArchiveTimestamp, ArchiveTimestampOffset,
+    ArchiveEntryInfo, ArchiveInfo, ArchiveRename, ArchiveTimestamp, ArchiveTimestampOffset,
     ArchiveTimestampPrecision, CancellationToken, ConflictPolicy, CreateOptions, ExtractOptions,
-    ListOptions, OperationProgress, OperationSummary, ProgressSnapshot, TestOptions,
+    ListOptions, OperationProgress, OperationSummary, ProgressSnapshot, TestOptions, UpdateOptions,
     create_archive, extract_archive, list_archive, list_archive_with_limits,
-    list_archive_with_options, test_archive, test_archive_with_limits, test_archive_with_options,
+    list_archive_with_options, rename_archive, test_archive, test_archive_with_limits,
+    test_archive_with_options, update_archive,
 };
 pub use path_policy::safe_relative_path;
 
@@ -46,6 +47,7 @@ pub enum ArchiveFormat {
     TarXz,
     TarLzma,
     TarBzip2,
+    TarLz4,
     Gzip,
     Zstandard,
     Xz,
@@ -62,7 +64,7 @@ pub enum ArchiveFormat {
 pub const OPEN_ARCHIVE_EXTENSIONS: &[&str] = &[
     "zip", "zipx", "cbz", "epub", "7z", "cb7", "rar", "cbr", "cab", "tar", "cbt", "gz", "tar.gz",
     "tgz", "zst", "tar.zst", "tzst", "xz", "tar.xz", "txz", "tar.lzma", "lzma", "bz", "bz2",
-    "tar.bz2", "tbz", "tbz2", "lz4", "br",
+    "tar.bz2", "tbz", "tbz2", "tar.lz4", "tlz4", "lz4", "br",
 ];
 
 /// Compound suffixes whose outer stream is a TAR archive.
@@ -80,11 +82,13 @@ pub const COMPOUND_ARCHIVE_EXTENSIONS: &[(&str, ArchiveFormat)] = &[
     (".tar.bz2", ArchiveFormat::TarBzip2),
     (".tbz2", ArchiveFormat::TarBzip2),
     (".tbz", ArchiveFormat::TarBzip2),
+    (".tar.lz4", ArchiveFormat::TarLz4),
+    (".tlz4", ArchiveFormat::TarLz4),
 ];
 
 impl ArchiveFormat {
     /// Stable display order used by both CLI and desktop UI.
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::Zip,
         Self::SevenZip,
         Self::Tar,
@@ -93,6 +97,7 @@ impl ArchiveFormat {
         Self::TarXz,
         Self::TarLzma,
         Self::TarBzip2,
+        Self::TarLz4,
         Self::Gzip,
         Self::Zstandard,
         Self::Xz,
@@ -108,7 +113,7 @@ impl ArchiveFormat {
     ///
     /// Keeping this beside `ALL` prevents the two desktop interfaces from
     /// maintaining subtly different creation menus as new providers arrive.
-    pub const CREATABLE: [Self; 15] = [
+    pub const CREATABLE: [Self; 16] = [
         Self::Zip,
         Self::SevenZip,
         Self::Tar,
@@ -117,6 +122,7 @@ impl ArchiveFormat {
         Self::TarXz,
         Self::TarLzma,
         Self::TarBzip2,
+        Self::TarLz4,
         Self::Gzip,
         Self::Zstandard,
         Self::Xz,
@@ -137,7 +143,8 @@ impl ArchiveFormat {
             | Self::TarZstd
             | Self::TarXz
             | Self::TarLzma
-            | Self::TarBzip2 => FormatCapabilities::read_write(false, ReleaseStage::Alpha),
+            | Self::TarBzip2
+            | Self::TarLz4 => FormatCapabilities::read_write(false, ReleaseStage::Alpha),
             Self::Gzip
             | Self::Zstandard
             | Self::Xz
@@ -166,7 +173,8 @@ impl ArchiveFormat {
             | Self::TarZstd
             | Self::TarXz
             | Self::TarLzma
-            | Self::TarBzip2 => Some(CreateInputKind::FilesAndDirectories),
+            | Self::TarBzip2
+            | Self::TarLz4 => Some(CreateInputKind::FilesAndDirectories),
         }
     }
 
@@ -187,7 +195,7 @@ impl ArchiveFormat {
             Self::TarZstd | Self::Zstandard => Some((0, 22)),
             Self::TarBzip2 | Self::Bzip2 => Some((1, 9)),
             Self::Brotli => Some((0, 11)),
-            Self::Tar | Self::Lz4 | Self::Rar | Self::Cab => None,
+            Self::Tar | Self::TarLz4 | Self::Lz4 | Self::Rar | Self::Cab => None,
         }
     }
 
@@ -212,6 +220,7 @@ impl ArchiveFormat {
             Self::TarXz => "tar.xz",
             Self::TarLzma => "tar.lzma",
             Self::TarBzip2 => "tar.bz2",
+            Self::TarLz4 => "tar.lz4",
             Self::Gzip => "gz",
             Self::Zstandard => "zst",
             Self::Xz => "xz",
@@ -233,6 +242,25 @@ impl ArchiveFormat {
                 | Self::TarXz
                 | Self::TarLzma
                 | Self::TarBzip2
+                | Self::TarLz4
+        )
+    }
+
+    /// Whether an existing multi-entry archive can be rebuilt in place through
+    /// the safe update path. Single-file streams and read-only providers stay
+    /// explicitly out of this operation.
+    pub const fn supports_update(self) -> bool {
+        matches!(
+            self,
+            Self::Zip
+                | Self::SevenZip
+                | Self::Tar
+                | Self::TarGzip
+                | Self::TarZstd
+                | Self::TarXz
+                | Self::TarLzma
+                | Self::TarBzip2
+                | Self::TarLz4
         )
     }
 }
@@ -255,6 +283,7 @@ impl fmt::Display for ArchiveFormat {
             Self::TarXz => "TAR + XZ",
             Self::TarLzma => "TAR + LZMA",
             Self::TarBzip2 => "TAR + Bzip2",
+            Self::TarLz4 => "TAR + LZ4",
             Self::Gzip => "gzip",
             Self::Zstandard => "Zstandard",
             Self::Xz => "XZ",
@@ -432,7 +461,11 @@ pub fn detect_format(path: impl AsRef<Path>) -> ZiFileResult<ArchiveFormat> {
             detect_tar_composition(path, ArchiveFormat::TarBzip2).unwrap_or(ArchiveFormat::Bzip2)
         })
     } else if bytes.starts_with(b"\x04\x22\x4D\x18") {
-        Some(ArchiveFormat::Lz4)
+        Some(if extension_hint == Some(ArchiveFormat::TarLz4) {
+            ArchiveFormat::TarLz4
+        } else {
+            detect_tar_composition(path, ArchiveFormat::TarLz4).unwrap_or(ArchiveFormat::Lz4)
+        })
     } else if bytes.get(257..262) == Some(b"ustar") {
         Some(ArchiveFormat::Tar)
     } else if extension_hint == Some(ArchiveFormat::Brotli) {
@@ -461,6 +494,7 @@ fn detect_tar_composition(path: &Path, format: ArchiveFormat) -> Option<ArchiveF
         ArchiveFormat::TarZstd => Box::new(zstd::stream::read::Decoder::new(input).ok()?),
         ArchiveFormat::TarXz => Box::new(xz2::read::XzDecoder::new(input)),
         ArchiveFormat::TarBzip2 => Box::new(bzip2::read::BzDecoder::new(input)),
+        ArchiveFormat::TarLz4 => Box::new(lz4_flex::frame::FrameDecoder::new(input)),
         _ => return None,
     };
     let mut header = [0_u8; 512];
@@ -532,6 +566,10 @@ mod tests {
         assert_eq!(
             detect_format_from_path("backup.tar.bz2"),
             Some(ArchiveFormat::TarBzip2)
+        );
+        assert_eq!(
+            detect_format_from_path("backup.tar.lz4"),
+            Some(ArchiveFormat::TarLz4)
         );
     }
 
@@ -606,6 +644,7 @@ mod tests {
             ArchiveFormat::TarXz,
             ArchiveFormat::TarLzma,
             ArchiveFormat::TarBzip2,
+            ArchiveFormat::TarLz4,
         ] {
             assert_eq!(
                 format.create_input(),
@@ -629,7 +668,7 @@ mod tests {
 
     #[test]
     fn creatable_display_order_matches_capabilities() {
-        assert_eq!(ArchiveFormat::CREATABLE.len(), 15);
+        assert_eq!(ArchiveFormat::CREATABLE.len(), 16);
         for format in ArchiveFormat::CREATABLE {
             assert!(format.capabilities().create);
             assert!(format.create_input().is_some());
@@ -639,6 +678,39 @@ mod tests {
                 assert!(!format.capabilities().create);
                 assert_eq!(format.create_input(), None);
             }
+        }
+    }
+
+    #[test]
+    fn update_capability_is_limited_to_multi_entry_containers() {
+        for format in [
+            ArchiveFormat::Zip,
+            ArchiveFormat::SevenZip,
+            ArchiveFormat::Tar,
+            ArchiveFormat::TarGzip,
+            ArchiveFormat::TarZstd,
+            ArchiveFormat::TarXz,
+            ArchiveFormat::TarLzma,
+            ArchiveFormat::TarBzip2,
+            ArchiveFormat::TarLz4,
+        ] {
+            assert!(format.supports_update(), "{format} should be updateable");
+        }
+        for format in [
+            ArchiveFormat::Gzip,
+            ArchiveFormat::Zstandard,
+            ArchiveFormat::Xz,
+            ArchiveFormat::Lzma,
+            ArchiveFormat::Bzip2,
+            ArchiveFormat::Lz4,
+            ArchiveFormat::Brotli,
+            ArchiveFormat::Rar,
+            ArchiveFormat::Cab,
+        ] {
+            assert!(
+                !format.supports_update(),
+                "{format} should remain read-only"
+            );
         }
     }
 
@@ -669,7 +741,11 @@ mod tests {
             Some((0, 11))
         );
         assert_eq!(ArchiveFormat::Brotli.clamp_compression_level(22), 11);
-        for format in [ArchiveFormat::Tar, ArchiveFormat::Lz4] {
+        for format in [
+            ArchiveFormat::Tar,
+            ArchiveFormat::TarLz4,
+            ArchiveFormat::Lz4,
+        ] {
             assert_eq!(format.compression_level_range(), None);
         }
     }

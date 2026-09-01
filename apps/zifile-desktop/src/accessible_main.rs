@@ -19,7 +19,7 @@ use dioxus::prelude::*;
 use dioxus_html::HasFileData;
 use rfd::AsyncFileDialog;
 use zifile_core::{
-    ArchiveFormat, ArchiveInfo, CancellationToken, ConflictPolicy, CreateInputKind,
+    ArchiveFormat, ArchiveInfo, ArchiveRename, CancellationToken, ConflictPolicy, CreateInputKind,
     OPEN_ARCHIVE_EXTENSIONS, OperationProgress, OperationSummary, ProgressSnapshot, SafetyLimits,
 };
 use zifile_worker_protocol::WorkerRequest;
@@ -39,9 +39,9 @@ use settings::AppSettings;
 use worker_client::{WorkerOutput, run_worker};
 use zifile_desktop::create_validation::{CreateSourceIssue, create_source_issue};
 use zifile_desktop::entry_view::{
-    BrowserEntry, DirectorySelection, ENTRIES_PER_PAGE, EntrySort, SortDirection,
-    browser_entry_count, browser_entry_page, child_directory_selections, descendant_file_paths,
-    directory_breadcrumbs, next_sort,
+    BatchRenameError, BrowserEntry, DirectorySelection, ENTRIES_PER_PAGE, EntrySort, SortDirection,
+    batch_rename_mappings, browser_entry_count, browser_entry_page, child_directory_selections,
+    descendant_file_paths, directory_breadcrumbs, next_sort,
 };
 use zifile_desktop::operation_queue::{Job, OperationQueue, Submission};
 use zifile_desktop::startup::{self, StartupRequest};
@@ -68,7 +68,7 @@ const FOCUS_MAIN_SCRIPT: &str =
 const FOCUS_ARCHIVE_SEARCH_SCRIPT: &str =
     "requestAnimationFrame(() => document.getElementById('archive-search')?.focus())";
 const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data:; connect-src dioxus: ws://127.0.0.1:* http://dioxus.index.html https://dioxus.index.html ipc:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">"#;
-const CREATE_FORMATS: [ArchiveFormat; 15] = ArchiveFormat::CREATABLE;
+const CREATE_FORMATS: [ArchiveFormat; 16] = ArchiveFormat::CREATABLE;
 
 fn main() {
     if std::env::args_os().any(|argument| argument == zifile_worker::WORKER_MODE_ARGUMENT) {
@@ -106,6 +106,8 @@ enum OperationKind {
     Test,
     Extract,
     Create,
+    Update,
+    Rename,
 }
 
 struct QueuedOperation {
@@ -174,6 +176,14 @@ struct UiState {
     cancellation: Option<CancellationToken>,
     progress: Option<OperationProgress>,
     operations: SharedOperationQueue,
+    confirm_remove: bool,
+    rename_source: Option<PathBuf>,
+    rename_target: String,
+    batch_rename_open: bool,
+    batch_rename_find: String,
+    batch_rename_replace: String,
+    batch_rename_prefix: String,
+    batch_rename_suffix: String,
     recent_archives: Vec<PathBuf>,
     dark: bool,
     locale: Locale,
@@ -213,6 +223,14 @@ impl Default for UiState {
             cancellation: None,
             progress: None,
             operations: Arc::new(Mutex::new(OperationQueue::default())),
+            confirm_remove: false,
+            rename_source: None,
+            rename_target: String::new(),
+            batch_rename_open: false,
+            batch_rename_find: String::new(),
+            batch_rename_replace: String::new(),
+            batch_rename_prefix: String::new(),
+            batch_rename_suffix: String::new(),
             recent_archives: settings.recent_archives,
             dark: settings.dark,
             locale: settings.locale,
@@ -232,6 +250,19 @@ impl UiState {
         self.create_password_confirmation.clear();
         self.create_password_confirmation_touched = false;
         self.create_password_visible = false;
+    }
+
+    fn clear_rename(&mut self) {
+        self.rename_source = None;
+        self.rename_target.clear();
+    }
+
+    fn clear_batch_rename(&mut self) {
+        self.batch_rename_open = false;
+        self.batch_rename_find.clear();
+        self.batch_rename_replace.clear();
+        self.batch_rename_prefix.clear();
+        self.batch_rename_suffix.clear();
     }
 
     fn set_archive_password(&mut self, password: String) {
@@ -660,6 +691,8 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                 button { "aria-keyshortcuts": ARIA_SHORTCUT_OPEN, onclick: move |_| open_archive_dialog(state), {locale.text(Text::OpenAnother)} }
                 button { onclick: move |_| reveal_archive(state), {locale.text(Text::RevealInExplorer)} }
                 button { onclick: move |_| test_archive(state), {locale.text(Text::TestArchive)} }
+                button { disabled: view.busy || !archive.format.supports_update(), onclick: move |_| add_to_archive_files(state), {locale.text(Text::AddToArchive)} }
+                button { disabled: view.busy || !archive.format.supports_update(), onclick: move |_| add_to_archive_folder(state), {locale.text(Text::AddFolderToArchive)} }
                 button { "aria-keyshortcuts": ARIA_SHORTCUT_CLOSE, onclick: move |_| close_archive(state), {locale.text(Text::CloseArchive)} }
             }
         }
@@ -704,6 +737,49 @@ fn ArchivePage(mut state: Signal<UiState>) -> Element {
                         for policy in [ConflictPolicy::Rename, ConflictPolicy::Overwrite, ConflictPolicy::Skip, ConflictPolicy::Error] { option { value: conflict_value(policy), {conflict_label(locale, policy)} } } }
                 }
                 button { disabled: selected_count == 0, "aria-describedby": "archive-selection-summary", onclick: move |_| extract_selected(state), {locale.text(Text::ExtractSelected)} }
+                if view.confirm_remove {
+                    button { class: "danger", "aria-describedby": "archive-selection-summary", onclick: move |_| confirm_remove_selected(state), {locale.text(Text::ConfirmRemoveSelected)} }
+                    button { "aria-describedby": "archive-selection-summary", onclick: move |_| cancel_remove_selected(state), {locale.text(Text::Cancel)} }
+                } else {
+                    button { class: "danger", disabled: selected_count == 0 || view.busy || !archive.format.supports_update(), "aria-describedby": "archive-selection-summary", onclick: move |_| request_remove_selected(state), {locale.text(Text::RemoveSelected)} }
+                }
+                if let Some(source) = view.rename_source.clone() {
+                    div { class: "rename-editor", "aria-label": locale.text(Text::RenameTarget),
+                        label { span { {locale.text(Text::RenameTarget)} }
+                            input { r#type: "text", value: view.rename_target.clone(), placeholder: locale.text(Text::RenameTarget), autocomplete: "off", spellcheck: "false", oninput: move |event| state.write().rename_target = event.value() }
+                        }
+                        span { class: "rename-source", "{source.display()}" }
+                        button { class: "primary", disabled: view.rename_target.trim().is_empty() || view.busy, onclick: move |_| confirm_rename_selected(state), {locale.text(Text::ConfirmRenameSelected)} }
+                        button { onclick: move |_| cancel_rename_selected(state), {locale.text(Text::CancelRename)} }
+                    }
+                } else {
+                    button { disabled: selected_count != 1 || view.busy || !archive.format.supports_update(), "aria-describedby": "archive-selection-summary", onclick: move |_| request_rename_selected(state), {locale.text(Text::RenameSelected)} }
+                }
+                if view.batch_rename_open {
+                    div { class: "rename-editor batch-rename-editor", "aria-label": locale.text(Text::BatchRenameSelected),
+                        p { class: "rename-help", {locale.text(Text::BatchRenamePrompt)} }
+                        div { class: "batch-rename-fields",
+                            label { span { {locale.text(Text::BatchRenameFind)} }
+                                input { r#type: "text", value: view.batch_rename_find.clone(), autocomplete: "off", spellcheck: "false", oninput: move |event| state.write().batch_rename_find = event.value() }
+                            }
+                            label { span { {locale.text(Text::BatchRenameReplace)} }
+                                input { r#type: "text", value: view.batch_rename_replace.clone(), autocomplete: "off", spellcheck: "false", oninput: move |event| state.write().batch_rename_replace = event.value() }
+                            }
+                            label { span { {locale.text(Text::BatchRenamePrefix)} }
+                                input { r#type: "text", value: view.batch_rename_prefix.clone(), autocomplete: "off", spellcheck: "false", oninput: move |event| state.write().batch_rename_prefix = event.value() }
+                            }
+                            label { span { {locale.text(Text::BatchRenameSuffix)} }
+                                input { r#type: "text", value: view.batch_rename_suffix.clone(), autocomplete: "off", spellcheck: "false", oninput: move |event| state.write().batch_rename_suffix = event.value() }
+                            }
+                        }
+                        div { class: "button-row",
+                            button { class: "primary", disabled: view.busy, onclick: move |_| confirm_batch_rename_selected(state), {locale.text(Text::ConfirmBatchRenameSelected)} }
+                            button { onclick: move |_| cancel_batch_rename_selected(state), {locale.text(Text::CancelBatchRenameSelected)} }
+                        }
+                    }
+                } else {
+                    button { disabled: selected_count < 2 || view.busy || !archive.format.supports_update(), "aria-describedby": "archive-selection-summary", onclick: move |_| request_batch_rename_selected(state), {locale.text(Text::BatchRenameSelected)} }
+                }
                 button { "aria-describedby": "archive-selection-summary", onclick: move |_| extract_to_named_folder(state), {locale.text(Text::ExtractToNamedFolder)} }
                 button { class: "primary", "aria-describedby": "archive-selection-summary", onclick: move |_| extract_all(state), {locale.text(Text::ExtractAll)} }
             }
@@ -764,6 +840,9 @@ fn set_entry_sort(mut state: Signal<UiState>, sort: EntrySort) {
 
 fn navigate_archive_directory(mut state: Signal<UiState>, directory: PathBuf) {
     let mut value = state.write();
+    value.confirm_remove = false;
+    value.clear_rename();
+    value.clear_batch_rename();
     value.entry_directory = directory;
     value.entry_filter.clear();
     value.entry_page = 0;
@@ -1043,6 +1122,8 @@ fn clear_archive_session(value: &mut UiState) {
     value.pending_archive_requires_password = false;
     value.automatic_extract_destination = None;
     value.selected.clear();
+    value.clear_rename();
+    value.clear_batch_rename();
     value.entry_directory.clear();
     value.entry_filter.clear();
     value.entry_page = 0;
@@ -1190,6 +1271,373 @@ fn test_archive(state: Signal<UiState>) {
             "正在校验所有项目与校验和…",
         )
         .to_owned(),
+    );
+}
+
+fn add_to_archive_files(mut state: Signal<UiState>) {
+    let (locale, can_update) = {
+        let value = state.read();
+        (
+            value.locale,
+            value
+                .archive
+                .as_ref()
+                .is_some_and(|archive| archive.format.supports_update()),
+        )
+    };
+    if !can_update {
+        state.write().set_error(
+            choose(
+                locale,
+                "This archive format cannot be updated",
+                "此压缩格式不支持更新",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    if state.read().dialog_open || state.read().busy {
+        return;
+    }
+    state.write().dialog_open = true;
+    let dialog = AsyncFileDialog::new().set_title(locale.text(Text::UpdateArchiveDialog));
+    spawn(async move {
+        let paths = dialog.pick_files().await.map(|files| {
+            files
+                .into_iter()
+                .map(|file| file.path().to_path_buf())
+                .collect::<Vec<_>>()
+        });
+        state.write().dialog_open = false;
+        if let Some(paths) = paths {
+            submit_archive_update(state, paths, Vec::new());
+        }
+    });
+}
+
+fn add_to_archive_folder(mut state: Signal<UiState>) {
+    let (locale, can_update) = {
+        let value = state.read();
+        (
+            value.locale,
+            value
+                .archive
+                .as_ref()
+                .is_some_and(|archive| archive.format.supports_update()),
+        )
+    };
+    if !can_update {
+        state.write().set_error(
+            choose(
+                locale,
+                "This archive format cannot be updated",
+                "此压缩格式不支持更新",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    if state.read().dialog_open || state.read().busy {
+        return;
+    }
+    state.write().dialog_open = true;
+    let dialog = AsyncFileDialog::new().set_title(locale.text(Text::AddFolderToArchive));
+    spawn(async move {
+        let path = dialog
+            .pick_folder()
+            .await
+            .map(|folder| folder.path().to_path_buf());
+        state.write().dialog_open = false;
+        if let Some(path) = path {
+            submit_archive_update(state, vec![path], Vec::new());
+        }
+    });
+}
+
+fn request_remove_selected(mut state: Signal<UiState>) {
+    let mut value = state.write();
+    let locale = value.locale;
+    if value.busy || value.selected.is_empty() {
+        return;
+    }
+    let can_update = value
+        .archive
+        .as_ref()
+        .is_some_and(|archive| archive.format.supports_update());
+    if !can_update {
+        value.set_error(
+            choose(
+                locale,
+                "This archive format cannot be updated",
+                "此压缩格式不支持更新",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    value.confirm_remove = true;
+    value.set_status(locale.text(Text::RemoveSelectedPrompt).to_owned());
+}
+
+fn cancel_remove_selected(mut state: Signal<UiState>) {
+    let mut value = state.write();
+    let locale = value.locale;
+    value.confirm_remove = false;
+    value.set_status(locale.text(Text::Ready).to_owned());
+}
+
+fn request_rename_selected(mut state: Signal<UiState>) {
+    let mut value = state.write();
+    let locale = value.locale;
+    if value.busy || value.selected.len() != 1 {
+        return;
+    }
+    let can_update = value
+        .archive
+        .as_ref()
+        .is_some_and(|archive| archive.format.supports_update());
+    if !can_update {
+        value.set_error(
+            choose(
+                locale,
+                "This archive format cannot be renamed",
+                "此压缩格式不支持重命名",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    let Some(source) = value.selected.iter().next().cloned() else {
+        return;
+    };
+    value.rename_source = Some(source);
+    value.rename_target.clear();
+    value.set_status(locale.text(Text::RenamePrompt).to_owned());
+}
+
+fn cancel_rename_selected(mut state: Signal<UiState>) {
+    let locale = state.read().locale;
+    state.write().clear_rename();
+    state
+        .write()
+        .set_status(locale.text(Text::Ready).to_owned());
+}
+
+fn request_batch_rename_selected(mut state: Signal<UiState>) {
+    let mut value = state.write();
+    let locale = value.locale;
+    if value.busy || value.selected.len() < 2 {
+        return;
+    }
+    let can_update = value
+        .archive
+        .as_ref()
+        .is_some_and(|archive| archive.format.supports_update());
+    if !can_update {
+        value.set_error(
+            choose(
+                locale,
+                "This archive format cannot be renamed",
+                "此压缩格式不支持重命名",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    value.clear_rename();
+    value.batch_rename_open = true;
+    value.set_status(locale.text(Text::BatchRenamePrompt).to_owned());
+}
+
+fn cancel_batch_rename_selected(mut state: Signal<UiState>) {
+    let locale = state.read().locale;
+    state.write().clear_batch_rename();
+    state
+        .write()
+        .set_status(locale.text(Text::Ready).to_owned());
+}
+
+fn confirm_batch_rename_selected(mut state: Signal<UiState>) {
+    let (archive, selected, find, replace, prefix, suffix, busy, locale) = {
+        let value = state.read();
+        (
+            value.archive.clone(),
+            value.selected.clone(),
+            value.batch_rename_find.clone(),
+            value.batch_rename_replace.clone(),
+            value.batch_rename_prefix.clone(),
+            value.batch_rename_suffix.clone(),
+            value.busy,
+            value.locale,
+        )
+    };
+    if busy || archive.is_none() {
+        return;
+    }
+    let Some(archive) = archive else {
+        return;
+    };
+    let mappings =
+        match batch_rename_mappings(&archive, &selected, &find, &replace, &prefix, &suffix) {
+            Ok(mappings) => mappings,
+            Err(error) => {
+                let message = match error {
+                    BatchRenameError::NoSelection => choose(
+                        locale,
+                        "Select at least two archive files",
+                        "请至少选择两个归档文件",
+                    ),
+                    BatchRenameError::NoChanges => choose(
+                        locale,
+                        "The batch rule does not change any selected filename",
+                        "批量规则不会改变任何所选文件名",
+                    ),
+                    BatchRenameError::InvalidSelection(_) => choose(
+                        locale,
+                        "A selected archive file is no longer available",
+                        "所选归档文件已不可用",
+                    ),
+                };
+                state.write().set_error(message.to_owned());
+                return;
+            }
+        };
+    state.write().clear_batch_rename();
+    submit_archive_renames(state, mappings);
+}
+
+fn confirm_rename_selected(mut state: Signal<UiState>) {
+    let (source, target, busy, locale) = {
+        let value = state.read();
+        (
+            value.rename_source.clone(),
+            value.rename_target.trim().to_owned(),
+            value.busy,
+            value.locale,
+        )
+    };
+    if busy || source.is_none() {
+        return;
+    }
+    if target.is_empty() {
+        state.write().set_error(
+            choose(
+                locale,
+                "Enter a new archive-relative path",
+                "请输入新的归档相对路径",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    state.write().clear_rename();
+    if let Some(source) = source {
+        submit_archive_rename(state, source, PathBuf::from(target));
+    }
+}
+
+fn confirm_remove_selected(mut state: Signal<UiState>) {
+    let paths = state.read().selected.iter().cloned().collect::<Vec<_>>();
+    if paths.is_empty() || state.read().busy {
+        return;
+    }
+    state.write().confirm_remove = false;
+    submit_archive_update(state, Vec::new(), paths);
+}
+
+fn submit_archive_update(
+    mut state: Signal<UiState>,
+    additions: Vec<PathBuf>,
+    remove_paths: Vec<PathBuf>,
+) {
+    if additions.is_empty() && remove_paths.is_empty() {
+        return;
+    }
+    let value = state.read();
+    let Some(archive) = value.archive.as_ref() else {
+        return;
+    };
+    let format = archive.format;
+    let path = archive.path.clone();
+    let locale = value.locale;
+    let password = non_empty(&value.password);
+    drop(value);
+    if !format.supports_update() {
+        state.write().set_error(
+            choose(
+                locale,
+                "This archive format cannot be updated",
+                "此压缩格式不支持更新",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    launch_worker(
+        state,
+        WorkerRequest::Update {
+            archive: path.clone(),
+            additions,
+            compression_level: format.clamp_compression_level(6),
+            password,
+            limits: SafetyLimits::default(),
+            remove_paths,
+        },
+        OperationKind::Update,
+        format!(
+            "{} {}…",
+            choose(locale, "Updating", "正在更新"),
+            path.display()
+        ),
+    );
+}
+
+fn submit_archive_rename(state: Signal<UiState>, source: PathBuf, target: PathBuf) {
+    submit_archive_renames(
+        state,
+        vec![ArchiveRename {
+            from: source,
+            to: target,
+        }],
+    );
+}
+
+fn submit_archive_renames(mut state: Signal<UiState>, renames: Vec<ArchiveRename>) {
+    let value = state.read();
+    let Some(archive) = value.archive.as_ref() else {
+        return;
+    };
+    let format = archive.format;
+    let path = archive.path.clone();
+    let locale = value.locale;
+    let password = non_empty(&value.password);
+    drop(value);
+    if !format.supports_update() {
+        state.write().set_error(
+            choose(
+                locale,
+                "This archive format cannot be renamed",
+                "此压缩格式不支持重命名",
+            )
+            .to_owned(),
+        );
+        return;
+    }
+    launch_worker(
+        state,
+        WorkerRequest::Rename {
+            archive: path.clone(),
+            renames,
+            compression_level: format.clamp_compression_level(6),
+            password,
+            limits: SafetyLimits::default(),
+        },
+        OperationKind::Rename,
+        format!(
+            "{} {}…",
+            choose(locale, "Renaming", "正在重命名"),
+            path.display()
+        ),
     );
 }
 
@@ -1522,6 +1970,7 @@ fn start_worker(mut state: Signal<UiState>, job: Job<QueuedOperation>) {
             value.pending_archive = Some(path);
             value.pending_archive_requires_password = false;
             value.selected.clear();
+            value.clear_batch_rename();
             value.page = Page::Archive;
         }
         value.busy = true;
@@ -1590,6 +2039,7 @@ fn finish_worker(
             value.pending_archive = None;
             value.pending_archive_requires_password = false;
             value.selected = selected;
+            value.clear_batch_rename();
             value.entry_filter.clear();
             value.entry_directory.clear();
             value.entry_page = 0;
@@ -1631,6 +2081,38 @@ fn finish_worker(
             summary_status(locale, summary, false),
             StatusKind::Informational,
         ),
+        (OperationKind::Update, Ok(WorkerOutput::Summary(summary))) => (
+            if locale == Locale::ZhCn {
+                format!(
+                    "压缩文件已更新 · {} 个文件 · {}",
+                    summary.files,
+                    format_bytes(summary.bytes)
+                )
+            } else {
+                format!(
+                    "Archive updated · {} files · {}",
+                    summary.files,
+                    format_bytes(summary.bytes)
+                )
+            },
+            StatusKind::Informational,
+        ),
+        (OperationKind::Rename, Ok(WorkerOutput::Summary(summary))) => (
+            if locale == Locale::ZhCn {
+                format!(
+                    "归档项目已重命名 · {} 个文件 · {}",
+                    summary.files,
+                    format_bytes(summary.bytes)
+                )
+            } else {
+                format!(
+                    "Archive entries renamed · {} files · {}",
+                    summary.files,
+                    format_bytes(summary.bytes)
+                )
+            },
+            StatusKind::Informational,
+        ),
         (_, Ok(_)) => (
             choose(
                 locale,
@@ -1650,6 +2132,8 @@ fn finish_worker(
                     }
                     OperationKind::Extract => choose(locale, "Extraction failed", "解压失败"),
                     OperationKind::Create => choose(locale, "Creation failed", "创建失败"),
+                    OperationKind::Update => choose(locale, "Update failed", "更新失败"),
+                    OperationKind::Rename => choose(locale, "Rename failed", "重命名失败"),
                 },
                 format_worker_error(locale, &error)
             ),
@@ -1661,6 +2145,19 @@ fn finish_worker(
         && status_kind == StatusKind::Informational
     {
         state.write().completed_output = completed_output;
+    }
+    if matches!(kind, OperationKind::Update | OperationKind::Rename)
+        && succeeded
+        && status_kind == StatusKind::Informational
+    {
+        let path = state
+            .read()
+            .archive
+            .as_ref()
+            .map(|archive| archive.path.clone());
+        if let Some(path) = path {
+            begin_load(state, path);
+        }
     }
     if let Some(destination) = automatic_extract {
         extract_to(state, destination, true);
@@ -1691,7 +2188,10 @@ fn operation_output_path(request: &WorkerRequest) -> Option<PathBuf> {
         WorkerRequest::Extract { destination, .. } | WorkerRequest::Create { destination, .. } => {
             Some(destination.clone())
         }
-        WorkerRequest::List { .. } | WorkerRequest::Test { .. } => None,
+        WorkerRequest::List { .. }
+        | WorkerRequest::Test { .. }
+        | WorkerRequest::Update { .. }
+        | WorkerRequest::Rename { .. } => None,
     }
 }
 
@@ -1725,6 +2225,7 @@ fn cancel_operation(mut state: Signal<UiState>) {
 }
 
 fn select_all(mut state: Signal<UiState>, selected: bool) {
+    state.write().confirm_remove = false;
     let paths = state
         .read()
         .archive
@@ -1740,6 +2241,8 @@ fn select_all(mut state: Signal<UiState>, selected: bool) {
         .unwrap_or_default();
     let count = paths.len();
     let mut value = state.write();
+    value.clear_rename();
+    value.clear_batch_rename();
     value.selected = if selected { paths } else { HashSet::new() };
     let status = if selected {
         match value.locale {
@@ -1754,6 +2257,9 @@ fn select_all(mut state: Signal<UiState>, selected: bool) {
 
 fn invert_selection(mut state: Signal<UiState>) {
     let mut value = state.write();
+    value.confirm_remove = false;
+    value.clear_rename();
+    value.clear_batch_rename();
     let UiState {
         archive, selected, ..
     } = &mut *value;
@@ -1770,6 +2276,9 @@ fn invert_selection(mut state: Signal<UiState>) {
 
 fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected: bool) {
     let mut value = state.write();
+    value.confirm_remove = false;
+    value.clear_rename();
+    value.clear_batch_rename();
     if selected {
         value.selected.insert(path.clone());
     } else {
@@ -1786,6 +2295,12 @@ fn update_archive_selection(mut state: Signal<UiState>, path: PathBuf, selected:
 }
 
 fn toggle_archive_directory(mut state: Signal<UiState>, directory: PathBuf, selected: bool) {
+    {
+        let mut value = state.write();
+        value.confirm_remove = false;
+        value.clear_rename();
+        value.clear_batch_rename();
+    }
     let descendants = state
         .read()
         .archive
@@ -2209,6 +2724,25 @@ mod tests {
     }
 
     #[test]
+    fn accessible_archive_view_exposes_the_batch_rename_form() {
+        let source = include_str!("accessible_main.rs");
+        let archive_page = source
+            .split_once("fn ArchivePage")
+            .expect("archive page")
+            .1
+            .split_once("fn set_entry_sort")
+            .expect("sort helper follows archive page")
+            .0;
+        assert!(archive_page.contains("Text::BatchRenameSelected"));
+        assert!(archive_page.contains("Text::BatchRenameFind"));
+        assert!(archive_page.contains("Text::BatchRenameReplace"));
+        assert!(archive_page.contains("Text::BatchRenamePrefix"));
+        assert!(archive_page.contains("Text::BatchRenameSuffix"));
+        assert!(archive_page.contains("confirm_batch_rename_selected(state)"));
+        assert!(archive_page.contains("cancel_batch_rename_selected(state)"));
+    }
+
+    #[test]
     fn failed_archive_empty_state_exposes_an_idle_non_password_retry() {
         let source = include_str!("accessible_main.rs");
         let archive_page = source
@@ -2249,6 +2783,11 @@ mod tests {
             locale: Locale::En,
             ..UiState::default()
         };
+        state.batch_rename_open = true;
+        state.batch_rename_find = "secret".to_owned();
+        state.batch_rename_replace = "redacted".to_owned();
+        state.batch_rename_prefix = "p-".to_owned();
+        state.batch_rename_suffix = "-done".to_owned();
 
         clear_archive_session(&mut state);
 
@@ -2263,6 +2802,11 @@ mod tests {
         assert_eq!(state.entry_page, 0);
         assert!(state.password.is_empty());
         assert!(!state.password_visible);
+        assert!(!state.batch_rename_open);
+        assert!(state.batch_rename_find.is_empty());
+        assert!(state.batch_rename_replace.is_empty());
+        assert!(state.batch_rename_prefix.is_empty());
+        assert!(state.batch_rename_suffix.is_empty());
     }
 
     #[test]

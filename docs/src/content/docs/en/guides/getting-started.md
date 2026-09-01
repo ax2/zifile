@@ -3,7 +3,7 @@ title: Getting started
 description: Browse, test, extract, and create archives with ZiFile.
 ---
 
-ZiFile is currently a Stage 4 public release and has not shipped through Microsoft Store or WinGet. GitHub users can obtain the unsigned Windows build from the current [v0.1.7 Release](https://github.com/ax2/zifile/releases/tag/v0.1.7); verify every download with the included `SHA256SUMS.txt` first. For installation, choose the single all-in-one `ZiFile-0.1.7.0-windows.msixbundle`, which contains x64 and ARM64 packages. The portable downloads are `zifile-windows-x64.exe` and `zifile-windows-arm64.exe`; each is a self-contained standalone program and does not need a separate Worker or DLL. Never import an unknown root certificate or disable Windows security checks to install a development package.
+ZiFile is currently a Stage 4 public release and has not shipped through Microsoft Store or WinGet. GitHub users can obtain the unsigned Windows build from the current [v0.1.13 Release](https://github.com/ax2/zifile/releases/tag/v0.1.13); verify every download with the included `SHA256SUMS.txt` first. For installation, choose the single all-in-one `ZiFile-0.1.13.0-windows.msixbundle`, which contains x64 and ARM64 packages. The portable downloads are `zifile-windows-x64.exe` and `zifile-windows-arm64.exe`; each is a self-contained standalone program and does not need a separate Worker or DLL. Never import an unknown root certificate or disable Windows security checks to install a development package.
 
 ## Open and inspect an archive
 
@@ -30,9 +30,13 @@ Work runs in an isolated Worker. Pressing `Escape` or choosing **Cancel** reques
 
 ZIP, 7z, and TAR compositions accept multiple files and folders. gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli are single-file streams and require exactly one existing file; use the matching TAR composition for a directory. RAR and CAB are read-only and cannot be created.
 
+After opening a ZIP, 7z, or TAR-family archive, use `Add to archive` or `Add folder to archive` to update it in place, or select entries and choose `Remove selected`. Updates and removals extract, merge or delete, and rebuild in a temporary workspace beside the original, replacing the original only after success; single-file streams, RAR, and CAB cannot be updated.
+
+In the same updateable archive types, select at least two regular files and choose `Batch rename`. Enter optional find/replace text plus an optional prefix and suffix. An empty find value disables replacement. ZiFile builds the mappings first, skips unchanged entries, and then applies the same archive-relative validation, collision checks, and atomic rebuild protection used by single-entry rename.
+
 ## Queue and settings
 
-Open, test, extract, or create requests can be submitted while another operation runs. ZiFile keeps at most 32 operations and executes them in order. **Clear queue** removes only waiting work; **Cancel** affects only the active operation. Language and light/dark theme are stored in `%LOCALAPPDATA%\ZiFile\settings.conf`; paths, recent history, and passwords are not stored.
+Open, test, extract, create, or update requests can be submitted while another operation runs. ZiFile keeps at most 32 operations and executes them in order. **Clear queue** removes only waiting work; **Cancel** affects only the active operation. Language and light/dark theme are stored in `%LOCALAPPDATA%\ZiFile\settings.conf`; paths, recent history, and passwords are not stored.
 
 The **About** page identifies the running version, MIT license, format-family count, project address, and local-processing privacy boundary; press `F1` to open it directly. It can also open the project home, English documentation, and English privacy policy in the default browser; the footer reports an error if Windows cannot launch a link. Use this version when reporting a problem rather than relying only on the installer filename.
 
@@ -44,9 +48,11 @@ zifile list archive.zip
 zifile test archive.7z
 zifile extract archive.zip output --conflict rename
 zifile create output.7z files --format seven-zip --level 9
+zifile update archive.zip new-files --level 6
+zifile update archive.zip --remove folder/old.txt --remove folder/cache
 ```
 
-The `COMPRESSION_LEVEL` column in `zifile formats` gives each format's inclusive range; `fixed` means the encoder has no adjustable level and `--level` must be omitted. Adjustable formats default to level 6 when the option is omitted; an out-of-range value is reported instead of continuing with a different level.
+The `COMPRESSION_LEVEL` column in `zifile formats` gives each format's inclusive range; `fixed` means the encoder has no adjustable level and `--level` must be omitted. Adjustable formats default to level 6 when the option is omitted; an out-of-range value is reported instead of continuing with a different level. `update` requires at least one source or `--remove`; `--remove` takes archive-relative paths, may be repeated, and removes descendants when a directory is selected.
 
 Encrypted operations read a password from standard input. ZiFile does not accept a plaintext password argument that would enter process arguments or ordinary shell history:
 

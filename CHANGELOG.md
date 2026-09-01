@@ -8,6 +8,65 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Add TAR + LZ4 composition creation, listing, integrity testing, extraction,
+  update support, CLI selection, and shared desktop format-menu coverage.
+- Add batch rename controls to both desktop archive views. Select at least two
+  regular files, then combine find/replace with optional prefix and suffix
+  rules; unchanged entries are skipped and the resulting mappings use the same
+  atomic update and collision checks as single-entry rename.
+- Add atomic archive-relative file and directory renaming for ZIP, 7z, and
+  TAR-family containers through the core API, Worker, CLI, and both desktop
+  UIs. Directory mappings move their complete subtree, batch swaps are staged
+  safely, and invalid or colliding mappings leave the original archive intact.
+- Add the `rename` CLI command with repeated `FROM=TO` mappings and advance the
+  Worker IPC contract to version 3 for the new request type.
+
+## [0.1.13] - 2026-09-01
+
+### Added
+
+- Add TAR + LZ4 composition creation, listing, integrity testing, extraction,
+  update support, CLI selection, and shared desktop format-menu coverage.
+
+## [0.1.12] - 2026-09-01
+
+### Added
+
+- Add desktop batch rename rules for selected archive files. Find/replace,
+  prefix, and suffix inputs produce explicit mappings, skip unchanged entries,
+  and reuse the existing atomic update and collision checks.
+
+## [0.1.11] - 2026-09-01
+
+### Added
+
+- Add atomic archive-relative file and directory renaming for ZIP, 7z, and
+  TAR-family containers through the core API, Worker, CLI, and both desktop
+  UIs.
+
+## [0.1.10] - 2026-08-31
+
+### Added
+
+- Add safe removal of selected archive entries for ZIP, 7z, and TAR-family
+  containers through the core API, Worker, CLI, and both desktop UIs. Removal
+  accepts archive-relative paths, removes nested descendants as one operation,
+  and atomically replaces the original only after a successful rebuild.
+
+## [0.1.9] - 2026-08-31
+
+### Added
+
+- Add safe in-place archive updates for ZIP, 7z, and TAR-family containers in
+  the core API, Worker, CLI, and both desktop UIs. Updates merge selected files
+  or folders in a sibling staging directory and replace the original only
+  after a complete rebuild succeeds; single-file streams, RAR, and CAB remain
+  read-only.
+
+## [0.1.8] - 2026-08-31
+
+### Added
+
 - Expose an explicit, busy-safe retry action after a non-password archive-open
   failure while retaining the dedicated unlock flow for encrypted file lists.
 

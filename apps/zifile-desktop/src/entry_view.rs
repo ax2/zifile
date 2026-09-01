@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use zifile_core::{ArchiveEntryInfo, ArchiveInfo, ArchiveTimestamp};
+use zifile_core::{ArchiveEntryInfo, ArchiveInfo, ArchiveRename, ArchiveTimestamp};
 
 pub const ENTRIES_PER_PAGE: usize = 500;
 
@@ -38,6 +38,75 @@ pub struct BrowserEntry<'a> {
 pub struct DirectorySelection {
     pub selected: usize,
     pub total: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BatchRenameError {
+    NoSelection,
+    NoChanges,
+    InvalidSelection(PathBuf),
+}
+
+/// Builds deterministic same-directory rename mappings for the selected files.
+///
+/// The transformation applies find/replace to each filename, then adds the
+/// optional prefix and suffix. Directory components are never changed here;
+/// the core rename validator remains responsible for archive safety, collisions
+/// and atomic commit semantics.
+pub fn batch_rename_mappings(
+    archive: &ArchiveInfo,
+    selected: &HashSet<PathBuf>,
+    find: &str,
+    replace: &str,
+    prefix: &str,
+    suffix: &str,
+) -> Result<Vec<ArchiveRename>, BatchRenameError> {
+    if selected.is_empty() {
+        return Err(BatchRenameError::NoSelection);
+    }
+
+    let mut sources = selected.iter().cloned().collect::<Vec<_>>();
+    sources.sort();
+    let mut mappings = Vec::with_capacity(sources.len());
+    for source in sources {
+        let Some(entry) = archive
+            .entries
+            .iter()
+            .find(|entry| entry.path == source && !entry.is_directory)
+        else {
+            return Err(BatchRenameError::InvalidSelection(source));
+        };
+        let Some(file_name) = entry.path.file_name() else {
+            return Err(BatchRenameError::InvalidSelection(entry.path.clone()));
+        };
+        let file_name = file_name.to_string_lossy();
+        let replaced = if find.is_empty() {
+            file_name.to_string()
+        } else {
+            file_name.replace(find, replace)
+        };
+        let target_name = format!("{prefix}{replaced}{suffix}");
+        if target_name.is_empty() {
+            return Err(BatchRenameError::InvalidSelection(entry.path.clone()));
+        }
+        let target = entry
+            .path
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .join(target_name);
+        if target != entry.path {
+            mappings.push(ArchiveRename {
+                from: entry.path.clone(),
+                to: target,
+            });
+        }
+    }
+
+    if mappings.is_empty() {
+        Err(BatchRenameError::NoChanges)
+    } else {
+        Ok(mappings)
+    }
 }
 
 impl DirectorySelection {
@@ -608,5 +677,86 @@ mod tests {
             ]
         );
         assert!(directory_breadcrumbs(Path::new("")).is_empty());
+    }
+
+    #[test]
+    fn batch_rename_transforms_selected_filenames_in_stable_order() {
+        let archive = ArchiveInfo {
+            path: PathBuf::from("batch.zip"),
+            format: ArchiveFormat::Zip,
+            entries: vec![
+                ArchiveEntryInfo {
+                    path: PathBuf::from("photos/img-02.jpg"),
+                    size: 2,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+                ArchiveEntryInfo {
+                    path: PathBuf::from("photos/img-01.jpg"),
+                    size: 2,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+            ],
+            total_size: 4,
+            compressed_size: 2,
+        };
+        let selected = HashSet::from([
+            PathBuf::from("photos/img-02.jpg"),
+            PathBuf::from("photos/img-01.jpg"),
+        ]);
+        let mappings = batch_rename_mappings(&archive, &selected, "img-", "photo-", "new-", "-v2")
+            .expect("batch rule should produce mappings");
+        assert_eq!(
+            mappings,
+            vec![
+                ArchiveRename {
+                    from: PathBuf::from("photos/img-01.jpg"),
+                    to: PathBuf::from("photos/new-photo-01.jpg-v2"),
+                },
+                ArchiveRename {
+                    from: PathBuf::from("photos/img-02.jpg"),
+                    to: PathBuf::from("photos/new-photo-02.jpg-v2"),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn batch_rename_skips_unchanged_entries_and_rejects_empty_selection() {
+        let archive = large_archive();
+        let empty = HashSet::new();
+        assert_eq!(
+            batch_rename_mappings(&archive, &empty, "", "", "", ""),
+            Err(BatchRenameError::NoSelection)
+        );
+        let selected = HashSet::from([PathBuf::from("folder/file-000000.txt")]);
+        assert_eq!(
+            batch_rename_mappings(&archive, &selected, "", "", "", ""),
+            Err(BatchRenameError::NoChanges)
+        );
+    }
+
+    #[test]
+    fn batch_rename_rejects_stale_or_directory_selection() {
+        let archive = large_archive();
+        let stale = HashSet::from([PathBuf::from("missing.txt")]);
+        assert_eq!(
+            batch_rename_mappings(&archive, &stale, "", "", "new-", ""),
+            Err(BatchRenameError::InvalidSelection(PathBuf::from(
+                "missing.txt"
+            )))
+        );
+        let directory = HashSet::from([PathBuf::from("folder")]);
+        assert_eq!(
+            batch_rename_mappings(&archive, &directory, "", "", "new-", ""),
+            Err(BatchRenameError::InvalidSelection(PathBuf::from("folder")))
+        );
     }
 }

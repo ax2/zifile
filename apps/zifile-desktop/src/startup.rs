@@ -129,6 +129,8 @@ mod tests {
             "backup.tar.xz",
             "backup.tar.lzma",
             "backup.tar.bz2",
+            "backup.tar.lz4",
+            "backup.tlz4",
             "backup.tgz",
             "backup.tzst",
             "backup.txz",
@@ -141,10 +143,6 @@ mod tests {
                 "unexpected destination for {archive_name}"
             );
         }
-        assert_eq!(
-            extraction_destination(Path::new("backup.tar.lz4")),
-            PathBuf::from("backup.tar")
-        );
         assert_eq!(
             extraction_destination(Path::new("backup.tar.br")),
             PathBuf::from("backup.tar")

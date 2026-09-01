@@ -38,6 +38,10 @@ The archive selection bar provides explicit `Select all`, `Select none`, and `In
 
 `Extract to named folder` skips the folder picker and extracts every entry to a matching directory beside the archive: `sample.zip` uses `sample/`, while `backup.tar.gz` uses `backup/`. It shares naming rules with the File Explorer command and keeps the current conflict policy, operation queue, isolated Worker, and post-completion `Show output` action. Use `Extract all` when choosing a different destination.
 
+For ZIP, 7z, and TAR-family containers, the archive page also provides `Add to archive`, `Add folder to archive`, and `Remove selected`. ZiFile creates a bounded temporary workspace beside the original, fully extracts the archive, then merges new sources or removes the selected archive-relative paths and their descendants before rebuilding the same format. The original is replaced only after rebuilding, validation, and cancellation checks succeed. A new regular file with the same relative path updates the previous file; file/directory type collisions, links, RAR/CAB, and single-file streams are rejected explicitly, and a failure leaves the original archive intact.
+
+When at least two regular files are selected, the archive page also enables `Batch rename`. Find/replace, prefix, and suffix rules affect filenames while preserving their containing directories. Unchanged entries are removed before submission, and the core archive-relative validation, collision checks, and atomic replacement protection are reused. Changing directories, reloading, changing the selection, or closing the archive clears unsubmitted batch rules.
+
 Search is immediate and results are paged at 500 rows, keeping 100,000-entry archives bounded. Safety limits still apply during listing. Worker byte progress, or entry progress when bytes are unavailable, is mirrored to the Windows taskbar.
 
 ## Integrity-test checksums
@@ -58,7 +62,7 @@ does not add another settings entry or log record.
 
 ## Operation queue
 
-Open, reload, test, extract, and create requests may be submitted while work is running. A 32-item in-memory FIFO executes snapshots in order. Clearing removes only waiting work; cancel affects only the current Worker and then advances the queue. Both desktop UIs clear the create-form password as soon as a create request is accepted for execution or queuing, while retaining the input when a full queue rejects the request for retry. Request snapshots release paths and passwords after clearing, completion, or exit. Settings and logs do not retain the queue, passwords, create sources, or output destinations; only a successfully listed archive path is persisted under the recent-history policy above.
+Open, reload, test, extract, create, and update requests may be submitted while work is running. A 32-item in-memory FIFO executes snapshots in order. Clearing removes only waiting work; cancel affects only the current Worker and then advances the queue. Both desktop UIs clear the create-form password as soon as a create request is accepted for execution or queuing, while retaining the input when a full queue rejects the request for retry. Request snapshots release paths and passwords after clearing, completion, or exit. Settings and logs do not retain the queue, passwords, create sources, or output destinations; only a successfully listed archive path is persisted under the recent-history policy above.
 
 After successful creation or extraction, the status bar provides a bilingual `Show output` action that selects the generated archive or extraction directory in File Explorer. Starting new work clears the old output action; failures, cancellation, and Worker protocol result-type mismatches never leave a clickable success path, so status text and follow-up action cannot refer to different jobs.
 
@@ -114,7 +118,7 @@ Opening an archive, choosing an extraction directory, adding files/folders, and 
 
 Creation sources use the same shared path-identity deduplication function. On Windows, casing and slash-direction differences do not add the same file twice, and the Shell rejects disappeared paths, symbolic links, junctions, and reparse points before launch, so virtual items or stale sources cannot appear usable before the Worker reports an error.
 
-The create-format menu order now comes from the core `ArchiveFormat::CREATABLE` registry. The Iced baseline and Dioxus candidate no longer maintain separate format arrays, so a new creatable provider receives the same stable ordering in both UIs. The contract smoke locks the current fifteen creation formats and prevents the menus from silently diverging from the public capability matrix.
+The create-format menu order now comes from the core `ArchiveFormat::CREATABLE` registry. The Iced baseline and Dioxus candidate no longer maintain separate format arrays, so a new creatable provider receives the same stable ordering in both UIs. The contract smoke locks the current sixteen creation formats and prevents the menus from silently diverging from the public capability matrix.
 
 When saving a new archive, both UIs add the selected format's canonical extension if the name entered in the native save dialog has no extension (for example, `backup` becomes `backup.zip` or `backup.tar.gz`). An explicit user-entered extension is preserved rather than silently replaced.
 

@@ -11,13 +11,17 @@ Freeze the public CLI/provider contracts, finish user and release documentation,
 
 Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest, the Release workflow, SBOMs, provenance, checksums, and stage records exist, but they prove release preparation rather than completion of every stable-release gate.
 
+## Current Unreleased increment
+
+There is no pending release increment. TAR + LZ4 now ships in v0.1.13 across the core, CLI, both desktop format menus, the update path, format detection, round-trip/smoke/performance tests, and bilingual documentation.
+
 ## Prepared
 
 - `docs/src/content/docs/en/development/contracts.md` defines CLI commands, format values, conflict policies, password input, exit codes, core-provider boundaries, and Worker protocol compatibility.
-- `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, fifteen creation formats, seventeen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
+- `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, sixteen creation formats, eighteen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
 - `release/readiness.json` binds stable tags to accessibility, queue, trusted-install, ARM64, screenshot, WACK, WinGet, Store, Partner Center, and signing evidence.
 - The Release workflow derives dual-architecture builds, audits, checksums, SBOMs, provenance, and GitHub Releases from the workspace version; ordinary public releases use unsigned artifacts, while formal signing can be enabled explicitly through workflow inputs.
-- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, and `v0.1.7` have been published as public GitHub Releases from matching tags.
+- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, `v0.1.8`, `v0.1.9`, `v0.1.10`, `v0.1.11`, `v0.1.12`, and `v0.1.13` have been published as public GitHub Releases from matching tags.
 
 ## Required to finish
 
@@ -27,7 +31,49 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 ## Release result
 
-Stable 1.0 has not been published; `v0.1.7` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+Stable 1.0 has not been published; `v0.1.13` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+
+## 2026-09-01 — v0.1.13 TAR + LZ4 and public release result
+
+- TAR + LZ4 now ships across the core, CLI, default Iced UI, Dioxus/WebView2 candidate, update path, format detection, round-trip/smoke/performance tests, 18 fuzz inputs, and bilingual documentation. `tar.lz4` and `tlz4` are compound-format aliases; ordinary `.lz4` retains single-stream semantics.
+- PR [#100](https://github.com/ax2/zifile/pull/100) merged the feature; version-preparation PR [#101](https://github.com/ax2/zifile/pull/101) merged as `ade00dfe765f194b49ead830a9dc107fde2bcc33`, and tag `v0.1.13` points exactly to that commit.
+- [Release workflow 33454708236](https://github.com/ax2/zifile/actions/runs/33454708236) completed x64/ARM64 workspace tests, MSIX and standalone EXE builds, x64 EXE smoke testing, ARM64 PE auditing, the all-in-one bundle, SBOM, asset auditing, and public publication.
+- The [v0.1.13 Release](https://github.com/ax2/zifile/releases/tag/v0.1.13) was published at `2026-09-01T00:58:57Z` as neither a draft nor a prerelease and exposes exactly `ZiFile-0.1.13.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, or ZIP is public. Both EXEs are self-contained standalone Windows downloads.
+- This remains an unsigned GitHub build; SignPath, trusted installation, real foreground UI, physical ARM64, WACK, WinGet community acceptance, and Microsoft Store/Partner Center gates remain independently pending.
+
+## 2026-09-01 — archive-entry rename
+
+- The core now exposes `ArchiveRename` and `rename_archive`. ZIP, 7z, and TAR-family archives are rebuilt in a sibling staging directory and replace the original only after the rename succeeds; directory mappings move the complete subtree, while single-file streams, RAR, and CAB remain read-only.
+- Mappings are validated before staging content changes: archive-relative path policy, case-collision, duplicate/overlapping source and destination, type conflicts, existing targets, links/reparse points, and cancellation are covered. A temporary move phase makes batch swaps deterministic and failed work cannot commit the original archive.
+- Worker IPC advances to `PROTOCOL_VERSION = 3`; the CLI adds repeatable `rename <archive> --rename <FROM=TO>`. The default Iced UI and the Dioxus/WebView2 accessibility candidate both expose bilingual single-selection rename editors and reload the archive after success.
+- Verification: 55/55 core integration tests, 10/10 CLI unit tests, 4/4 Worker protocol tests, and desktop `cargo check --all-targets --all-features` passed. Real foreground UI, signing, Store, and WACK gates remain explicitly unclaimed.
+
+## 2026-09-01 — v0.1.12 batch rename and public release result
+
+- The default Iced UI and the Dioxus/WebView2 accessibility candidate now expose batch rename editors with find/replace, prefix, and suffix rules. Generated mappings continue through the core atomic staging, collision detection, and cancellation safeguards; uncommitted rules are cleared when selection changes or an archive closes.
+- Verification passed: 149 desktop UI unit tests across the three UI targets, seven entry-browser Criterion benchmarks, the full workspace test suite, strict Clippy, 32 bilingual locale pairs, the 65-page Astro static build, and version/release-note gates.
+- PR [#97](https://github.com/ax2/zifile/pull/97) merged the batch rename feature; version-preparation PR [#98](https://github.com/ax2/zifile/pull/98) merged as `36f69018934880ca46098f08d248eb0d2aad7c2e`, and tag `v0.1.12` points exactly to that commit.
+- [Release workflow 33440085168](https://github.com/ax2/zifile/actions/runs/33440085168) completed x64/ARM64 builds, standalone EXE smoke/audit, the all-in-one MSIX bundle, SBOM, asset auditing, and public publication.
+- The [v0.1.12 Release](https://github.com/ax2/zifile/releases/tag/v0.1.12) is neither a draft nor a prerelease and exposes exactly `ZiFile-0.1.12.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, or ZIP is public. Both EXEs are self-contained standalone Windows downloads, and all three binaries plus the checksum file were downloaded and rechecked against SHA-256.
+- This remains an unsigned GitHub build; SignPath, trusted installation, real foreground UI, physical ARM64, WACK, WinGet community acceptance, and Microsoft Store/Partner Center gates remain independently pending.
+
+## 2026-09-01 — 0.1.11 public release result
+
+- PR [#95](https://github.com/ax2/zifile/pull/95) merged as commit `f66843d2cee0d7fca53a050972771b4de1fbee96`; tag `v0.1.11` points to the release commit.
+- [Release workflow 33426811784](https://github.com/ax2/zifile/actions/runs/33426811784) completed x64/ARM64 workspace validation, MSIX and standalone EXE builds, x64 EXE smoke testing, ARM64 PE auditing, the all-in-one bundle, SBOM, asset auditing, and GitHub publication.
+- The [v0.1.11 Release](https://github.com/ax2/zifile/releases/tag/v0.1.11) is neither a draft nor a prerelease and exposes exactly `ZiFile-0.1.11.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, or ZIP is public. Both EXEs are self-contained standalone Windows downloads.
+
+## 2026-08-31 — 0.1.10 public release result
+
+- PR [#92](https://github.com/ax2/zifile/pull/92) merged as commit `b778ba5c2095aa19ccdd03500a5aacae59ae75e8`; annotated tag `v0.1.10` points to the release commit.
+- [Release workflow 33411124570](https://github.com/ax2/zifile/actions/runs/33411124570) completed x64/ARM64 tests and builds, standalone EXE smoke/audit, SBOM, the all-in-one bundle, and public publication.
+- The [v0.1.10 Release](https://github.com/ax2/zifile/releases/tag/v0.1.10) exposes exactly `ZiFile-0.1.10.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, or ZIP is public.
+
+## 2026-08-31 — 0.1.9 public release result
+
+- PR [#88](https://github.com/ax2/zifile/pull/88) merged as commit `5477766c1a8590576cab59326b1b2aeeeb74cc51`; annotated tag `v0.1.9` points to the release commit.
+- [Release workflow 33391659106](https://github.com/ax2/zifile/actions/runs/33391659106) successfully completed SBOM, x64/ARM64 builds, the all-in-one MSIX bundle, and publication.
+- The [v0.1.9 Release](https://github.com/ax2/zifile/releases/tag/v0.1.9) exposes exactly `ZiFile-0.1.9.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, or ZIP is public.
 
 ## 2026-08-29 public release result
 
@@ -192,3 +238,21 @@ Stable 1.0 has not been published; `v0.1.7` is the current usable public GitHub 
 - Since `v0.1.6`, recent archives with privacy controls, explicit select-all/select-none/invert actions with `Ctrl+I`, and a complete create-list-extract gate for the standalone x64 EXE form a useful patch-release boundary.
 - The workspace, three internal dependency constraints, six workspace lock entries, and Astro documentation package are aligned at `0.1.7`; its MSIX version maps to `0.1.7.0`.
 - `CHANGELOG.md` retains an empty top `[Unreleased]` section and collects this stage's user-facing and release-quality improvements under `0.1.7`. Download guidance continues to identify verified v0.1.6 until the new Release actually succeeds.
+
+## 2026-08-31 — 0.1.8 release outcome
+
+- PR [#85](https://github.com/ax2/zifile/pull/85) merged at
+  `9001928b3a9694af908a57baf3a137ea41e665f1`; annotated tag `v0.1.8` points exactly to that commit.
+- [Release workflow 33372674521](https://github.com/ax2/zifile/actions/runs/33372674521)
+  successfully completed SBOM, x64/ARM64 builds, the x64 standalone EXE create-list-extract
+  smoke test, ARM64 architecture audit, the all-in-one MSIX bundle, artifact provenance, and publication.
+- The non-draft, non-prerelease [v0.1.8 Release](https://github.com/ax2/zifile/releases/tag/v0.1.8)
+  exposes exactly `ZiFile-0.1.8.0-windows.msixbundle`, `zifile-windows-x64.exe`,
+  `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, or ZIP is public.
+- GitHub asset digests read back through the API are: MSIX
+  `5c3deefe2d5a71946c65b2b35de1e550f17b7e7aa3b038e7705795083f215dbb`, x64 EXE
+  `de74718b7accb0e4b10b07b289c74cf1630169fa3633bd34d077abc2f3688cfc`, ARM64 EXE
+  `ca7eb53d694080e8fdb642123ec6dfec670e5be7807ccc82d8fd485df2dada89`, and checksums
+  `49985c1572f7b973c66b093023111a5a391f7949e65d50f0ae5dc248079b623c`.
+- This remains an unsigned GitHub build; signing, WinGet community acceptance, Microsoft Store,
+  WACK, physical ARM64, and full assistive-technology certification remain separate external gates.

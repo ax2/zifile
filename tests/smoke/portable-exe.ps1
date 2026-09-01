@@ -75,7 +75,7 @@ function Invoke-StandaloneWorker {
     )
 
     $request = [ordered]@{
-        version = 1
+        version = 3
         payload = $Payload
     } | ConvertTo-Json -Depth 8 -Compress
 

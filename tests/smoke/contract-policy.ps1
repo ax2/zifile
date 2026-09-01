@@ -22,7 +22,7 @@ try {
 
     $rootHelp = (& $cli --help 2>&1) -join "`n"
     if ($LASTEXITCODE -ne 0) { throw 'The CLI top-level help returned a non-zero exit code.' }
-    foreach ($command in @('formats', 'detect', 'list', 'test', 'extract', 'create')) {
+    foreach ($command in @('formats', 'detect', 'list', 'test', 'extract', 'create', 'update', 'rename')) {
         if ($rootHelp -notmatch ("(?m)^  " + [Regex]::Escape($command) + '\s')) {
             throw "The CLI top-level help omits the public command: $command"
         }
@@ -37,11 +37,26 @@ try {
 
     $formatValues = @(
         'zip', 'seven-zip', 'tar', 'tar-gzip', 'tar-zstd', 'tar-xz', 'tar-lzma',
-        'tar-bzip2', 'gzip', 'zstandard', 'xz', 'lzma', 'bzip2', 'lz4', 'brotli'
+        'tar-bzip2', 'tar-lz4', 'gzip', 'zstandard', 'xz', 'lzma', 'bzip2', 'lz4', 'brotli'
     )
     $formatValueLine = '[possible values: {0}]' -f ($formatValues -join ', ')
     if ($createHelp -notmatch [Regex]::Escape($formatValueLine)) {
         throw 'The CLI create help format enum drifted from the public contract.'
+    }
+
+    $updateHelp = (& $cli update --help 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or
+        $updateHelp -notmatch '--password-stdin' -or
+        $updateHelp -match '(?m)^\s*--password(?:\s|=|<)') {
+        throw 'The CLI update help violates the password-input contract.'
+    }
+
+    $renameHelp = (& $cli rename --help 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or
+        $renameHelp -notmatch '--rename' -or
+        $renameHelp -notmatch '--password-stdin' -or
+        $renameHelp -match '(?m)^\s*--password(?:\s|=|<)') {
+        throw 'The CLI rename help violates the public contract.'
     }
 
     $formats = (& $cli formats 2>&1) -join "`n"
@@ -57,6 +72,7 @@ try {
         "TAR + XZ`tyes`tyes`tyes`tfiles-or-directories`t0-9`tno`tAlpha",
         "TAR + LZMA`tyes`tyes`tyes`tfiles-or-directories`t0-9`tno`tAlpha",
         "TAR + Bzip2`tyes`tyes`tyes`tfiles-or-directories`t1-9`tno`tAlpha",
+        "TAR + LZ4`tyes`tyes`tyes`tfiles-or-directories`tfixed`tno`tAlpha",
         "gzip`tyes`tyes`tyes`tsingle-file`t0-9`tno`tAlpha",
         "Zstandard`tyes`tyes`tyes`tsingle-file`t0-22`tno`tAlpha",
         "XZ`tyes`tyes`tyes`tsingle-file`t0-9`tno`tAlpha",
@@ -112,10 +128,35 @@ try {
         throw 'CLI syntax rejection created an output file.'
     }
 
+    $archive = Join-Path $testRoot 'update.zip'
+    $addition = Join-Path $testRoot 'addition.txt'
+    Set-Content -LiteralPath $addition -Value 'updated contract smoke' -NoNewline
+    $createOutput = (& $cli create $archive (Join-Path $testRoot 'input\hello.txt') --format zip --level 6 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "CLI create setup failed: $createOutput" }
+    $updateOutput = (& $cli update $archive $addition --level 6 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "CLI update round trip failed: $updateOutput" }
+    $extractRoot = Join-Path $testRoot 'updated-output'
+    $extractOutput = (& $cli extract $archive $extractRoot --conflict error 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "CLI update extraction failed: $extractOutput" }
+    $updatedFile = Join-Path $extractRoot 'addition.txt'
+    if ((Get-Content -Raw -LiteralPath $updatedFile) -ne 'updated contract smoke') {
+        throw 'CLI update round trip produced unexpected file content.'
+    }
+
+    $renameOutput = (& $cli rename $archive --rename addition.txt=renamed.txt --level 6 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "CLI rename round trip failed: $renameOutput" }
+    $renamedExtractRoot = Join-Path $testRoot 'renamed-output'
+    $extractRenamedOutput = (& $cli extract $archive $renamedExtractRoot --conflict error 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 0) { throw "CLI renamed archive extraction failed: $extractRenamedOutput" }
+    $renamedFile = Join-Path $renamedExtractRoot 'renamed.txt'
+    if ((Get-Content -Raw -LiteralPath $renamedFile) -ne 'updated contract smoke') {
+        throw 'CLI rename round trip produced unexpected file content.'
+    }
+
     $global:LASTEXITCODE = 0
     [ordered]@{
         schema_version = 1
-        commands_checked = 6
+        commands_checked = 8
         create_formats_checked = $formatValues.Count
         capability_rows_checked = $expectedRows.Count - 1
         runtime_error_exit_code = 1
