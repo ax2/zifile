@@ -3846,6 +3846,28 @@ mod tests {
     }
 
     #[test]
+    fn archive_action_toolbar_keeps_management_and_extraction_groups_separate() {
+        let source = include_str!("main.rs");
+        let archive_view = source
+            .split_once("fn archive_view(state: &ZiFile)")
+            .expect("archive view")
+            .1
+            .split_once("fn create_view(state: &ZiFile)")
+            .expect("create view follows archive view")
+            .0;
+        assert!(archive_view.contains("let archive_management_controls = row!["));
+        assert!(
+            archive_view
+                .contains("let archive_edit_controls = row![remove_control, rename_control]")
+        );
+        assert!(
+            archive_view.contains("let archive_batch_rename_controls = row![batch_rename_control]")
+        );
+        assert!(archive_view.contains("let archive_extract_controls = row!["));
+        assert!(archive_view.contains("container(selection_controls)"));
+    }
+
+    #[test]
     fn archive_view_exposes_the_batch_rename_rule_editor() {
         let source = include_str!("main.rs");
         let archive_view = source
