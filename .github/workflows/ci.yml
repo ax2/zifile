@@ -34,6 +34,9 @@ jobs:
       - name: Packaging policy smoke test
         shell: pwsh
         run: ./tests/smoke/packaging-policy.ps1
+      - name: Build-artifact cleanup smoke test
+        shell: pwsh
+        run: ./tests/smoke/build-cleanup.ps1
       - name: PowerShell syntax checks
         shell: pwsh
         run: |

@@ -157,6 +157,10 @@ jobs:
           name: windows-${{ matrix.architecture }}
           path: artifacts-${{ matrix.architecture }}/*
           if-no-files-found: error
+      - name: Clean generated build directories
+        if: always()
+        shell: pwsh
+        run: ./scripts/Clean-BuildArtifacts.ps1
 
   bundle:
     name: Windows all-in-one MSIX bundle

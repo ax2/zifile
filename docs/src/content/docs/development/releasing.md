@@ -13,6 +13,12 @@ description: GitHub、WinGet 与 Microsoft Store 的统一版本发布流程。
 - GitHub 构建来源证明。
 - 版本更新日志和对应文档快照。
 
+## 构建后清理
+
+构建或本地文档验证后，可运行 `./scripts/Clean-BuildArtifacts.ps1` 清理固定的生成目录：Cargo `target`、文档依赖/输出、MSIX 测试 helper 的 `bin/obj` 以及 `dist`。脚本只接受仓库根目录下的明确目标，并会拒绝仓库标记不存在或路径越界的调用；不会删除源码、`release/` 发布记录、Stage 档案或已保留的 Windows 可运行目录。需要暂时保留 `dist` 中的本地安装包时使用 `-KeepDist`。
+
+CI 会对清理脚本运行安全范围回归；Windows Release 在上传架构产物后自动清理生成目录。
+
 ## 渠道
 
 GitHub Release 面向用户只保留一个 all-in-one MSIX、一个 x64 独立便携 EXE、一个 ARM64 独立便携 EXE，以及一个 SHA-256 校验文件。审计 JSON、SBOM、来源证明和 WinGet YAML 作为 workflow artifact 保留，不混入 Release assets。GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID `ZiCode.ZiFile` 并引用发行方控制的版本化下载地址。Microsoft Store 以 MSIX 为主。
