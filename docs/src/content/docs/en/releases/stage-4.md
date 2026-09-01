@@ -13,15 +13,15 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 ## Current Unreleased increment
 
-TAR + LZ4 now runs through the core, CLI, both desktop format menus, update path, format detection, round-trip/smoke/performance tests, and bilingual documentation. The increment is verified locally on Windows but is not in a public version yet; the next release must still produce the all-in-one MSIX plus standalone x64/ARM64 EXEs and keep the Release asset allowlist free of DLL, JSON, YAML, and ZIP files.
+There is no pending release increment. TAR + LZ4 now ships in v0.1.13 across the core, CLI, both desktop format menus, the update path, format detection, round-trip/smoke/performance tests, and bilingual documentation.
 
 ## Prepared
 
 - `docs/src/content/docs/en/development/contracts.md` defines CLI commands, format values, conflict policies, password input, exit codes, core-provider boundaries, and Worker protocol compatibility.
-- `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, fifteen creation formats, seventeen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
+- `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, sixteen creation formats, eighteen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
 - `release/readiness.json` binds stable tags to accessibility, queue, trusted-install, ARM64, screenshot, WACK, WinGet, Store, Partner Center, and signing evidence.
 - The Release workflow derives dual-architecture builds, audits, checksums, SBOMs, provenance, and GitHub Releases from the workspace version; ordinary public releases use unsigned artifacts, while formal signing can be enabled explicitly through workflow inputs.
-- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, `v0.1.8`, `v0.1.9`, `v0.1.10`, `v0.1.11`, and `v0.1.12` have been published as public GitHub Releases from matching tags.
+- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, `v0.1.8`, `v0.1.9`, `v0.1.10`, `v0.1.11`, `v0.1.12`, and `v0.1.13` have been published as public GitHub Releases from matching tags.
 
 ## Required to finish
 
@@ -31,7 +31,15 @@ TAR + LZ4 now runs through the core, CLI, both desktop format menus, update path
 
 ## Release result
 
-Stable 1.0 has not been published; `v0.1.12` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+Stable 1.0 has not been published; `v0.1.13` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+
+## 2026-09-01 — v0.1.13 TAR + LZ4 and public release result
+
+- TAR + LZ4 now ships across the core, CLI, default Iced UI, Dioxus/WebView2 candidate, update path, format detection, round-trip/smoke/performance tests, 18 fuzz inputs, and bilingual documentation. `tar.lz4` and `tlz4` are compound-format aliases; ordinary `.lz4` retains single-stream semantics.
+- PR [#100](https://github.com/ax2/zifile/pull/100) merged the feature; version-preparation PR [#101](https://github.com/ax2/zifile/pull/101) merged as `ade00dfe765f194b49ead830a9dc107fde2bcc33`, and tag `v0.1.13` points exactly to that commit.
+- [Release workflow 33454708236](https://github.com/ax2/zifile/actions/runs/33454708236) completed x64/ARM64 workspace tests, MSIX and standalone EXE builds, x64 EXE smoke testing, ARM64 PE auditing, the all-in-one bundle, SBOM, asset auditing, and public publication.
+- The [v0.1.13 Release](https://github.com/ax2/zifile/releases/tag/v0.1.13) was published at `2026-09-01T00:58:57Z` as neither a draft nor a prerelease and exposes exactly `ZiFile-0.1.13.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, or ZIP is public. Both EXEs are self-contained standalone Windows downloads.
+- This remains an unsigned GitHub build; SignPath, trusted installation, real foreground UI, physical ARM64, WACK, WinGet community acceptance, and Microsoft Store/Partner Center gates remain independently pending.
 
 ## 2026-09-01 — archive-entry rename
 
