@@ -102,14 +102,45 @@ try {
         }
     }
 
+    # ZiFile MSZIP -> Windows expand.exe. This is the reverse direction of the
+    # makecab fixtures above and proves the generated cabinet is system-readable.
+    $zifileCabinet = Join-Path $testRoot 'zifile-mszip.cab'
+    & $cli create $zifileCabinet $source --format cab | Out-Host
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $zifileCabinet -PathType Leaf)) {
+        throw 'ZiFile failed to create the CAB interoperability fixture.'
+    }
+    $zifileReferenceOutput = Join-Path $testRoot 'zifile-expand'
+    New-Item -ItemType Directory -Path $zifileReferenceOutput -Force | Out-Null
+    & expand.exe $zifileCabinet '-F:*' $zifileReferenceOutput | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw 'expand.exe did not extract the ZiFile-created CAB fixture.'
+    }
+    $zifileReferenceFiles = @(Get-ChildItem -LiteralPath $zifileReferenceOutput -File)
+    if ($zifileReferenceFiles.Count -ne 1) {
+        throw 'expand.exe produced an unexpected file set for the ZiFile-created CAB.'
+    }
+    $zifileReferenceHash = (Get-FileHash -LiteralPath $zifileReferenceFiles[0].FullName -Algorithm SHA256).Hash
+    if ($zifileReferenceHash -cne $sourceHash) {
+        throw 'expand.exe content differs for the ZiFile-created CAB.'
+    }
+    $results += [ordered]@{
+        name = 'zifile-mszip'
+        compression_type = 'MSZIP'
+        cabinet_sha256 = (Get-FileHash -LiteralPath $zifileCabinet -Algorithm SHA256).Hash
+        source_sha256 = $sourceHash
+        zifile_sha256 = $sourceHash
+        expand_sha256 = $zifileReferenceHash
+        matched = $true
+    }
+
     $evidence = [ordered]@{
         schema_version = 1
         generated_at_utc = [DateTimeOffset]::UtcNow.ToString('O')
         platform = 'windows'
-        creator = 'makecab.exe'
+        creator = 'makecab.exe and ZiFile CLI'
         reference_extractor = 'expand.exe'
         cases = $results
-        passed = ($results.Count -eq 2 -and @($results | Where-Object { -not $_.matched }).Count -eq 0)
+        passed = ($results.Count -eq 3 -and @($results | Where-Object { -not $_.matched }).Count -eq 0)
     }
     $evidencePath = Join-Path $repoRoot 'target\cab-interoperability.json'
     $evidence | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $evidencePath -Encoding utf8

@@ -124,7 +124,7 @@ Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.
 
 RAR 门禁从固定的 `rars` 源码提交 `7d8f9386ef777a2415da34fe1db193d8471ff7d0` 下载六个夹具，使用硬编码 SHA-256 验证来源后，逐文件比较 ZiFile 与 7-Zip 的解压树。覆盖 RAR 1.3、1.54 多文件、RAR 3 PPMd、RAR 5 压缩与 E8E9 过滤，以及 WinRAR 7.21 加密头/Quick Open；另有三个链接/重定向夹具必须在无输出的情况下拒绝。CI 32853686537 完成全部六个有效场景和三个拒绝场景，证据 JSON SHA-256 为 `4C52D0240B911609C7DDB0CACB2E484F56C8F886E216347603B228261C4EE8EF`。RAR 1.3 因现代 7-Zip 不再读取，改与同一固定上游提交中的已知正确解压树逐文件核对，其余五种有效归档继续与 7-Zip 26.02 交叉验证。
 
-CAB 互操作门禁在 Windows Runner 使用系统 `makecab.exe` 生成 MSZIP 与 LZX Cabinet，再要求 ZiFile 完成签名识别、浏览、校验和解压，并与系统 `expand.exe` 的输出比较 SHA-256。None 压缩由 Rust 集成夹具覆盖；Quantum 与跨 Cabinet 集合明确不支持。每次 CI 上传不含用户数据的结构化 JSON 证据。
+CAB 互操作门禁在 Windows Runner 使用系统 `makecab.exe` 生成 MSZIP 与 LZX Cabinet，再要求 ZiFile 完成签名识别、浏览、校验和解压，并与系统 `expand.exe` 的输出比较 SHA-256；同时由 ZiFile 创建固定 MSZIP Cabinet，再要求 `expand.exe` 成功解压。None 压缩由 Rust 集成夹具覆盖；Quantum 与跨 Cabinet 集合明确不支持。每次 CI 上传不含用户数据的结构化 JSON 证据。
 
 CAB 解码阶段负向回归保留合法元数据并翻转首个 CFDATA 压缩字节，先证明列表仍能读取单个条目，再要求完整性校验失败、选择性解压报错且目标目录为空。该检查证明损坏负载不会越过临时文件提交边界，不把只测损坏头误当成解码器覆盖。
 
