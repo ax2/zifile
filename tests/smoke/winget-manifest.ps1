@@ -18,16 +18,12 @@ if (-not $fixture.StartsWith($temporaryRoot, [StringComparison]::OrdinalIgnoreCa
 try {
     New-Item -ItemType Directory -Path $fixture -Force | Out-Null
     $version = '9.8.7'
-    $x64 = Join-Path $fixture 'ZiFile-9.8.7.0-windows-x64.msix'
-    $arm64 = Join-Path $fixture 'ZiFile-9.8.7.0-windows-arm64.msix'
-    [IO.File]::WriteAllText($x64, 'deterministic x64 official WinGet validation fixture')
-    [IO.File]::WriteAllText($arm64, 'deterministic arm64 official WinGet validation fixture')
+    $bundle = Join-Path $fixture 'ZiFile-9.8.7.0-windows.msixbundle'
+    [IO.File]::WriteAllText($bundle, 'deterministic all-in-one official WinGet validation fixture')
     & $generator `
         -Version $version `
-        -X64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$version/$(Split-Path $x64 -Leaf)" `
-        -X64InstallerSha256 (Get-FileHash -LiteralPath $x64 -Algorithm SHA256).Hash `
-        -Arm64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$version/$(Split-Path $arm64 -Leaf)" `
-        -Arm64InstallerSha256 (Get-FileHash -LiteralPath $arm64 -Algorithm SHA256).Hash `
+        -BundleInstallerUrl "https://github.com/ax2/zifile/releases/download/v$version/$(Split-Path $bundle -Leaf)" `
+        -BundleInstallerSha256 (Get-FileHash -LiteralPath $bundle -Algorithm SHA256).Hash `
         -OutputRoot $fixture | Out-Null
     $manifestDirectory = [IO.Path]::Combine([string[]]@(
         $fixture, 'manifests', 'z', 'ZiCode', 'ZiFile', $version
@@ -35,16 +31,19 @@ try {
     $preflight = & $verifier `
         -ManifestDirectory $manifestDirectory `
         -Version $version `
-        -X64InstallerPath $x64 `
-        -Arm64InstallerPath $arm64 | ConvertFrom-Json
-    if (-not $preflight.ready_for_winget_validate -or -not $preflight.local_installers_verified) {
+        -BundleInstallerPath $bundle | ConvertFrom-Json
+    if (-not $preflight.ready_for_winget_validate -or
+        -not $preflight.local_bundle_verified -or
+        $preflight.public_installer_model -cne 'all-in-one-msixbundle') {
         throw 'ZiFile preflight did not accept the deterministic WinGet candidate.'
     }
-    if (@($preflight.file_extensions).Count -ne 29 -or
+    if (@($preflight.file_extensions).Count -ne 31 -or
         $preflight.file_extensions -cnotcontains 'rar' -or
         $preflight.file_extensions -cnotcontains 'cab' -or
         $preflight.file_extensions -cnotcontains 'zipx' -or
-        $preflight.file_extensions -cnotcontains 'cbr') {
+        $preflight.file_extensions -cnotcontains 'cbr' -or
+        $preflight.file_extensions -cnotcontains 'tar.lz4' -or
+        $preflight.file_extensions -cnotcontains 'tlz4') {
         throw 'ZiFile preflight did not preserve the complete open-extension contract.'
     }
 
@@ -68,8 +67,7 @@ try {
         $null = & $verifier `
             -ManifestDirectory $manifestDirectory `
             -Version $version `
-            -X64InstallerPath $x64 `
-            -Arm64InstallerPath $arm64
+            -BundleInstallerPath $bundle
     }
     catch {
         if ($_.Exception.Message -notmatch 'file extensions do not match') { throw }
@@ -86,7 +84,8 @@ try {
         manifest_files = $preflight.manifest_files
         architectures = $preflight.architectures
         file_extensions = $preflight.file_extensions
-        local_installers_verified = $preflight.local_installers_verified
+        public_installer_model = $preflight.public_installer_model
+        local_bundle_verified = $preflight.local_bundle_verified
         official_manifest_validation_passed = $true
         metadata_drift_rejected = $metadataDriftRejected
         public_assets_downloaded = $false

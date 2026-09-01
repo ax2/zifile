@@ -109,6 +109,21 @@ jobs:
             -Version '${{ steps.version.outputs.msix }}' `
             -Architecture '${{ matrix.architecture }}' `
             -AccessibleUi
+      - name: Smoke test standalone x64 executable
+        if: matrix.architecture == 'x64'
+        shell: pwsh
+        run: |
+          ./tests/smoke/portable-exe.ps1 `
+            -ExecutablePath "dist/ZiFile-${{ steps.version.outputs.msix }}-windows-x64/zifile-desktop.exe" `
+            -Architecture x64
+      - name: Audit standalone ARM64 executable
+        if: matrix.architecture == 'arm64'
+        shell: pwsh
+        run: |
+          ./tests/smoke/portable-exe.ps1 `
+            -ExecutablePath "dist/ZiFile-${{ steps.version.outputs.msix }}-windows-arm64/zifile-desktop.exe" `
+            -Architecture arm64 `
+            -SkipExecution
       - name: Stage release files
         shell: pwsh
         run: |
@@ -117,7 +132,7 @@ jobs:
           $source = "dist/ZiFile-$version-windows-$arch"
           $output = "artifacts-$arch"
           New-Item -ItemType Directory -Path $output -Force | Out-Null
-          Copy-Item -LiteralPath "$source/zifile-desktop.exe" -Destination "$output/zifile-desktop-windows-$arch.exe"
+          Copy-Item -LiteralPath "$source/zifile-desktop.exe" -Destination "$output/zifile-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile.exe" -Destination "$output/zifile-cli-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile-worker.exe" -Destination "$output/zifile-worker-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile-shell.dll" -Destination "$output/zifile-shell-windows-$arch.dll"
@@ -141,6 +156,44 @@ jobs:
         with:
           name: windows-${{ matrix.architecture }}
           path: artifacts-${{ matrix.architecture }}/*
+          if-no-files-found: error
+
+  bundle:
+    name: Windows all-in-one MSIX bundle
+    needs: windows
+    runs-on: windows-2022
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: windows-*
+          path: release
+          merge-multiple: true
+      - name: Resolve package version
+        id: version
+        shell: pwsh
+        run: |
+          $version = ./scripts/Test-VersionConsistency.ps1 | ConvertFrom-Json
+          "msix=$($version.msix_version)" >> $env:GITHUB_OUTPUT
+      - name: Build all-in-one MSIX bundle
+        shell: pwsh
+        run: |
+          $output = 'all-in-one'
+          New-Item -ItemType Directory -Path $output -Force | Out-Null
+          ./packaging/msix/Build-Bundle.ps1 `
+            -Version '${{ steps.version.outputs.msix }}' `
+            -InputDirectory release `
+            -OutputPath "$output/ZiFile-${{ steps.version.outputs.msix }}-windows.msixbundle"
+          Get-FileHash -LiteralPath (Get-ChildItem -LiteralPath $output -Filter '*.msixbundle').FullName -Algorithm SHA256 |
+            ForEach-Object { "{0}  {1}" -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf) } |
+            Set-Content -LiteralPath "$output/SHA256SUMS.txt"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: windows-all-in-one
+          path: all-in-one/*
           if-no-files-found: error
 
   sign:
@@ -211,7 +264,7 @@ jobs:
           $source = "artifacts-$arch"
           $input = "signing-input-$arch"
           New-Item -ItemType Directory -Path $input -Force | Out-Null
-          Copy-Item -LiteralPath "$source/zifile-desktop-windows-$arch.exe" -Destination $input
+          Copy-Item -LiteralPath "$source/zifile-windows-$arch.exe" -Destination $input
           Copy-Item -LiteralPath "$source/zifile-cli-windows-$arch.exe" -Destination $input
           Copy-Item -LiteralPath "$source/zifile-worker-windows-$arch.exe" -Destination $input
           Copy-Item -LiteralPath "$source/zifile-shell-windows-$arch.dll" -Destination $input
@@ -311,7 +364,7 @@ jobs:
   publish:
     name: Publish GitHub release
     if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
-    needs: [windows, sbom]
+    needs: [windows, bundle, sbom]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -333,22 +386,61 @@ jobs:
         shell: pwsh
         run: |
           $version = '${{ github.ref_name }}'.TrimStart('v')
-          $x64 = Get-ChildItem -LiteralPath release -Filter '*windows-x64.msix' | Select-Object -First 1
-          $arm64 = Get-ChildItem -LiteralPath release -Filter '*windows-arm64.msix' | Select-Object -First 1
+          $bundle = Get-ChildItem -LiteralPath release -Filter '*.msixbundle' | Select-Object -First 1
+          if (-not $bundle) {
+            throw 'Expected the all-in-one MSIX bundle artifact to be downloaded.'
+          }
           $base = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
           ./packaging/winget/Generate-Manifests.ps1 `
             -Version $version `
-            -X64InstallerUrl "$base/$($x64.Name)" `
-            -X64InstallerSha256 (Get-FileHash -LiteralPath $x64.FullName -Algorithm SHA256).Hash `
-            -Arm64InstallerUrl "$base/$($arm64.Name)" `
-            -Arm64InstallerSha256 (Get-FileHash -LiteralPath $arm64.FullName -Algorithm SHA256).Hash
+            -BundleInstallerUrl "$base/$($bundle.Name)" `
+            -BundleInstallerSha256 (Get-FileHash -LiteralPath $bundle.FullName -Algorithm SHA256).Hash
           $manifestDirectory = "target/winget/manifests/z/ZiCode/ZiFile/$version"
           ./packaging/winget/Test-Manifests.ps1 `
             -ManifestDirectory $manifestDirectory `
             -Version $version `
-            -X64InstallerPath $x64.FullName `
-            -Arm64InstallerPath $arm64.FullName
-          Copy-Item -Path "$manifestDirectory/*.yaml" -Destination release
+            -BundleInstallerPath $bundle.FullName
+          New-Item -ItemType Directory -Path release-support -Force | Out-Null
+          Copy-Item -Path "$manifestDirectory/*.yaml" -Destination release-support
+      - name: Upload WinGet submission candidate
+        uses: actions/upload-artifact@v6
+        with:
+          name: winget-manifest-candidate
+          path: release-support/*.yaml
+          if-no-files-found: error
+          retention-days: 30
+      - name: Prepare user-facing release assets
+        shell: pwsh
+        run: |
+          $public = 'public-release'
+          New-Item -ItemType Directory -Path $public -Force | Out-Null
+          $installers = @(Get-ChildItem -LiteralPath release -File | Where-Object { $_.Extension -ieq '.msixbundle' })
+          if ($installers.Count -eq 0) {
+            throw 'No all-in-one MSIX bundle was staged for the public release.'
+          }
+          $installers | Copy-Item -Destination $public -Force
+          $portableExecutables = @(Get-ChildItem -LiteralPath release -File | Where-Object {
+            $_.Name -in @(
+              'zifile-windows-x64.exe',
+              'zifile-windows-arm64.exe'
+            )
+          })
+          if ($portableExecutables.Count -ne 2) {
+            throw 'Expected one standalone x64 and one standalone ARM64 portable executable for the public release.'
+          }
+          $portableExecutables | Copy-Item -Destination $public -Force
+          Get-FileHash -LiteralPath @(
+            (Get-ChildItem -LiteralPath $public -Filter '*.msixbundle').FullName
+            (Get-ChildItem -LiteralPath $public -Filter '*.exe').FullName
+          ) -Algorithm SHA256 |
+            Sort-Object Path |
+            ForEach-Object { "{0}  {1}" -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf) } |
+            Set-Content -LiteralPath "$public/SHA256SUMS.txt"
+      - name: Audit user-facing release assets
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          ./tests/smoke/public-release-assets.ps1 -Directory public-release -Version $version
       - name: Attest SBOM
         uses: actions/attest-build-provenance@v4
         with:
@@ -360,12 +452,12 @@ jobs:
           body: |
             This is a public unsigned Windows build for GitHub distribution. It is not a Microsoft Store-certified package. Verify the included SHA256SUMS file before installing.
           prerelease: false
-          files: release/*
+          files: public-release/*
 
   publish-stage:
     name: Publish stage GitHub release
     if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')
-    needs: [windows, sbom]
+    needs: [windows, bundle, sbom]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -373,6 +465,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
         with:
           pattern: windows-*
@@ -382,23 +475,25 @@ jobs:
         with:
           name: sbom
           path: release
-      - name: Write stage release index
+      - name: Prepare user-facing stage release assets
         shell: bash
         run: |
           set -euo pipefail
-          {
-            find release -maxdepth 1 -type f \
-              ! -name 'RELEASE-ASSETS.txt' \
-              ! -name 'SHA256SUMS-stage.txt' \
-              -printf '%f\n'
-            printf '%s\n' 'RELEASE-ASSETS.txt' 'SHA256SUMS-stage.txt'
-          } | sort > release/RELEASE-ASSETS.txt
-          find release -maxdepth 1 -type f \
-            ! -name 'SHA256SUMS-stage.txt' \
-            -printf '%f\0' | sort -z | \
-            while IFS= read -r -d '' asset; do
-              sha256sum "release/$asset"
-            done > release/SHA256SUMS-stage.txt
+          mkdir -p public-release
+          find release -maxdepth 1 -type f -iname '*.msixbundle' -exec cp -f {} public-release/ \;
+          test -n "$(find public-release -maxdepth 1 -type f -iname '*.msixbundle' -print -quit)"
+          for executable in \
+            zifile-windows-x64.exe \
+            zifile-windows-arm64.exe; do
+            test -f "release/$executable"
+            cp -f "release/$executable" public-release/
+          done
+          (cd public-release && sha256sum ./*.msixbundle ./*.exe) > public-release/SHA256SUMS.txt
+      - name: Audit user-facing stage assets
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          ./tests/smoke/public-release-assets.ps1 -Directory public-release -Version $version
       - name: Attest stage build assets
         uses: actions/attest-build-provenance@v4
         with:
@@ -410,4 +505,4 @@ jobs:
           body: |
             Free code signing provided by SignPath.io, certificate by SignPath Foundation.
           prerelease: true
-          files: release/*
+          files: public-release/*

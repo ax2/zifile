@@ -18,7 +18,7 @@ if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
 }
 
 $requiredFiles = @(
-    "zifile-desktop-windows-$Architecture.exe",
+    "zifile-windows-$Architecture.exe",
     "zifile-cli-windows-$Architecture.exe",
     "zifile-worker-windows-$Architecture.exe",
     "zifile-shell-windows-$Architecture.dll",

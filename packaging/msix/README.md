@@ -32,6 +32,10 @@ archive. The builder is unsigned by default. Its local PFX parameters remain
 only for isolated developer experiments; GitHub Release never consumes a PFX
 and signs staged artifacts through a cloud-HSM provider.
 
+Release automation combines the x64 and ARM64 packages into one
+`ZiFile-<version>-windows.msixbundle`. Windows selects the matching package from
+the bundle, so users download one all-in-one installer.
+
 ```powershell
 ./packaging/msix/Build-Package.ps1 -Version 0.1.0.0 -Architecture x64
 ```
@@ -70,13 +74,16 @@ Implemented packaging features:
   PE architecture, required executables, file associations, CLI alias, forbidden sensitive files,
   and required signature status;
 - a machine-readable `.audit.json` beside every MSIX, included in release checksums and provenance;
-- complete runnable directories and standalone EXEs without ZIP output;
+- complete runnable directories and standalone EXEs without ZIP output; the desktop EXE embeds the Worker protocol runtime;
 - the architecture-matched `zifile-worker.exe` beside the desktop executable and inside MSIX.
 - an architecture-matched Rust `IExplorerCommand` COM DLL registered for the Windows 11 modern
   File Explorer menu, with its CLSID, item types and PE machine covered by the package audit.
 
-The desktop executable requires its matching Worker. GitHub release staging therefore publishes
-both architecture-suffixed files; complete runnable directories retain the canonical sibling name.
+The desktop executable embeds the Worker protocol runtime and launches itself in an internal
+worker mode for archive operations. GitHub Release therefore publishes one standalone
+architecture-suffixed portable EXE for x64 and one for ARM64, alongside the single all-in-one
+MSIX bundle. The legacy `zifile-worker.exe` remains in build and MSIX evidence for compatibility,
+but is not required by the portable EXE.
 
 Stable tagged GitHub releases build with formal `ZIFILE_MSIX_IDENTITY` and
 `ZIFILE_MSIX_PUBLISHER` plus `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME` environment

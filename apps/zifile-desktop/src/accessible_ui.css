@@ -86,6 +86,11 @@ input::placeholder { color: var(--muted); opacity: .8; }
 input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); }
 input[type="range"] { padding: 8px 0; accent-color: var(--accent); }
 label > span { display: block; margin-bottom: 6px; color: var(--muted); font-size: .88rem; }
+.password-field { min-width: 0; }
+.field-error { color: var(--danger); margin: 0; font-weight: 650; }
+.password-toggle { display: inline-flex; align-items: center; gap: 7px; margin-top: 7px; color: var(--muted); cursor: pointer; font-size: .88rem; }
+.password-toggle > span { display: inline; margin: 0; color: inherit; font-size: inherit; }
+.password-toggle input[type="checkbox"] { flex: none; margin: 0; }
 .home { max-width: 1120px; }
 .home h2 { margin: 0; font-size: clamp(2.35rem, 4vw, 3.5rem); font-weight: 680; letter-spacing: -0.055em; }
 .lead { max-width: 760px; margin: 16px 0 32px; color: var(--muted); font-size: 1.12rem; line-height: 1.65; }
@@ -95,6 +100,12 @@ label > span { display: block; margin-bottom: 6px; color: var(--muted); font-siz
 .actions h3, .privacy h3 { margin: 0 0 14px; font-size: 1.45rem; font-weight: 650; }
 .actions p, .privacy p { color: var(--muted); line-height: 1.65; }
 .actions article button { margin-top: auto; }
+.recent-archives { margin-top: 20px; padding: 22px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 10px 28px color-mix(in srgb, #000 12%, transparent); }
+.recent-archives .page-heading { align-items: center; margin-bottom: 12px; }
+.recent-archives h3 { margin: 0; font-size: 1.25rem; }
+.recent-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.recent-list li { display: flex; gap: 8px; min-width: 0; }
+.recent-list .recent-open { flex: 1; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .primary { border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-text); padding: 10px 16px; font-weight: 700; cursor: pointer; box-shadow: 0 7px 18px color-mix(in srgb, var(--accent) 20%, transparent); }
 .primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 85%, white); color: var(--accent-text); }
 .privacy { margin-top: 20px; }
@@ -104,6 +115,13 @@ label > span { display: block; margin-bottom: 6px; color: var(--muted); font-siz
 .about-details > div:last-child { grid-column: 1 / -1; }
 .about-details dt { color: var(--muted); font-size: .84rem; }
 .about-details dd { margin: 8px 0 0; overflow-wrap: anywhere; font-size: 1.05rem; }
+.shortcut-help { margin-top: 20px; padding: 22px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 8px 22px color-mix(in srgb, #000 10%, transparent); }
+.shortcut-help h3 { margin: 0 0 16px; font-size: 1.25rem; }
+.shortcut-help dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; margin: 0; }
+.shortcut-help dl > div { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 12px; }
+.shortcut-help dt, .shortcut-help dd { margin: 0; }
+.shortcut-help kbd { display: inline-block; padding: 5px 9px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 7px; background: var(--surface-strong); color: var(--text); font: 600 .82rem ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.shortcut-help dd { color: var(--muted); line-height: 1.4; }
 .empty-state { max-width: 620px; padding: 34px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 12px 30px color-mix(in srgb, #000 14%, transparent); }
 .empty-state button { margin-top: 22px; }
 .archive-page, .create-page { min-width: 0; }
@@ -116,6 +134,11 @@ label > span { display: block; margin-bottom: 6px; color: var(--muted); font-siz
 .selection-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
 .selection-bar > label { display: flex; align-items: center; gap: 7px; }
 .selection-bar select { min-width: 220px; }
+.rename-editor { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 6px 8px; border: 1px solid var(--accent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.rename-editor label { display: flex; align-items: center; gap: 7px; }
+.rename-editor label span { color: var(--muted); font-size: .82rem; white-space: nowrap; }
+.rename-editor input { width: min(280px, 32vw); min-width: 160px; }
+.rename-source { max-width: 260px; overflow: hidden; color: var(--muted); font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
 .breadcrumbs { display: flex; align-items: center; gap: 3px; min-height: 38px; margin-bottom: 10px; overflow-x: auto; color: var(--muted); }
 .breadcrumbs button, .folder-link { border: 0; background: transparent; color: var(--text); padding: 6px 8px; white-space: nowrap; }
 .breadcrumbs button:hover, .folder-link:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--accent); }
@@ -162,6 +185,7 @@ footer progress { width: min(260px, 30vw); accent-color: var(--accent); }
   .actions { grid-template-columns: 1fr; }
   .about-details { grid-template-columns: 1fr; }
   .about-details > div:last-child { grid-column: auto; }
+  .shortcut-help dl { grid-template-columns: 1fr; }
   .page-heading, .selection-bar { align-items: stretch; flex-direction: column; }
   .toolbar, .form-grid { grid-template-columns: 1fr; }
   .table-wrap { max-height: 380px; }
@@ -185,7 +209,7 @@ footer progress { width: min(260px, 30vw); accent-color: var(--accent); }
     --border: CanvasText;
     forced-color-adjust: auto;
   }
-  button, input, select, .actions article, .privacy, .empty-state,
+  button, input, select, .actions article, .privacy, .recent-archives, .empty-state,
   .table-wrap, .source-list, .form-grid {
     border-color: CanvasText;
   }

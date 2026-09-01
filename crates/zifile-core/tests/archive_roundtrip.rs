@@ -6,10 +6,11 @@ use std::time::UNIX_EPOCH;
 
 use tempfile::TempDir;
 use zifile_core::{
-    ArchiveFormat, ArchiveTimestampOffset, CancellationToken, ConflictPolicy, CreateOptions,
-    ExtractOptions, ListOptions, OperationProgress, SafetyLimits, TestOptions, ZiFileError,
-    create_archive, detect_format, extract_archive, list_archive, list_archive_with_limits,
-    list_archive_with_options, test_archive, test_archive_with_limits, test_archive_with_options,
+    ArchiveFormat, ArchiveRename, ArchiveTimestampOffset, CancellationToken, ConflictPolicy,
+    CreateOptions, ExtractOptions, ListOptions, OperationProgress, SafetyLimits, TestOptions,
+    UpdateOptions, ZiFileError, create_archive, detect_format, extract_archive, list_archive,
+    list_archive_with_limits, list_archive_with_options, rename_archive, test_archive,
+    test_archive_with_limits, test_archive_with_options, update_archive,
 };
 
 fn fixture() -> (TempDir, PathBuf) {
@@ -321,6 +322,405 @@ fn zip_round_trip() {
 }
 
 #[test]
+fn updating_zip_merges_a_matching_directory_and_replaces_colliding_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let initial = temp.path().join("initial/input");
+    fs::create_dir_all(&initial).unwrap();
+    fs::write(initial.join("hello.txt"), "old\n").unwrap();
+    let archive = temp.path().join("editable.zip");
+    create_archive(
+        std::slice::from_ref(&initial),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    let addition = temp.path().join("addition/input");
+    fs::create_dir_all(addition.join("nested")).unwrap();
+    fs::write(addition.join("hello.txt"), "updated\n").unwrap();
+    fs::write(addition.join("nested/new.txt"), "new\n").unwrap();
+    let progress = OperationProgress::default();
+    let summary = update_archive(
+        &archive,
+        std::slice::from_ref(&addition),
+        &UpdateOptions {
+            progress: progress.clone(),
+            ..UpdateOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(summary.files, 2);
+    assert_eq!(progress.snapshot().fraction(), 1.0);
+
+    let output = temp.path().join("updated-output");
+    extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
+    assert_eq!(
+        fs::read_to_string(output.join("input/hello.txt")).unwrap(),
+        "updated\n"
+    );
+    assert_eq!(
+        fs::read_to_string(output.join("input/nested/new.txt")).unwrap(),
+        "new\n"
+    );
+}
+
+#[test]
+fn updating_zip_can_remove_files_and_nested_directories_atomically() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("input");
+    fs::create_dir_all(source.join("nested")).unwrap();
+    fs::write(source.join("keep.txt"), "keep\n").unwrap();
+    fs::write(source.join("nested/remove.txt"), "remove\n").unwrap();
+    fs::write(source.join("nested/also-remove.txt"), "remove\n").unwrap();
+    let archive = temp.path().join("editable.zip");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    update_archive(
+        &archive,
+        &[],
+        &UpdateOptions {
+            remove_paths: vec![PathBuf::from("input/nested")],
+            ..UpdateOptions::default()
+        },
+    )
+    .unwrap();
+
+    let output = temp.path().join("output");
+    extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
+    assert_eq!(
+        fs::read_to_string(output.join("input/keep.txt")).unwrap(),
+        "keep\n"
+    );
+    assert!(!output.join("input/nested").exists());
+}
+
+#[test]
+fn update_removal_normalizes_duplicate_and_descendant_paths() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("input");
+    fs::create_dir_all(source.join("nested")).unwrap();
+    fs::write(source.join("nested/remove.txt"), "remove\n").unwrap();
+    let archive = temp.path().join("editable.zip");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    update_archive(
+        &archive,
+        &[],
+        &UpdateOptions {
+            remove_paths: vec![
+                PathBuf::from("input/nested/remove.txt"),
+                PathBuf::from(r"input\nested"),
+                PathBuf::from("input/nested"),
+            ],
+            ..UpdateOptions::default()
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn updating_zip_can_remove_the_last_root_file_and_leave_a_valid_empty_archive() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("only.txt");
+    fs::write(&source, "only\n").unwrap();
+    let archive = temp.path().join("empty-after-remove.zip");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    update_archive(
+        &archive,
+        &[],
+        &UpdateOptions {
+            remove_paths: vec![PathBuf::from("only.txt")],
+            ..UpdateOptions::default()
+        },
+    )
+    .unwrap();
+
+    let info = list_archive(&archive, None).unwrap();
+    assert!(info.entries.is_empty());
+}
+
+#[test]
+fn renaming_zip_moves_files_directories_and_supports_swaps_atomically() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("input");
+    fs::create_dir_all(source.join("nested")).unwrap();
+    fs::write(source.join("first.txt"), "first\n").unwrap();
+    fs::write(source.join("second.txt"), "second\n").unwrap();
+    fs::write(source.join("nested/value.txt"), "nested\n").unwrap();
+    let archive = temp.path().join("rename.zip");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+
+    let summary = rename_archive(
+        &archive,
+        &[
+            ArchiveRename {
+                from: PathBuf::from("input/first.txt"),
+                to: PathBuf::from("input/renamed.txt"),
+            },
+            ArchiveRename {
+                from: PathBuf::from("input/second.txt"),
+                to: PathBuf::from("input/first.txt"),
+            },
+            ArchiveRename {
+                from: PathBuf::from("input/nested"),
+                to: PathBuf::from("renamed-folder"),
+            },
+        ],
+        &UpdateOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(summary.files, 3);
+
+    let output = temp.path().join("output");
+    extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
+    assert_eq!(
+        fs::read_to_string(output.join("input/renamed.txt")).unwrap(),
+        "first\n"
+    );
+    assert_eq!(
+        fs::read_to_string(output.join("input/first.txt")).unwrap(),
+        "second\n"
+    );
+    assert_eq!(
+        fs::read_to_string(output.join("renamed-folder/value.txt")).unwrap(),
+        "nested\n"
+    );
+    assert!(!output.join("input/second.txt").exists());
+}
+
+#[test]
+fn invalid_archive_rename_is_rejected_without_changing_the_original() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("input");
+    fs::create_dir_all(&source).unwrap();
+    fs::write(source.join("keep.txt"), "keep\n").unwrap();
+    let archive = temp.path().join("rename-invalid.zip");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    let before = fs::read(&archive).unwrap();
+
+    let error = rename_archive(
+        &archive,
+        &[ArchiveRename {
+            from: PathBuf::from("input/keep.txt"),
+            to: PathBuf::from("../escape.txt"),
+        }],
+        &UpdateOptions::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(error, ZiFileError::UnsafePath(_)));
+    assert_eq!(fs::read(&archive).unwrap(), before);
+}
+
+#[test]
+fn colliding_archive_rename_mappings_are_rejected_before_commit() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("input");
+    fs::create_dir_all(source.join("nested")).unwrap();
+    fs::write(source.join("first.txt"), "first\n").unwrap();
+    fs::write(source.join("second.txt"), "second\n").unwrap();
+    fs::write(source.join("nested/value.txt"), "nested\n").unwrap();
+    let archive = temp.path().join("rename-collision.zip");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    let before = fs::read(&archive).unwrap();
+
+    let cases = [
+        vec![
+            ArchiveRename {
+                from: PathBuf::from("input/first.txt"),
+                to: PathBuf::from("new.txt"),
+            },
+            ArchiveRename {
+                from: PathBuf::from("input/second.txt"),
+                to: PathBuf::from("new.txt"),
+            },
+        ],
+        vec![
+            ArchiveRename {
+                from: PathBuf::from("input"),
+                to: PathBuf::from("renamed"),
+            },
+            ArchiveRename {
+                from: PathBuf::from("input/nested"),
+                to: PathBuf::from("nested-copy"),
+            },
+        ],
+        vec![
+            ArchiveRename {
+                from: PathBuf::from("input/first.txt"),
+                to: PathBuf::from("target"),
+            },
+            ArchiveRename {
+                from: PathBuf::from("input/second.txt"),
+                to: PathBuf::from("target/child.txt"),
+            },
+        ],
+        vec![ArchiveRename {
+            from: PathBuf::from("input/first.txt"),
+            to: PathBuf::from("input/second.txt"),
+        }],
+    ];
+
+    for renames in cases {
+        assert!(rename_archive(&archive, &renames, &UpdateOptions::default()).is_err());
+        assert_eq!(fs::read(&archive).unwrap(), before);
+    }
+}
+
+#[test]
+fn updating_a_single_file_stream_is_explicitly_rejected() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("payload.txt");
+    fs::write(&source, "stream\n").unwrap();
+    let archive = temp.path().join("payload.gz");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Gzip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    let addition = temp.path().join("addition.txt");
+    fs::write(&addition, "addition\n").unwrap();
+
+    assert!(matches!(
+        update_archive(
+            &archive,
+            std::slice::from_ref(&addition),
+            &UpdateOptions::default(),
+        ),
+        Err(ZiFileError::UnsupportedOperation(ArchiveFormat::Gzip))
+    ));
+    assert!(!fs::read(&archive).unwrap().is_empty());
+}
+
+#[test]
+fn updating_seven_zip_and_tar_compositions_preserves_the_merge_contract() {
+    let formats = [
+        ArchiveFormat::SevenZip,
+        ArchiveFormat::Tar,
+        ArchiveFormat::TarGzip,
+        ArchiveFormat::TarZstd,
+        ArchiveFormat::TarXz,
+        ArchiveFormat::TarLzma,
+        ArchiveFormat::TarBzip2,
+        ArchiveFormat::TarLz4,
+    ];
+    let temp = tempfile::tempdir().unwrap();
+
+    for (index, format) in formats.into_iter().enumerate() {
+        let initial = temp.path().join(format!("initial-{index}/input"));
+        fs::create_dir_all(&initial).unwrap();
+        fs::write(initial.join("hello.txt"), "old\n").unwrap();
+        let archive = temp
+            .path()
+            .join(format!("editable-{index}.{}", format.canonical_extension()));
+        create_archive(
+            std::slice::from_ref(&initial),
+            &archive,
+            format,
+            &CreateOptions::default(),
+        )
+        .unwrap();
+
+        let addition = temp.path().join(format!("addition-{index}/input"));
+        fs::create_dir_all(addition.join("nested")).unwrap();
+        fs::write(addition.join("hello.txt"), "updated\n").unwrap();
+        fs::write(addition.join("nested/new.txt"), "new\n").unwrap();
+        update_archive(
+            &archive,
+            std::slice::from_ref(&addition),
+            &UpdateOptions::default(),
+        )
+        .unwrap();
+
+        let output = temp.path().join(format!("output-{index}"));
+        extract_archive(&archive, &output, &ExtractOptions::default()).unwrap();
+        assert_eq!(
+            fs::read_to_string(output.join("input/hello.txt")).unwrap(),
+            "updated\n",
+            "format {format:?} did not replace the colliding file"
+        );
+        assert_eq!(
+            fs::read_to_string(output.join("input/nested/new.txt")).unwrap(),
+            "new\n",
+            "format {format:?} did not add the nested file"
+        );
+    }
+}
+
+#[test]
+fn cancelled_update_leaves_the_original_archive_unchanged() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("input");
+    fs::create_dir_all(&source).unwrap();
+    fs::write(source.join("hello.txt"), "original\n").unwrap();
+    let archive = temp.path().join("editable.zip");
+    create_archive(
+        std::slice::from_ref(&source),
+        &archive,
+        ArchiveFormat::Zip,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    let original = fs::read(&archive).unwrap();
+
+    let addition = temp.path().join("addition.txt");
+    fs::write(&addition, "new\n").unwrap();
+    let cancellation = CancellationToken::default();
+    cancellation.cancel();
+    assert!(matches!(
+        update_archive(
+            &archive,
+            std::slice::from_ref(&addition),
+            &UpdateOptions {
+                cancellation,
+                ..UpdateOptions::default()
+            },
+        ),
+        Err(ZiFileError::Cancelled)
+    ));
+    assert_eq!(fs::read(&archive).unwrap(), original);
+}
+
+#[test]
 fn seven_zip_round_trip() {
     assert_round_trip(ArchiveFormat::SevenZip);
 }
@@ -388,6 +788,7 @@ fn tar_family_round_trips() {
         ArchiveFormat::TarXz,
         ArchiveFormat::TarLzma,
         ArchiveFormat::TarBzip2,
+        ArchiveFormat::TarLz4,
     ] {
         assert_round_trip(format);
     }
@@ -1274,6 +1675,7 @@ fn tar_listing_honors_declared_expansion_limits_before_skipping_payload() {
         ArchiveFormat::TarXz,
         ArchiveFormat::TarLzma,
         ArchiveFormat::TarBzip2,
+        ArchiveFormat::TarLz4,
     ];
     for format in formats {
         let temp = tempfile::tempdir().unwrap();
@@ -1347,6 +1749,7 @@ fn renamed_tar_compositions_are_detected_from_a_bounded_decoded_header() {
         ArchiveFormat::TarZstd,
         ArchiveFormat::TarXz,
         ArchiveFormat::TarBzip2,
+        ArchiveFormat::TarLz4,
     ] {
         let original = temp
             .path()

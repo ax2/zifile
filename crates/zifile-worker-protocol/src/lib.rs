@@ -13,11 +13,11 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use zifile_core::{
-    ArchiveEntryInfo, ArchiveFormat, ConflictPolicy, OperationSummary, ProgressSnapshot,
-    SafetyLimits,
+    ArchiveEntryInfo, ArchiveFormat, ArchiveRename, ConflictPolicy, OperationSummary,
+    ProgressSnapshot, SafetyLimits,
 };
 
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u16 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Envelope<T> {
@@ -59,6 +59,24 @@ pub enum WorkerRequest {
         format: ArchiveFormat,
         compression_level: u8,
         password: Option<String>,
+    },
+    Update {
+        archive: PathBuf,
+        additions: Vec<PathBuf>,
+        compression_level: u8,
+        password: Option<String>,
+        limits: SafetyLimits,
+        /// Optional archive-relative files or directories to remove. The
+        /// default keeps older update requests structurally compatible.
+        #[serde(default)]
+        remove_paths: Vec<PathBuf>,
+    },
+    Rename {
+        archive: PathBuf,
+        renames: Vec<ArchiveRename>,
+        compression_level: u8,
+        password: Option<String>,
+        limits: SafetyLimits,
     },
 }
 
@@ -108,7 +126,7 @@ mod tests {
     #[test]
     fn archive_entry_optional_metadata_is_backward_compatible() {
         let legacy = r#"{
-            "version": 1,
+            "version": 2,
             "payload": {
                 "event": "archive_entry",
                 "entry": {
@@ -150,5 +168,63 @@ mod tests {
             serde_json::to_string(&Envelope::new(WorkerEvent::ArchiveEntry { entry: current }))
                 .unwrap();
         assert!(encoded.contains("checksum"));
+    }
+
+    #[test]
+    fn update_request_without_removals_is_backward_compatible() {
+        let legacy = r#"{
+            "version": 2,
+            "payload": {
+                "operation": "update",
+                "archive": "sample.zip",
+                "additions": ["new.txt"],
+                "compression_level": 6,
+                "password": null,
+                "limits": {
+                    "max_entries": 100,
+                    "max_path_depth": 8,
+                    "max_path_bytes": 4096,
+                    "max_expanded_bytes": 1048576,
+                    "max_expansion_ratio": 1000,
+                    "max_compression_ratio": 100
+                }
+            }
+        }"#;
+        let decoded: Envelope<WorkerRequest> = serde_json::from_str(legacy).unwrap();
+        let Envelope {
+            payload:
+                WorkerRequest::Update {
+                    remove_paths,
+                    additions,
+                    ..
+                },
+            ..
+        } = decoded
+        else {
+            panic!("legacy request decoded as the wrong variant");
+        };
+        assert!(remove_paths.is_empty());
+        assert_eq!(additions, [PathBuf::from("new.txt")]);
+    }
+
+    #[test]
+    fn rename_request_round_trips_archive_relative_mappings() {
+        let envelope = Envelope::new(WorkerRequest::Rename {
+            archive: PathBuf::from("sample.zip"),
+            renames: vec![ArchiveRename {
+                from: PathBuf::from("old.txt"),
+                to: PathBuf::from("new.txt"),
+            }],
+            compression_level: 6,
+            password: None,
+            limits: SafetyLimits::default(),
+        });
+        let encoded = serde_json::to_string(&envelope).unwrap();
+        let decoded: Envelope<WorkerRequest> = serde_json::from_str(&encoded).unwrap();
+        let WorkerRequest::Rename { renames, .. } = decoded.payload else {
+            panic!("rename request decoded as the wrong variant");
+        };
+        assert_eq!(renames[0].from, PathBuf::from("old.txt"));
+        assert_eq!(renames[0].to, PathBuf::from("new.txt"));
     }
 }

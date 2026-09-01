@@ -9,10 +9,32 @@
     )
 )]
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use zifile_core::{ArchiveFormat, detect_format, detect_format_from_path};
+use zifile_core::{ArchiveFormat, ArchiveInfo, detect_format, detect_format_from_path};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OfficialLink {
+    Project,
+    DocumentationZh,
+    DocumentationEn,
+    PrivacyZh,
+    PrivacyEn,
+}
+
+impl OfficialLink {
+    pub const fn url(self) -> &'static str {
+        match self {
+            Self::Project => "https://github.com/ax2/zifile",
+            Self::DocumentationZh => "https://ax2.github.io/zifile/",
+            Self::DocumentationEn => "https://ax2.github.io/zifile/en/",
+            Self::PrivacyZh => "https://ax2.github.io/zifile/product/privacy/",
+            Self::PrivacyEn => "https://ax2.github.io/zifile/en/product/privacy/",
+        }
+    }
+}
 
 pub mod create_validation;
 pub mod entry_view;
@@ -55,6 +77,23 @@ pub fn append_unique_paths(destination: &mut Vec<PathBuf>, paths: Vec<PathBuf>) 
     destination.len() - before
 }
 
+/// Inverts selection across every regular file in an archive.
+///
+/// Directories remain navigation nodes rather than extraction selections. The
+/// operation is linear in archive size and reuses the existing selection set,
+/// matching the established all-files selection scope in both desktop UIs.
+pub fn invert_archive_file_selection(
+    archive: &ArchiveInfo,
+    selected: &mut HashSet<PathBuf>,
+) -> usize {
+    for entry in archive.entries.iter().filter(|entry| !entry.is_directory) {
+        if !selected.remove(&entry.path) {
+            selected.insert(entry.path.clone());
+        }
+    }
+    selected.len()
+}
+
 /// Adds the selected format's canonical extension when a save-dialog path has
 /// no usable extension. An explicit user-entered extension is preserved.
 pub fn ensure_archive_extension(path: PathBuf, format: ArchiveFormat) -> PathBuf {
@@ -67,6 +106,77 @@ pub fn ensure_archive_extension(path: PathBuf, format: ArchiveFormat) -> PathBuf
     let mut path = path;
     path.set_extension(format.canonical_extension());
     path
+}
+
+/// Requires both create-form password fields to match exactly.
+///
+/// Two empty values deliberately match and mean that encryption is disabled.
+/// Keeping this rule shared prevents the default and accessible UIs from
+/// diverging at the point where an unrecoverable archive password is chosen.
+pub fn create_passwords_match(password: &str, confirmation: &str) -> bool {
+    password == confirmation
+}
+
+/// Returns whether a failed non-password archive open can be retried now.
+pub const fn can_retry_archive_open(
+    busy: bool,
+    has_pending_archive: bool,
+    requires_password: bool,
+) -> bool {
+    has_pending_archive && !busy && !requires_password
+}
+
+/// Opens one of ZiFile's compile-time official destinations in the default browser.
+///
+/// Accepting an enum rather than an arbitrary URL keeps UI events from becoming a
+/// general-purpose protocol launcher.
+pub fn open_official_link(link: OfficialLink) -> std::io::Result<()> {
+    let url = link.url();
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        use windows::core::PCWSTR;
+
+        let encoded = url
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        // SAFETY: every pointer references a live NUL-terminated UTF-16 buffer or is null;
+        // ShellExecuteW does not retain these pointers after returning.
+        let result = unsafe {
+            ShellExecuteW(
+                None,
+                PCWSTR::null(),
+                PCWSTR(encoded.as_ptr()),
+                PCWSTR::null(),
+                PCWSTR::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        if result.0 as isize <= 32 {
+            return Err(std::io::Error::other(
+                "Windows could not open the official link",
+            ));
+        }
+        Ok(())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(url).spawn().map(|_| ())
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open").arg(url).spawn().map(|_| ())
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        let _ = url;
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "no default browser launcher is available",
+        ))
+    }
 }
 
 /// Opens the containing folder and selects an archive when the host supports
@@ -148,6 +258,43 @@ mod tests {
     }
 
     #[test]
+    fn archive_creation_requires_an_exact_password_confirmation() {
+        assert!(create_passwords_match("", ""));
+        assert!(create_passwords_match("correct horse", "correct horse"));
+        assert!(!create_passwords_match("correct horse", "correct Horse"));
+        assert!(!create_passwords_match("secret", ""));
+        assert!(!create_passwords_match("", "secret"));
+    }
+
+    #[test]
+    fn official_links_are_fixed_https_destinations() {
+        let links = [
+            OfficialLink::Project,
+            OfficialLink::DocumentationZh,
+            OfficialLink::DocumentationEn,
+            OfficialLink::PrivacyZh,
+            OfficialLink::PrivacyEn,
+        ];
+        for link in links {
+            let url = link.url();
+            assert!(url.starts_with("https://"));
+            assert!(
+                url.starts_with("https://github.com/ax2/zifile")
+                    || url.starts_with("https://ax2.github.io/zifile/")
+            );
+            assert!(!url.contains(['\r', '\n', '"']));
+        }
+    }
+
+    #[test]
+    fn archive_retry_is_only_available_for_idle_non_password_failures() {
+        assert!(can_retry_archive_open(false, true, false));
+        assert!(!can_retry_archive_open(true, true, false));
+        assert!(!can_retry_archive_open(false, false, false));
+        assert!(!can_retry_archive_open(false, true, true));
+    }
+
+    #[test]
     fn dropped_archive_detection_keeps_known_extension_fallback() {
         let temporary = tempfile::tempdir().expect("temporary directory");
         let mislabeled = temporary.path().join("archive.zip");
@@ -195,6 +342,50 @@ mod tests {
             1
         );
         assert_eq!(sources.len(), 2);
+    }
+
+    #[test]
+    fn archive_file_selection_inverts_files_and_ignores_directories() {
+        use zifile_core::ArchiveEntryInfo;
+
+        let archive = ArchiveInfo {
+            path: PathBuf::from("sample.zip"),
+            format: ArchiveFormat::Zip,
+            entries: vec![
+                ArchiveEntryInfo {
+                    path: PathBuf::from("folder"),
+                    size: 0,
+                    compressed_size: 0,
+                    is_directory: true,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+                ArchiveEntryInfo {
+                    path: PathBuf::from("folder/one.txt"),
+                    size: 1,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+                ArchiveEntryInfo {
+                    path: PathBuf::from("two.txt"),
+                    size: 1,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+            ],
+            total_size: 0,
+            compressed_size: 0,
+        };
+        let mut selected = HashSet::from([PathBuf::from("folder/one.txt")]);
+        assert_eq!(invert_archive_file_selection(&archive, &mut selected), 1);
+        assert_eq!(selected, HashSet::from([PathBuf::from("two.txt")]));
     }
 
     #[test]

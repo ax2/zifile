@@ -3,6 +3,7 @@ $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $publishingPolicy = Join-Path $repoRoot 'packaging\msix\Test-PublishingInputs.ps1'
 $packageAudit = Join-Path $repoRoot 'packaging\msix\Test-Package.ps1'
 $packageBuild = Join-Path $repoRoot 'packaging\msix\Build-Package.ps1'
+$packageBundle = Join-Path $repoRoot 'packaging\msix\Build-Bundle.ps1'
 $packageLifecycle = Join-Path $repoRoot 'tests\smoke\msix-lifecycle.ps1'
 $repairHelper = Join-Path $repoRoot 'tests\helpers\msix-repair\Program.cs'
 $repairProject = Join-Path $repoRoot 'tests\helpers\msix-repair\MsixRepair.csproj'
@@ -36,8 +37,9 @@ $msixAssets = Join-Path $repoRoot 'packaging\msix\Test-Assets.ps1'
 $embeddedIconAudit = Join-Path $repoRoot 'packaging\msix\Test-EmbeddedIcon.ps1'
 $storeListingAssets = Join-Path $repoRoot 'packaging\store\Test-ListingAssets.ps1'
 $storeListingAssetSmoke = Join-Path $repoRoot 'tests\smoke\store-listing-assets.ps1'
+$publicReleaseAssetSmoke = Join-Path $repoRoot 'tests\smoke\public-release-assets.ps1'
 
-$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $windowsTools, $contractPolicy, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground, $msixAssets, $embeddedIconAudit, $storeListingAssets, $storeListingAssetSmoke)
+$scriptsToParse = @($publishingPolicy, $packageAudit, $packageBuild, $packageBundle, $packageLifecycle, $repairProbe, $rarCorpus, $cabInteroperability, $zipMethodCorpus, $zipLegacyCorpus, $zipZstdCorpus, $windowsTools, $contractPolicy, $wackReadiness, $versionConsistency, $releaseNotes, $contributorDocs, $securityDocs, $releaseReadiness, $cloudSigningInputs, $signedReleaseArtifacts, $signingOperationsDocs, $partnerCenterIdentity, $publicPrivacy, $wingetGenerator, $wingetVerifier, $wingetClientInstaller, $wingetSmoke, $userDocs, $operationQueueForeground, $msixAssets, $embeddedIconAudit, $storeListingAssets, $storeListingAssetSmoke, $publicReleaseAssetSmoke)
 foreach ($script in $scriptsToParse) {
     $tokens = $null
     $errors = $null
@@ -200,6 +202,42 @@ $versionFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
 if (-not $versionFixture.StartsWith($temporaryBase, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw 'Refusing to create the version-policy fixture outside the system temporary directory.'
 }
+$publicReleaseFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
+    'zifile-public-release-policy-{0}' -f [Guid]::NewGuid().ToString('N')
+)))
+if (-not $publicReleaseFixture.StartsWith($temporaryBase, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Refusing to create the public-release fixture outside the system temporary directory.'
+}
+try {
+    New-Item -ItemType Directory -Path $publicReleaseFixture -Force | Out-Null
+    foreach ($asset in @{
+        'ZiFile-0.1.3.0-windows.msixbundle' = 'all-in-one bundle fixture'
+        'zifile-windows-x64.exe' = 'x64 portable fixture'
+        'zifile-windows-arm64.exe' = 'arm64 portable fixture'
+    }.GetEnumerator()) {
+        Set-Content -LiteralPath (Join-Path $publicReleaseFixture $asset.Key) -Value $asset.Value -NoNewline -Encoding utf8NoBOM
+    }
+    $checksumLines = foreach ($asset in Get-ChildItem -LiteralPath $publicReleaseFixture -File | Sort-Object Name) {
+        $hash = (Get-FileHash -LiteralPath $asset.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        "${hash}  ./$($asset.Name)"
+    }
+    Set-Content -LiteralPath (Join-Path $publicReleaseFixture 'SHA256SUMS.txt') -Value ($checksumLines -join "`n") -Encoding utf8NoBOM
+    $publicReleaseResult = & $publicReleaseAssetSmoke -Directory $publicReleaseFixture -Version '0.1.3' | ConvertFrom-Json
+    if (-not $publicReleaseResult.checksums_verified -or
+        -not $publicReleaseResult.forbidden_internal_assets_absent -or
+        $publicReleaseResult.user_facing_asset_count -ne 4) {
+        throw 'The public-release asset audit did not accept its valid fixture.'
+    }
+    Set-Content -LiteralPath (Join-Path $publicReleaseFixture 'unexpected.dll') -Value 'forbidden' -Encoding utf8NoBOM
+    $null = Get-ExpectedFailure -Pattern 'exactly' -Action {
+        & $publicReleaseAssetSmoke -Directory $publicReleaseFixture -Version '0.1.3'
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $publicReleaseFixture) {
+        Remove-Item -LiteralPath $publicReleaseFixture -Recurse -Force
+    }
+}
 try {
     New-Item -ItemType Directory -Path (Join-Path $versionFixture 'docs') -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot 'Cargo.toml') -Destination $versionFixture
@@ -228,18 +266,13 @@ if (-not $wingetFixture.StartsWith($temporaryBase, [System.StringComparison]::Or
 try {
     New-Item -ItemType Directory -Path $wingetFixture -Force | Out-Null
     $wingetVersion = '9.8.7'
-    $wingetX64 = Join-Path $wingetFixture 'ZiFile-9.8.7.0-windows-x64.msix'
-    $wingetArm64 = Join-Path $wingetFixture 'ZiFile-9.8.7.0-windows-arm64.msix'
-    Set-Content -LiteralPath $wingetX64 -Value 'deterministic x64 signed-package fixture' -Encoding utf8NoBOM
-    Set-Content -LiteralPath $wingetArm64 -Value 'deterministic arm64 signed-package fixture' -Encoding utf8NoBOM
-    $wingetX64Sha = (Get-FileHash -LiteralPath $wingetX64 -Algorithm SHA256).Hash
-    $wingetArm64Sha = (Get-FileHash -LiteralPath $wingetArm64 -Algorithm SHA256).Hash
+    $wingetBundle = Join-Path $wingetFixture 'ZiFile-9.8.7.0-windows.msixbundle'
+    Set-Content -LiteralPath $wingetBundle -Value 'deterministic all-in-one signed-package fixture' -Encoding utf8NoBOM
+    $wingetBundleSha = (Get-FileHash -LiteralPath $wingetBundle -Algorithm SHA256).Hash
     & $wingetGenerator `
         -Version $wingetVersion `
-        -X64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$wingetVersion/$(Split-Path $wingetX64 -Leaf)" `
-        -X64InstallerSha256 $wingetX64Sha `
-        -Arm64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$wingetVersion/$(Split-Path $wingetArm64 -Leaf)" `
-        -Arm64InstallerSha256 $wingetArm64Sha `
+        -BundleInstallerUrl "https://github.com/ax2/zifile/releases/download/v$wingetVersion/$(Split-Path $wingetBundle -Leaf)" `
+        -BundleInstallerSha256 $wingetBundleSha `
         -OutputRoot $wingetFixture | Out-Null
     $wingetManifestDirectory = Join-Path $wingetFixture 'manifests\z\ZiCode\ZiFile\9.8.7'
     foreach ($manifestPath in Get-ChildItem -LiteralPath $wingetManifestDirectory -File -Filter '*.yaml') {
@@ -249,32 +282,29 @@ try {
     $wingetResult = & $wingetVerifier `
         -ManifestDirectory $wingetManifestDirectory `
         -Version $wingetVersion `
-        -X64InstallerPath $wingetX64 `
-        -Arm64InstallerPath $wingetArm64 | ConvertFrom-Json
+        -BundleInstallerPath $wingetBundle | ConvertFrom-Json
     if (-not $wingetResult.ready_for_winget_validate -or
-        -not $wingetResult.local_installers_verified -or
+        -not $wingetResult.local_bundle_verified -or
+        $wingetResult.public_installer_model -cne 'all-in-one-msixbundle' -or
         $wingetResult.manifest_files -ne 4 -or
         $wingetResult.architectures.Count -ne 2) {
         throw 'The generated WinGet multi-file candidate did not pass the signed-package verifier.'
     }
     $installerManifest = Join-Path $wingetManifestDirectory 'ZiCode.ZiFile.installer.yaml'
     $originalInstallerManifest = Get-Content -Raw -LiteralPath $installerManifest
-    $tamperedInstallerManifest = $originalInstallerManifest.Replace($wingetX64Sha, ('0' * 64))
+    $tamperedInstallerManifest = $originalInstallerManifest.Replace($wingetBundleSha, ('0' * 64))
     Set-Content -LiteralPath $installerManifest -Value $tamperedInstallerManifest -Encoding utf8NoBOM -NoNewline
-    $null = Get-ExpectedFailure -Pattern 'does not match the signed local MSIX' -Action {
+    $null = Get-ExpectedFailure -Pattern 'does not match the local all-in-one MSIX bundle' -Action {
         & $wingetVerifier `
             -ManifestDirectory $wingetManifestDirectory `
             -Version $wingetVersion `
-            -X64InstallerPath $wingetX64 `
-            -Arm64InstallerPath $wingetArm64
+            -BundleInstallerPath $wingetBundle
     }
     $null = Get-ExpectedFailure -Pattern 'versioned ZiFile GitHub Release path' -Action {
         & $wingetGenerator `
             -Version $wingetVersion `
-            -X64InstallerUrl "https://example.com/$(Split-Path $wingetX64 -Leaf)" `
-            -X64InstallerSha256 $wingetX64Sha `
-            -Arm64InstallerUrl "https://github.com/ax2/zifile/releases/download/v$wingetVersion/$(Split-Path $wingetArm64 -Leaf)" `
-            -Arm64InstallerSha256 $wingetArm64Sha `
+            -BundleInstallerUrl "https://example.com/$(Split-Path $wingetBundle -Leaf)" `
+            -BundleInstallerSha256 $wingetBundleSha `
             -OutputRoot $wingetFixture
     }
 }
@@ -565,7 +595,7 @@ if (-not $signedFixture.StartsWith($temporaryBase, [System.StringComparison]::Or
 try {
     New-Item -ItemType Directory -Path $signedFixture -Force | Out-Null
     foreach ($fixtureName in @(
-        'zifile-desktop-windows-x64.exe',
+        'zifile-windows-x64.exe',
         'zifile-cli-windows-x64.exe',
         'zifile-worker-windows-x64.exe',
         'zifile-shell-windows-x64.dll',
@@ -620,6 +650,46 @@ foreach ($requiredSigningWorkflowToken in @(
         throw "The release workflow omits cloud-signing token: $requiredSigningWorkflowToken"
     }
 }
+foreach ($requiredBundleWorkflowToken in @(
+    'Build-Bundle.ps1',
+    'Windows all-in-one MSIX bundle',
+    'windows-all-in-one',
+    '.msixbundle',
+    'public-release/*'
+)) {
+    if ($releaseSource -notmatch [Regex]::Escape($requiredBundleWorkflowToken)) {
+        throw "The release workflow omits all-in-one installer token: $requiredBundleWorkflowToken"
+    }
+}
+foreach ($requiredPortableSmokeToken in @(
+    'Smoke test standalone x64 executable',
+    'Audit standalone ARM64 executable',
+    'tests/smoke/portable-exe.ps1',
+    '-Architecture x64',
+    '-Architecture arm64',
+    '-SkipExecution'
+)) {
+    if ($releaseSource -notmatch [Regex]::Escape($requiredPortableSmokeToken)) {
+        throw "The release workflow omits standalone portable EXE smoke coverage: $requiredPortableSmokeToken"
+    }
+}
+$portableSmokeSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'tests\smoke\portable-exe.ps1')
+foreach ($requiredPortableSmokeSourceToken in @(
+    '--zifile-worker',
+    'separate_worker_present',
+    'archive_entry',
+    "operation = 'create'",
+    "operation = 'list'",
+    "operation = 'extract'",
+    'round_trip_verified',
+    'Get-PeMachine',
+    '0xAA64',
+    'execution_skipped'
+)) {
+    if ($portableSmokeSource -notmatch [Regex]::Escape($requiredPortableSmokeSourceToken)) {
+        throw "The standalone portable EXE smoke test omits required behavior: $requiredPortableSmokeSourceToken"
+    }
+}
 foreach ($retiredPfxToken in @('ZIFILE_PFX_BASE64', 'ZIFILE_PFX_PASSWORD')) {
     if ($releaseSource -match [Regex]::Escape($retiredPfxToken)) {
         throw "The release workflow still references retired PFX input: $retiredPfxToken"
@@ -659,17 +729,27 @@ if ($releaseSource -notmatch [Regex]::Escape('Test-Screenshots.ps1 -RequireCompl
 foreach ($requiredStageReleaseToken in @(
     "if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')",
     'publish-stage:',
-    'needs: [windows, sbom]',
+    'needs: [windows, bundle, sbom]',
     'pattern: windows-*',
     'prerelease: true',
-    'RELEASE-ASSETS.txt',
-    'SHA256SUMS-stage.txt',
-    "! -name 'SHA256SUMS-stage.txt'",
-    "while IFS= read -r -d '' asset"
+    'Prepare user-facing stage release assets',
+    '*.msixbundle',
+    'zifile-windows-x64.exe',
+    'zifile-windows-arm64.exe',
+    'sha256sum ./*.msixbundle ./*.exe',
+    'public-release/*'
 )) {
     if ($releaseSource -notmatch [Regex]::Escape($requiredStageReleaseToken)) {
         throw "The release workflow omits stage-release token: $requiredStageReleaseToken"
     }
+}
+$stageReleaseSource = [Regex]::Match(
+    $releaseSource,
+    '(?ms)^  publish-stage:.*?(?=^  [A-Za-z0-9_-]+:\s*$|\z)'
+).Value
+if ([string]::IsNullOrWhiteSpace($stageReleaseSource) -or
+    $stageReleaseSource -notmatch [Regex]::Escape('- uses: actions/checkout@v7')) {
+    throw 'The stage release job must checkout the repository before running repository scripts.'
 }
 if ($releaseSource -match [Regex]::Escape('sha256sum release/* > release/SHA256SUMS-stage.txt')) {
     throw 'The stage release checksum manifest must not hash itself.'
@@ -695,14 +775,33 @@ foreach ($requiredIdentitySelectionToken in @(
     }
 }
 foreach ($requiredPublicReleaseToken in @(
-    'needs: [windows, sbom]',
+    'needs: [windows, bundle, sbom]',
     'pattern: windows-*',
     'prerelease: false',
+    'No all-in-one MSIX bundle was staged for the public release.',
+    'Expected one standalone x64 and one standalone ARM64 portable executable for the public release.',
+    'zifile-windows-x64.exe',
+    'zifile-windows-arm64.exe',
+    'public-release',
+    'files: public-release/*',
     'public unsigned Windows build',
     'Verify the included SHA256SUMS file'
 )) {
     if ($releaseSource -notmatch [Regex]::Escape($requiredPublicReleaseToken)) {
         throw "The stable GitHub release does not publish the unsigned public build: $requiredPublicReleaseToken"
+    }
+}
+$publicReleaseAssetSmokeSource = Get-Content -Raw -LiteralPath $publicReleaseAssetSmoke
+foreach ($requiredPublicReleaseAuditToken in @(
+    'Audit user-facing release assets',
+    'Audit user-facing stage assets',
+    'tests/smoke/public-release-assets.ps1',
+    'exactly one entry for each user-facing installer and portable executable',
+    'forbidden_internal_assets_absent'
+)) {
+    if ($releaseSource -notmatch [Regex]::Escape($requiredPublicReleaseAuditToken) -and
+        $publicReleaseAssetSmokeSource -notmatch [Regex]::Escape($requiredPublicReleaseAuditToken)) {
+        throw "Public release asset audit omits required token: $requiredPublicReleaseAuditToken"
     }
 }
 $manifestSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'packaging\msix\AppxManifest.xml')
@@ -1084,7 +1183,10 @@ foreach ($requiredWingetClientToken in @(
     "[string]`$ClientVersion = '1.29.280'",
     'Install-Module',
     'Microsoft.WinGet.Client',
+    'for ($attempt = 1; $attempt -le $RepairAttempts; $attempt++)',
     'Repair-WinGetPackageManager -Version $ClientVersion -Force',
+    'Start-Sleep -Seconds $delaySeconds',
+    'repair_attempts = $RepairAttempts',
     'current_stable_client_pinned = $true'
 )) {
     if ($wingetClientInstallerSource -notmatch [Regex]::Escape($requiredWingetClientToken)) {
@@ -1129,8 +1231,8 @@ foreach ($requiredWingetToken in @(
     './packaging/winget/Generate-Manifests.ps1',
     './packaging/winget/Test-Manifests.ps1',
     'target/winget/manifests/z/ZiCode/ZiFile/$version',
-    '-X64InstallerPath $x64.FullName',
-    '-Arm64InstallerPath $arm64.FullName'
+    '-BundleInstallerPath $bundle.FullName',
+    'all-in-one MSIX bundle artifact'
 )) {
     if ($releaseWorkflowSource -notmatch [Regex]::Escape($requiredWingetToken)) {
         throw "Release does not enforce the verified WinGet candidate token: $requiredWingetToken"

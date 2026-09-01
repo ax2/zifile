@@ -10,7 +10,7 @@ Repository integration tests cover the capabilities below. Planned operations ar
 | ZIP | Yes | Yes | Yes | AES | Implemented |
 | 7z | Yes | Yes | Yes | AES | Implemented |
 | TAR | Yes | Yes | Yes | No | Implemented |
-| TAR + gzip/zstd/xz/LZMA/bzip2 | Yes | Yes | Yes | No | Implemented |
+| TAR + gzip/zstd/xz/LZMA/bzip2/LZ4 | Yes | Yes | Yes | No | Implemented |
 | Single-stream gzip/zstd/xz/lzma/bzip2/lz4/brotli | One entry | Yes | Yes | No | Implemented |
 | RAR 1.3–7 | Yes | Yes | No | Read | Beta |
 | Windows CAB | Yes | Yes | No | No | Beta |
@@ -19,11 +19,11 @@ ZIP reading supports Store, Deflate, Deflate64, BZip2, LZMA, XZ, Zstandard, and 
 
 `.zipx` is recognized as a ZIP reading alias and is included in both desktop open dialogs and the Windows package file association. ZiFile still creates ordinary `.zip` archives by default.
 
-The desktop open dialog also exposes common comic-book, TAR-family, LZMA, and Bzip2 aliases such as CBZ/CB7/CBR/CBT, TXZ/TZST/TBZ2, `.tar.lzma`, `.lzma`, and `.bz`. `.tar.lzma` uses TAR + LZMA-alone, ordinary `.lzma` uses an LZMA-alone decoder, and `.xz` uses an XZ decoder. The Windows package registers single-component archive suffixes; Appx manifests reject a compound suffix such as `.tar.lzma`, so it remains available in ZiFile's open dialog without being claimed by the MSIX default file association. The package also deliberately does not take over `.epub`; EPUB files can still be selected manually and are inspected as ZIP content.
+The desktop open dialog also exposes common comic-book, TAR-family, LZMA, Bzip2, and LZ4 aliases such as CBZ/CB7/CBR/CBT, TXZ/TZST/TBZ2, `.tar.lzma`, `.tlz4`, `.lzma`, and `.bz`. `.tar.lzma` uses TAR + LZMA-alone, `.tar.lz4`/`.tlz4` use TAR + LZ4, ordinary `.lzma` uses an LZMA-alone decoder, and `.lz4` uses the single-stream LZ4 decoder. The Windows package registers single-component archive suffixes; Appx manifests reject compound suffixes, so the compound formats remain available in ZiFile's open dialog without being claimed by the MSIX default file association. The package also deliberately does not take over `.epub`; EPUB files can still be selected manually and are inspected as ZIP content.
 
 Legacy ZIP Shrink, Reduce 1–4, and Implode methods are also decoded read-only. Pinned upstream fixtures verify ZiFile's extracted bytes against known content, while 7-Zip independently identifies the archived method. These obsolete algorithms are not offered for new archive creation.
 
-ZIP, 7z, and TAR compositions (including TAR + LZMA) accept multiple files and folders when created. Single-stream gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli require exactly one existing file; use the corresponding TAR composition for folders or multiple items. The desktop validates this before opening the destination dialog.
+ZIP, 7z, and TAR compositions (including TAR + LZMA and TAR + LZ4) accept multiple files and folders when created. Single-stream gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli require exactly one existing file; use the corresponding TAR composition for folders or multiple items. The desktop validates this before opening the destination dialog.
 
 When extracting a single-stream format, legacy aliases such as `.lzma` and `.bz` preserve the original filename stem instead of gaining an unnecessary `.out` suffix because their canonical extensions differ.
 

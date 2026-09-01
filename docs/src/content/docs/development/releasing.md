@@ -15,7 +15,15 @@ description: GitHub、WinGet 与 Microsoft Store 的统一版本发布流程。
 
 ## 渠道
 
-GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID `ZiCode.ZiFile` 并引用发行方控制的版本化下载地址。Microsoft Store 以 MSIX 为主。
+GitHub Release 面向用户只保留一个 all-in-one MSIX、一个 x64 独立便携 EXE、一个 ARM64 独立便携 EXE，以及一个 SHA-256 校验文件。审计 JSON、SBOM、来源证明和 WinGet YAML 作为 workflow artifact 保留，不混入 Release assets。GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID `ZiCode.ZiFile` 并引用发行方控制的版本化下载地址。Microsoft Store 以 MSIX 为主。
+
+WinGet 候选只接收公开 all-in-one `.msixbundle` 的 URL、SHA-256 和本地验证路径，不再要求或引用未公开的单架构 MSIX。清单按微软 MSIXBundle 示例保留 x64 与 ARM64 两个安装器节点，两者必须指向同一个 bundle URL 和同一哈希；`Test-Manifests.ps1` 会同时锁定该关系、29 个文件扩展名和本地 bundle 哈希，再交给官方 `winget validate`。
+
+## 主分支保护
+
+GitHub `main` 要求通过 PR 和以下七项状态检查：Dependency policy、Documentation build、Fuzz targets compile、MSIX Repair helper、RAR reference interoperability、Rust performance benchmarks、Rust quality gates。检查必须基于最新主分支；管理员同样不能绕过。仓库不要求人工批准，适合单维护者工作流，但要求解决所有评审对话、保持线性历史，并禁止强推和删除主分支。该规则属于 GitHub 仓库设置；迁移或重建仓库时必须单独复核，不能仅从源代码推断它仍然生效。
+
+Release Job 会运行 `tests/smoke/portable-exe.ps1`：x64 桌面 EXE 被复制到不含独立 Worker 的目录中，三次启动内置的 `--zifile-worker` 模式，依次创建 ZIP、列出并核对项目、解压并逐字节核对原文件。这样公开的单文件资产必须证明完整创建—读取—解压往返，而不只是能够启动。ARM64 EXE 在 x64 runner 上执行相同的 PE 头与“无旁置 Worker”审计，但跳过运行；真正的 ARM64 执行仍属于实机门禁。
 
 文档当前发布到 `ax2.github.io/zifile`；完成 DNS 配置后迁移到计划域名 `zifile.zicode.com`。
 
@@ -23,7 +31,9 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 
 公开的[代码签名政策](/zifile/development/code-signing-policy/)记录 SignPath Foundation 申请状态、发布角色、来源证明边界、隐私说明以及独立的 Partner Center MSIX 身份。申请获批且 MSIX 身份决策完成评审前，不将 SignPath Foundation 接入正式发布工作流。
 
-推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE，并直接发布公开的 GitHub Release。稳定标签（例如 `v1.0.0`）默认发布未签名的可用 Windows 包、独立 EXE、审计、校验和、SBOM、WinGet 清单候选与构建证明；Release Notes 会明确提示未签名状态，用户应先核对 SHA-256。带连字符的阶段标签（例如 `v0.1.0-alpha.1`、`v0.1.0-beta.1`、`v1.0.0-rc.1`）发布相同的未签名产物到 GitHub Pre-release；它们不能提交 WinGet 或 Store。正式签名仍保留为 Release workflow 的 `digicert-stm` 手动选项，只有显式勾选 `require_release_ready` 时才要求 Partner Center、Store 截图和全部 1.0 readiness 门禁。未签名 `.Dev` 包使用微软固定 OID Publisher 并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
+推送 `v*` 标签会为 x64 和 ARM64 构建 MSIX 与独立 EXE，并直接发布公开的 GitHub Release。独立 EXE 将自身以内部 Worker 模式重新启动，因此不需要旁边的 Worker 文件；稳定标签（例如 `v1.0.0`）默认只发布用户需要的一个 all-in-one MSIX、一个 x64 独立便携 EXE、一个 ARM64 独立便携 EXE 和一个 SHA-256 校验文件。审计 JSON、SBOM、WinGet 清单候选和构建证明由 workflow 作为内部证据保留，不混入 Release assets。Release Notes 会明确提示未签名状态，用户应先核对 SHA-256。带连字符的阶段标签（例如 `v0.1.0-alpha.1`、`v0.1.0-beta.1`、`v1.0.0-rc.1`）发布相同的用户资产到 GitHub Pre-release；它们不能提交 WinGet 或 Store。正式签名仍保留为 Release workflow 的 `digicert-stm` 手动选项，只有显式勾选 `require_release_ready` 时才要求 Partner Center、Store 截图和全部 1.0 readiness 门禁。未签名 `.Dev` 包使用微软固定 OID Publisher 并要求 Windows 11 build 26100；正式签名/Store 包使用证书或 Partner Center 的精确 Publisher，保留 build 19041 最低版本，且不得包含未签名 OID。
+
+上传前，`publish-stage` 会 checkout 当前提交并运行 `tests/smoke/public-release-assets.ps1`，确认 Release 只包含上述四类用户资产、每个负载都有且只有一个校验和、文件非空，并拒绝 DLL、配置、ZIP、SBOM 等额外文件。这样可以让发布工作流的内部产物与公开下载页保持明确边界。
 
 阶段预发布的 workflow 会自动在 Release Notes 中加入 `Free code signing provided by SignPath.io, certificate by SignPath Foundation.`，同时保留 GitHub 自动生成的变更说明。这是基金会署名/申请说明，不代表当前未签名开发包已经获得受信任签名。
 
@@ -42,6 +52,8 @@ Partner Center 需要先手动预留名称并完成首个提交；之后可以�
 Windows Release 使用仓库固定的 Rust 1.93.0、锁文件、单作业 Cargo 构建和 MSVC `/Brepro` 确定性链接。x64/ARM64 测试与打包 Job 各有 90 分钟硬超时；超时按失败处理，不能跳过包审计或产物上传。独立的双构建工作流会在两个隔离目标目录比较五个裸 PE 文件的 SHA-256；方法与证据边界见[可复现 Windows 构建](/zifile/development/reproducible-builds/)。
 
 在打标签前可从 Actions 手动运行 Release 工作流。该模式不接收第二个版本输入，而是使用 `Cargo.toml` 的工作区版本；推送 tag 会自动公开发布，`none` 构建未签名双架构产物，`digicert-stm` 才进入受保护环境并保存签后产物。推荐每个阶段使用精确递增的带连字符标签，例如 `v0.1.0-alpha.1`、`v0.1.0-beta.1` 和 `v1.0.0-rc.1`；稳定版本使用无连字符的 `v1.0.0`，默认也可发布公开 GitHub 构建，需要正式渠道时再显式启用 `require_release_ready`。普通 CI 与 Release 都运行版本一致性门禁；标签必须精确匹配 `v<workspace-version>`。CLI、核心 Provider 和 IPC 的兼容边界见[公开契约与版本策略](/zifile/development/contracts/)。
+
+公开 Release 成功并核对四个用户资产后，应在后续文档提交中更新 `release/public-release.json`。该文件记录已经真实发布的版本、标签、URL、时间和严格资产集合，而不是下一次构建中的 workspace 版本。文档 claim 检查会要求 README、双语快速上手、Stage 4 当前状态和路线图与它一致；因此版本准备期间可以继续安全指向上一版，发布完成后也不能遗漏下载指引更新。
 
 普通 CI 还会检查 `CHANGELOG.md` 只有一个 `[Unreleased]` 章节。标签发布必须先把本次内容整理为 `## [<workspace-version>] - YYYY-MM-DD`，至少包含一个 Keep a Changelog 分类和一条非占位更新；版本标题缺失、日期无效、空章节或残留 `TODO`/`TBD` 都会在构建前失败。手动 Release 只验证 `[Unreleased]` 结构，便于发布前演练。
 

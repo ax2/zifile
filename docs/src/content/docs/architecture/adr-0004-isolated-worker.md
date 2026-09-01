@@ -13,7 +13,7 @@ description: 桌面归档操作的进程边界、IPC 与 Windows Job Object 决�
 
 ## 决策
 
-- 新增 `zifile-worker.exe`，桌面的 list、test、extract、create 全部由它调用 `zifile-core`。
+- 归档操作通过 `zifile-worker` runtime 执行；桌面便携 EXE 使用 `--zifile-worker` 在自身内启动该 runtime，独立的 `zifile-worker.exe` 继续作为 MSIX 和开发环境的兼容入口。
 - `zifile-worker-protocol` 定义显式版本号的 JSON Lines 消息；条目逐条发送，终结事件必须唯一。
 - 请求经标准输入发送，密码不进入命令行；请求最多 16 MiB，单事件最多 4 MiB，标准错误最多读取 64 KiB。
 - Windows 客户端先创建并配置 Job Object、再发送归档请求。Job 最多一个活动进程、进程内存上限 4 GiB，并启用 kill-on-close。
@@ -21,6 +21,6 @@ description: 桌面归档操作的进程边界、IPC 与 Windows Job Object 决�
 
 ## 后果
 
-桌面 UI 不再直接链接调用归档入口，解析器异常通常只终止 Worker。完整可运行目录、MSIX 和发布产物必须同时携带架构匹配的 Worker。
+桌面 UI 不再直接链接调用归档入口，解析器异常通常只终止 Worker。完整可运行目录和 MSIX 保留架构匹配的 Worker 入口；GitHub Release 的便携 EXE 将桌面端与 Worker runtime 合并到单个文件，不要求额外文件。
 
 Job Object 不是权限沙箱：Worker 仍以当前用户身份访问文件。后续可以评估 AppContainer、CPU 时间限制和更细的 Broker，但不能因此宣称当前实现拥有这些能力。

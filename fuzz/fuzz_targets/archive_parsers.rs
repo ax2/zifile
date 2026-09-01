@@ -19,7 +19,7 @@ struct FormatCase {
     tar_header: bool,
 }
 
-const CASES: [FormatCase; 15] = [
+const CASES: [FormatCase; 18] = [
     FormatCase {
         suffix: ".zip",
         magic: b"PK\x03\x04",
@@ -61,8 +61,18 @@ const CASES: [FormatCase; 15] = [
         tar_header: false,
     },
     FormatCase {
+        suffix: ".tar.lzma",
+        magic: b"",
+        tar_header: false,
+    },
+    FormatCase {
         suffix: ".tar.bz2",
         magic: b"BZh",
+        tar_header: false,
+    },
+    FormatCase {
+        suffix: ".tar.lz4",
+        magic: b"\x04\x22\x4D\x18",
         tar_header: false,
     },
     FormatCase {
@@ -78,6 +88,11 @@ const CASES: [FormatCase; 15] = [
     FormatCase {
         suffix: ".xz",
         magic: b"\xFD7zXZ\x00",
+        tar_header: false,
+    },
+    FormatCase {
+        suffix: ".lzma",
+        magic: b"",
         tar_header: false,
     },
     FormatCase {

@@ -156,6 +156,45 @@ impl Default for CreateOptions {
     }
 }
 
+/// Options for rebuilding an existing multi-entry archive after merging local
+/// files or directories and/or removing archive-relative paths. The original
+/// archive is only replaced after the complete staged rebuild succeeds.
+#[derive(Debug, Clone)]
+pub struct UpdateOptions {
+    pub compression_level: u8,
+    pub password: Option<String>,
+    pub limits: SafetyLimits,
+    /// Archive-relative files or directories to remove after extraction.
+    /// Paths are normalized and checked with the same policy used for archive
+    /// entries before anything is removed from the staging tree.
+    pub remove_paths: Vec<PathBuf>,
+    pub cancellation: CancellationToken,
+    pub progress: OperationProgress,
+}
+
+/// One archive-relative rename applied while rebuilding a multi-entry archive.
+///
+/// Both paths are validated with the archive path policy before any staging
+/// content is changed. Directory renames move the complete subtree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArchiveRename {
+    pub from: PathBuf,
+    pub to: PathBuf,
+}
+
+impl Default for UpdateOptions {
+    fn default() -> Self {
+        Self {
+            compression_level: 6,
+            password: None,
+            limits: SafetyLimits::default(),
+            remove_paths: Vec::new(),
+            cancellation: CancellationToken::default(),
+            progress: OperationProgress::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperationSummary {
     pub files: u64,
@@ -306,7 +345,8 @@ pub fn list_archive_with_options(
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
         | ArchiveFormat::TarLzma
-        | ArchiveFormat::TarBzip2 => list_tar(path, format, options)?,
+        | ArchiveFormat::TarBzip2
+        | ArchiveFormat::TarLz4 => list_tar(path, format, options)?,
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
@@ -398,7 +438,8 @@ pub fn test_archive_with_options(
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
         | ArchiveFormat::TarLzma
-        | ArchiveFormat::TarBzip2 => test_tar(path, info.format, options)?,
+        | ArchiveFormat::TarBzip2
+        | ArchiveFormat::TarLz4 => test_tar(path, info.format, options)?,
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
@@ -477,7 +518,8 @@ pub fn extract_archive(
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
         | ArchiveFormat::TarLzma
-        | ArchiveFormat::TarBzip2 => extract_tar(archive, destination, info.format, options),
+        | ArchiveFormat::TarBzip2
+        | ArchiveFormat::TarLz4 => extract_tar(archive, destination, info.format, options),
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
@@ -500,8 +542,18 @@ pub fn create_archive(
     format: ArchiveFormat,
     options: &CreateOptions,
 ) -> ZiFileResult<OperationSummary> {
+    create_archive_inner(sources, destination, format, options, false)
+}
+
+fn create_archive_inner(
+    sources: &[PathBuf],
+    destination: impl AsRef<Path>,
+    format: ArchiveFormat,
+    options: &CreateOptions,
+    allow_empty: bool,
+) -> ZiFileResult<OperationSummary> {
     options.cancellation.check()?;
-    if sources.is_empty() {
+    if sources.is_empty() && !allow_empty {
         return Err(ZiFileError::InvalidInput(
             "at least one source is required".to_owned(),
         ));
@@ -536,7 +588,8 @@ pub fn create_archive(
         | ArchiveFormat::TarZstd
         | ArchiveFormat::TarXz
         | ArchiveFormat::TarLzma
-        | ArchiveFormat::TarBzip2 => create_tar(sources, destination, format, options),
+        | ArchiveFormat::TarBzip2
+        | ArchiveFormat::TarLz4 => create_tar(sources, destination, format, options),
         ArchiveFormat::Gzip
         | ArchiveFormat::Zstandard
         | ArchiveFormat::Xz
@@ -546,6 +599,483 @@ pub fn create_archive(
         | ArchiveFormat::Brotli => create_stream(sources, destination, format, options),
         ArchiveFormat::Rar | ArchiveFormat::Cab => Err(ZiFileError::UnsupportedOperation(format)),
     }
+}
+
+/// Adds local files or directories to an existing multi-entry archive.
+///
+/// The archive is extracted into a private sibling staging directory, the
+/// additions are merged by archive-relative root name, and a fresh archive is
+/// created before the original is atomically replaced. A source file with an
+/// existing archive-relative name is updated; directory/file type collisions
+/// are rejected. RAR, CAB, and single-file stream formats remain read-only for
+/// this operation.
+pub fn update_archive(
+    archive: impl AsRef<Path>,
+    additions: &[PathBuf],
+    options: &UpdateOptions,
+) -> ZiFileResult<OperationSummary> {
+    options.cancellation.check()?;
+    if additions.is_empty() && options.remove_paths.is_empty() {
+        return Err(ZiFileError::InvalidInput(
+            "at least one addition or removal is required".to_owned(),
+        ));
+    }
+
+    let archive = archive.as_ref();
+    let format = detect_format(archive)?;
+    if !format.supports_update() {
+        return Err(ZiFileError::UnsupportedOperation(format));
+    }
+    let canonical_archive = fs::canonicalize(archive)?;
+    for source in additions {
+        let canonical_source = fs::canonicalize(source).map_err(|error| {
+            ZiFileError::InvalidInput(format!(
+                "addition does not exist or cannot be resolved: {} ({error})",
+                source.display()
+            ))
+        })?;
+        if path_is_same_or_descendant(&canonical_archive, &canonical_source) {
+            return Err(ZiFileError::InvalidInput(
+                "an archive cannot be added to itself or to one of its parent sources".to_owned(),
+            ));
+        }
+    }
+
+    let parent = archive.parent().unwrap_or_else(|| Path::new("."));
+    let staging = tempfile::tempdir_in(parent)?;
+    let contents = staging.path().join("contents");
+    fs::create_dir(&contents)?;
+    let remove_paths = normalized_update_removals(&options.remove_paths, options.limits)?;
+    let extract_options = ExtractOptions {
+        conflict: ConflictPolicy::Error,
+        limits: options.limits,
+        password: options.password.clone(),
+        selected_paths: None,
+        cancellation: options.cancellation.clone(),
+        progress: options.progress.clone(),
+    };
+    extract_archive(archive, &contents, &extract_options)?;
+    for path in &remove_paths {
+        remove_update_path(&contents, path, options)?;
+    }
+    for source in additions {
+        merge_update_source(source, &contents, options)?;
+    }
+
+    let sources = top_level_sources(&contents)?;
+    let output = staging
+        .path()
+        .join(format!("updated.{}", format.canonical_extension()));
+    let source_entries = collect_sources(&sources, &output)?;
+    validate_update_entries(&source_entries, options.limits)?;
+    options.cancellation.check()?;
+    let create_options = CreateOptions {
+        compression_level: format.clamp_compression_level(options.compression_level),
+        password: options.password.clone(),
+        cancellation: options.cancellation.clone(),
+        progress: options.progress.clone(),
+    };
+    let summary = create_archive_inner(&sources, &output, format, &create_options, true)?;
+    options.cancellation.check()?;
+    replace_existing_file(&output, archive)?;
+    Ok(summary)
+}
+
+/// Renames files or directories inside an existing multi-entry archive.
+///
+/// The archive is extracted into a private staging directory, all rename
+/// mappings are validated, and the rebuilt archive replaces the original only
+/// after encoding succeeds. ZIP, 7z, and TAR-family archives support this
+/// operation; single-file streams and read-only providers do not.
+pub fn rename_archive(
+    archive: impl AsRef<Path>,
+    renames: &[ArchiveRename],
+    options: &UpdateOptions,
+) -> ZiFileResult<OperationSummary> {
+    options.cancellation.check()?;
+    if renames.is_empty() {
+        return Err(ZiFileError::InvalidInput(
+            "at least one rename is required".to_owned(),
+        ));
+    }
+
+    let archive = archive.as_ref();
+    let format = detect_format(archive)?;
+    if !format.supports_update() {
+        return Err(ZiFileError::UnsupportedOperation(format));
+    }
+
+    let staging = tempfile::tempdir_in(archive.parent().unwrap_or_else(|| Path::new(".")))?;
+    let contents = staging.path().join("contents");
+    fs::create_dir(&contents)?;
+    let extract_options = ExtractOptions {
+        conflict: ConflictPolicy::Error,
+        limits: options.limits,
+        password: options.password.clone(),
+        selected_paths: None,
+        cancellation: options.cancellation.clone(),
+        progress: options.progress.clone(),
+    };
+    extract_archive(archive, &contents, &extract_options)?;
+    let renames = normalized_archive_renames(renames, options.limits)?;
+    apply_archive_renames(&contents, &renames, options)?;
+
+    let sources = top_level_sources(&contents)?;
+    let output = staging
+        .path()
+        .join(format!("renamed.{}", format.canonical_extension()));
+    let source_entries = collect_sources(&sources, &output)?;
+    validate_update_entries(&source_entries, options.limits)?;
+    options.cancellation.check()?;
+    let create_options = CreateOptions {
+        compression_level: format.clamp_compression_level(options.compression_level),
+        password: options.password.clone(),
+        cancellation: options.cancellation.clone(),
+        progress: options.progress.clone(),
+    };
+    let summary = create_archive_inner(&sources, &output, format, &create_options, true)?;
+    options.cancellation.check()?;
+    replace_existing_file(&output, archive)?;
+    Ok(summary)
+}
+
+fn normalized_archive_renames(
+    renames: &[ArchiveRename],
+    limits: SafetyLimits,
+) -> ZiFileResult<Vec<ArchiveRename>> {
+    let mut normalized = Vec::with_capacity(renames.len());
+    let mut source_keys = HashSet::with_capacity(renames.len());
+    let mut destination_keys = HashSet::with_capacity(renames.len());
+    for rename in renames {
+        let from = safe_relative_path(&rename.from.to_string_lossy(), limits.max_path_depth)?;
+        let to = safe_relative_path(&rename.to.to_string_lossy(), limits.max_path_depth)?;
+        if from == to {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename source and destination are identical: {}",
+                from.display()
+            )));
+        }
+        if !source_keys.insert(archive_collision_key(&from)) {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename source collides with another source: {}",
+                from.display()
+            )));
+        }
+        if !destination_keys.insert(archive_collision_key(&to)) {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename destination collides with another destination: {}",
+                to.display()
+            )));
+        }
+        if archive_collision_key(&from) == archive_collision_key(&to) {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename source and destination collide: {} -> {}",
+                from.display(),
+                to.display()
+            )));
+        }
+        if normalized
+            .iter()
+            .any(|item: &ArchiveRename| item.from == from)
+        {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename source is specified more than once: {}",
+                from.display()
+            )));
+        }
+        if normalized.iter().any(|item: &ArchiveRename| item.to == to) {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename destination is specified more than once: {}",
+                to.display()
+            )));
+        }
+        normalized.push(ArchiveRename { from, to });
+    }
+
+    for (index, current) in normalized.iter().enumerate() {
+        for (other_index, other) in normalized.iter().enumerate() {
+            if index == other_index {
+                continue;
+            }
+            if current.from.starts_with(&other.from) || other.from.starts_with(&current.from) {
+                return Err(ZiFileError::InvalidInput(
+                    "rename sources cannot overlap".to_owned(),
+                ));
+            }
+        }
+        if normalized
+            .iter()
+            .any(|other| current.to != other.from && current.to.starts_with(&other.from))
+        {
+            return Err(ZiFileError::InvalidInput(format!(
+                "rename destination is inside a renamed source: {}",
+                current.to.display()
+            )));
+        }
+        if normalized.iter().any(|other| {
+            current.to != other.to
+                && (current.to.starts_with(&other.to) || other.to.starts_with(&current.to))
+        }) {
+            return Err(ZiFileError::InvalidInput(
+                "rename destinations cannot overlap".to_owned(),
+            ));
+        }
+    }
+    Ok(normalized)
+}
+
+fn apply_archive_renames(
+    contents: &Path,
+    renames: &[ArchiveRename],
+    options: &UpdateOptions,
+) -> ZiFileResult<()> {
+    let mut source_kinds = HashMap::with_capacity(renames.len());
+    for rename in renames {
+        options.cancellation.check()?;
+        let source = contents.join(&rename.from);
+        reject_symlink_components(&source)?;
+        let metadata = fs::symlink_metadata(&source).map_err(|error| {
+            if error.kind() == io::ErrorKind::NotFound {
+                ZiFileError::InvalidInput(format!(
+                    "archive entry to rename was not found: {}",
+                    rename.from.display()
+                ))
+            } else {
+                ZiFileError::Io(error)
+            }
+        })?;
+        if metadata_is_link_like(&metadata) {
+            return Err(ZiFileError::LinkEntry(rename.from.display().to_string()));
+        }
+        if !metadata.is_dir() && !metadata.is_file() {
+            return Err(ZiFileError::UnsupportedEntry(
+                rename.from.display().to_string(),
+            ));
+        }
+        source_kinds.insert(rename.from.clone(), metadata.is_dir());
+    }
+
+    for rename in renames {
+        options.cancellation.check()?;
+        let destination = contents.join(&rename.to);
+        reject_symlink_components(&destination)?;
+        if let Some(source_is_directory) = source_kinds.get(&rename.to) {
+            let source_is_directory = *source_is_directory;
+            let current_is_directory =
+                source_kinds.get(&rename.from).copied().ok_or_else(|| {
+                    ZiFileError::InvalidInput("rename source validation lost an entry".to_owned())
+                })?;
+            if source_is_directory != current_is_directory {
+                return Err(ZiFileError::NameCollision(rename.to.clone()));
+            }
+        } else if fs::symlink_metadata(&destination).is_ok() {
+            return Err(ZiFileError::NameCollision(rename.to.clone()));
+        }
+    }
+
+    // Move every source out of the way first. This also makes swaps such as
+    // a.txt -> b.txt and b.txt -> a.txt deterministic on Windows.
+    let temporary = tempfile::tempdir_in(contents.parent().unwrap_or(contents))?;
+    for (index, rename) in renames.iter().enumerate() {
+        options.cancellation.check()?;
+        fs::rename(
+            contents.join(&rename.from),
+            temporary.path().join(index.to_string()),
+        )?;
+    }
+    for (index, rename) in renames.iter().enumerate() {
+        options.cancellation.check()?;
+        let destination = contents.join(&rename.to);
+        if let Some(parent) = destination.parent() {
+            reject_symlink_components(parent)?;
+            fs::create_dir_all(parent)?;
+        }
+        fs::rename(temporary.path().join(index.to_string()), destination)?;
+    }
+    options.cancellation.check()
+}
+
+fn normalized_update_removals(
+    paths: &[PathBuf],
+    limits: SafetyLimits,
+) -> ZiFileResult<Vec<PathBuf>> {
+    let mut normalized = paths
+        .iter()
+        .map(|path| safe_relative_path(&path.to_string_lossy(), limits.max_path_depth))
+        .collect::<ZiFileResult<Vec<_>>>()?;
+    normalized.sort_by_key(|path| path.components().count());
+    normalized.dedup();
+
+    let mut roots = Vec::with_capacity(normalized.len());
+    for path in normalized {
+        if !roots.iter().any(|root: &PathBuf| path.starts_with(root)) {
+            roots.push(path);
+        }
+    }
+    Ok(roots)
+}
+
+fn remove_update_path(contents: &Path, path: &Path, options: &UpdateOptions) -> ZiFileResult<()> {
+    options.cancellation.check()?;
+    let target = contents.join(path);
+    reject_symlink_components(&target)?;
+    let metadata = fs::symlink_metadata(&target).map_err(|error| {
+        if error.kind() == io::ErrorKind::NotFound {
+            ZiFileError::InvalidInput(format!(
+                "archive entry to remove was not found: {}",
+                path.display()
+            ))
+        } else {
+            ZiFileError::Io(error)
+        }
+    })?;
+    if metadata_is_link_like(&metadata) {
+        return Err(ZiFileError::LinkEntry(path.display().to_string()));
+    }
+    if metadata.is_dir() {
+        fs::remove_dir_all(&target)?;
+    } else if metadata.is_file() {
+        fs::remove_file(&target)?;
+    } else {
+        return Err(ZiFileError::UnsupportedEntry(path.display().to_string()));
+    }
+    options.cancellation.check()
+}
+
+fn top_level_sources(contents: &Path) -> ZiFileResult<Vec<PathBuf>> {
+    let mut sources = fs::read_dir(contents)?
+        .map(|entry| entry.map(|entry| entry.path()).map_err(ZiFileError::Io))
+        .collect::<ZiFileResult<Vec<_>>>()?;
+    sources.sort();
+    Ok(sources)
+}
+
+fn validate_update_entries(entries: &[SourceEntry], limits: SafetyLimits) -> ZiFileResult<()> {
+    if entries.len() as u64 > limits.max_entries {
+        return Err(ZiFileError::LimitExceeded(format!(
+            "entry count exceeds {}",
+            limits.max_entries
+        )));
+    }
+    let total_size = entries.iter().try_fold(0_u64, |total, entry| {
+        total
+            .checked_add(entry.size)
+            .ok_or_else(|| ZiFileError::LimitExceeded("archive size overflow".to_owned()))
+    })?;
+    if total_size > limits.max_expanded_bytes {
+        return Err(ZiFileError::LimitExceeded(format!(
+            "expanded data exceeds {} bytes",
+            limits.max_expanded_bytes
+        )));
+    }
+    Ok(())
+}
+
+fn merge_update_source(
+    source: &Path,
+    contents: &Path,
+    options: &UpdateOptions,
+) -> ZiFileResult<()> {
+    let metadata = fs::symlink_metadata(source)?;
+    if metadata_is_link_like(&metadata) {
+        return Err(ZiFileError::LinkEntry(source.display().to_string()));
+    }
+    let root_name = source.file_name().ok_or_else(|| {
+        ZiFileError::InvalidInput(format!("addition has no file name: {}", source.display()))
+    })?;
+    let root = safe_relative_path(&root_name.to_string_lossy(), options.limits.max_path_depth)?;
+    for item in WalkDir::new(source).follow_links(false) {
+        options.cancellation.check()?;
+        let item = item.map_err(|error| ZiFileError::Backend(error.to_string()))?;
+        let item_metadata = fs::symlink_metadata(item.path())?;
+        if metadata_is_link_like(&item_metadata) {
+            return Err(ZiFileError::LinkEntry(item.path().display().to_string()));
+        }
+        let relative = item.path().strip_prefix(source).map_err(|error| {
+            ZiFileError::InvalidInput(format!("cannot relativize addition: {error}"))
+        })?;
+        let relative_archive_path = root.join(relative);
+        let safe = safe_relative_path(
+            &relative_archive_path.to_string_lossy(),
+            options.limits.max_path_depth,
+        )?;
+        let target = contents.join(&safe);
+        reject_symlink_components(&target)?;
+        if item_metadata.is_dir() {
+            if target.exists() && !target.is_dir() {
+                return Err(ZiFileError::NameCollision(safe));
+            }
+            fs::create_dir_all(&target)?;
+            set_modified_time_if_present(&target, item_metadata.modified().ok())?;
+        } else if item_metadata.is_file() {
+            if target.exists() && target.is_dir() {
+                return Err(ZiFileError::NameCollision(safe));
+            }
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut input = BufReader::new(File::open(item.path())?);
+            let mut output = BufWriter::new(File::create(&target)?);
+            let mut copied = 0_u64;
+            copy_limited(
+                &mut input,
+                &mut output,
+                &mut copied,
+                options.limits.max_expanded_bytes,
+                Some(&options.cancellation),
+                Some(&options.progress),
+            )?;
+            output.flush()?;
+            output.get_ref().sync_all()?;
+            set_modified_time_if_present(&target, item_metadata.modified().ok())?;
+        } else {
+            return Err(ZiFileError::UnsupportedEntry(
+                item.path().display().to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn replace_existing_file(source: &Path, destination: &Path) -> ZiFileResult<()> {
+    if destination.is_dir() {
+        return Err(ZiFileError::DestinationExists(destination.to_path_buf()));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+        };
+
+        let source: Vec<u16> = source
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let destination: Vec<u16> = destination
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        // SAFETY: both vectors are NUL-terminated UTF-16 paths that remain
+        // alive for the duration of the synchronous Win32 call.
+        let moved = unsafe {
+            MoveFileExW(
+                source.as_ptr(),
+                destination.as_ptr(),
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            )
+        };
+        if moved == 0 {
+            return Err(ZiFileError::Io(io::Error::last_os_error()));
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        fs::rename(source, destination)?;
+    }
+    Ok(())
 }
 
 fn open_cab(path: &Path) -> ZiFileResult<Cabinet<BufReader<File>>> {
@@ -1605,6 +2135,12 @@ fn create_tar(
             &options.cancellation,
             &options.progress,
         )?,
+        ArchiveFormat::TarLz4 => write_tar_lz4(
+            &entries,
+            BufWriter::new(temporary.as_file_mut()),
+            &options.cancellation,
+            &options.progress,
+        )?,
         _ => return Err(ZiFileError::UnsupportedOperation(format)),
     };
     persist_archive(temporary, destination)?;
@@ -1668,6 +2204,24 @@ fn write_tar_lzma(
     Ok(summary)
 }
 
+fn write_tar_lz4(
+    entries: &[SourceEntry],
+    output: BufWriter<&mut File>,
+    cancellation: &CancellationToken,
+    progress: &OperationProgress,
+) -> ZiFileResult<OperationSummary> {
+    let lz4 = FrameEncoder::new(output);
+    let mut archive = tar::Builder::new(lz4);
+    let summary = append_tar_entries(&mut archive, entries, cancellation, progress)?;
+    archive.finish()?;
+    archive
+        .into_inner()
+        .map_err(|error| ZiFileError::Backend(error.to_string()))?
+        .finish()
+        .map_err(|error| ZiFileError::Backend(error.to_string()))?;
+    Ok(summary)
+}
+
 fn open_tar_reader(
     path: &Path,
     format: ArchiveFormat,
@@ -1685,6 +2239,7 @@ fn open_tar_reader(
                 .map_err(|error| ZiFileError::Backend(error.to_string()))
         }
         ArchiveFormat::TarBzip2 => Ok(Box::new(BzDecoder::new(file))),
+        ArchiveFormat::TarLz4 => Ok(Box::new(FrameDecoder::new(file))),
         _ => Err(ZiFileError::UnsupportedOperation(format)),
     }
 }
