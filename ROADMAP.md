@@ -32,11 +32,12 @@ Goal: safely open, list, create, and extract common archives.
 - [x] 7z read/write with optional AES encryption.
 - [x] Beta read-only RAR 1.3–7 browse/test/selective extraction with password support; creation stays disabled.
 - [x] TAR and gzip/zstd/xz/LZMA/bzip2 stream composition; standalone LZMA-alone creation is also available, while lz4/brotli remain single-stream formats.
+- [x] Beta Windows CAB creation with fixed MSZIP compression, plus None/MSZIP/LZX read support; empty directories, passwords, updates, and renames remain explicitly unsupported for CAB.
 - [x] Signature-based format detection.
 - [x] Archive browser, selected extraction, destination and conflict policies.
 - [x] Add safe in-place updates and selected-entry removal for ZIP, 7z, and
   TAR-family multi-entry archives; single streams, RAR, and CAB remain
-  explicitly read-only.
+  explicitly read-only for update operations.
 - [x] Add atomic archive-relative file and directory renaming, including safe
   batch mappings and directory subtree moves, for the same updateable formats.
 - [x] Background execution with cooperative cancellation.
