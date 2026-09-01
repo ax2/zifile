@@ -463,10 +463,18 @@ jobs:
             -BundleInstallerUrl "$base/$($bundle.Name)" `
             -BundleInstallerSha256 (Get-FileHash -LiteralPath $bundle.FullName -Algorithm SHA256).Hash
           $manifestDirectory = "target/winget/manifests/z/ZiCode/ZiFile/$version"
-          ./packaging/winget/Test-Manifests.ps1 `
-            -ManifestDirectory $manifestDirectory `
-            -Version $version `
-            -BundleInstallerPath $bundle.FullName
+          $verificationArguments = @{
+            ManifestDirectory = $manifestDirectory
+            Version = $version
+            BundleInstallerPath = $bundle.FullName
+          }
+          if ('${{ inputs.signing_provider }}' -eq 'none' -and
+              '${{ inputs.require_release_ready }}' -ne 'true') {
+            # Ordinary GitHub evidence intentionally uses the isolated .Dev
+            # identity; this switch is never used for a WinGet submission.
+            $verificationArguments.AllowDevelopmentIdentity = $true
+          }
+          ./packaging/winget/Test-Manifests.ps1 @verificationArguments
           New-Item -ItemType Directory -Path release-support -Force | Out-Null
           Copy-Item -Path "$manifestDirectory/*.yaml" -Destination release-support
       - name: Upload WinGet submission candidate

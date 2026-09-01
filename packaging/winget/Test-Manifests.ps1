@@ -3,7 +3,8 @@ param(
     [string]$ManifestDirectory,
     [Parameter(Mandatory)]
     [string]$Version,
-    [string]$BundleInstallerPath
+    [string]$BundleInstallerPath,
+    [switch]$AllowDevelopmentIdentity
 )
 
 $ErrorActionPreference = 'Stop'
@@ -147,6 +148,7 @@ if (@($bundleUrls | Sort-Object -Unique).Count -ne 1 -or
     throw 'The x64 and arm64 WinGet entries must reference the same all-in-one MSIX bundle and SHA-256.'
 }
 
+$packageIdentities = @()
 if ($BundleInstallerPath) {
     $resolvedBundle = (Resolve-Path -LiteralPath $BundleInstallerPath -ErrorAction Stop).Path
     if (-not $resolvedBundle.EndsWith('.msixbundle', [StringComparison]::OrdinalIgnoreCase)) {
@@ -155,6 +157,76 @@ if ($BundleInstallerPath) {
     $actualBundleSha = (Get-FileHash -LiteralPath $resolvedBundle -Algorithm SHA256).Hash
     if ($actualBundleSha -ne $bundleHashes[0]) {
         throw 'The WinGet manifest SHA-256 does not match the local all-in-one MSIX bundle.'
+    }
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $outerArchive = [IO.Compression.ZipFile]::OpenRead($resolvedBundle)
+    try {
+        foreach ($architecture in @('x64', 'arm64')) {
+            $msixEntry = @(
+                $outerArchive.Entries |
+                    Where-Object { $_.FullName -match "-windows-$architecture\.msix$" }
+            )
+            if ($msixEntry.Count -ne 1) {
+                throw "MSIX bundle must contain exactly one $architecture package."
+            }
+
+            $innerStream = New-Object IO.MemoryStream
+            try {
+                $entryStream = $msixEntry[0].Open()
+                try { $entryStream.CopyTo($innerStream) }
+                finally { $entryStream.Dispose() }
+                $innerStream.Position = 0
+                $innerArchive = New-Object IO.Compression.ZipArchive(
+                    $innerStream,
+                    ([IO.Compression.ZipArchiveMode]::Read),
+                    $false
+                )
+                try {
+                    $manifestEntry = @(
+                        $innerArchive.Entries |
+                            Where-Object { $_.FullName -ieq 'AppxManifest.xml' }
+                    )
+                    if ($manifestEntry.Count -ne 1) {
+                        throw "$architecture MSIX package does not contain AppxManifest.xml."
+                    }
+                    $reader = New-Object IO.StreamReader($manifestEntry[0].Open())
+                    try { $manifestXml = [xml]$reader.ReadToEnd() }
+                    finally { $reader.Dispose() }
+                    $identity = $manifestXml.SelectSingleNode(
+                        "/*[local-name()='Package']/*[local-name()='Identity']"
+                    )
+                    if ($null -eq $identity) {
+                        throw "$architecture AppxManifest.xml does not contain Package/Identity."
+                    }
+                    $packageIdentities += [pscustomobject]@{
+                        architecture = $architecture
+                        name = $identity.GetAttribute('Name')
+                        version = $identity.GetAttribute('Version')
+                        publisher = $identity.GetAttribute('Publisher')
+                    }
+                }
+                finally { $innerArchive.Dispose() }
+            }
+            finally { $innerStream.Dispose() }
+        }
+    }
+    finally { $outerArchive.Dispose() }
+
+    $expectedMsixVersion = "$Version.0"
+    $expectedPackageIdentity = if ($AllowDevelopmentIdentity) {
+        "$identifier.Dev"
+    }
+    else {
+        $identifier
+    }
+    foreach ($packageIdentity in $packageIdentities) {
+        if ($packageIdentity.name -ne $expectedPackageIdentity) {
+            throw "$($packageIdentity.architecture) MSIX Identity.Name is '$($packageIdentity.name)', expected '$expectedPackageIdentity'. Development or renamed package identities cannot be submitted to WinGet."
+        }
+        if ($packageIdentity.version -ne $expectedMsixVersion) {
+            throw "$($packageIdentity.architecture) MSIX Identity.Version is '$($packageIdentity.version)', expected '$expectedMsixVersion'."
+        }
     }
 }
 
@@ -169,6 +241,9 @@ if ($BundleInstallerPath) {
     public_installer_model = 'all-in-one-msixbundle'
     local_bundle_verified = [bool]$BundleInstallerPath
     local_installers_verified = [bool]$BundleInstallerPath
+    package_identity_verified = ($packageIdentities.Count -eq 2)
+    package_identity_expected = if ($BundleInstallerPath) { $expectedPackageIdentity } else { $null }
+    package_identity_names = @($packageIdentities | Select-Object -ExpandProperty name -Unique)
     community_repository_path = $directory
     ready_for_winget_validate = $true
 } | ConvertTo-Json -Depth 4

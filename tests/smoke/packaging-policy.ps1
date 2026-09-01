@@ -263,11 +263,73 @@ $wingetFixture = [System.IO.Path]::GetFullPath((Join-Path $temporaryBase (
 if (-not $wingetFixture.StartsWith($temporaryBase, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw 'Refusing to create the WinGet fixture outside the system temporary directory.'
 }
+
+function New-WingetMsixBundleFixture {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$PackageIdentity,
+        [Parameter(Mandatory)][string]$PackageVersion
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $innerPackages = @()
+    try {
+        foreach ($architecture in @('x64', 'arm64')) {
+            $innerPath = Join-Path $Root "ZiFile-$architecture.msix"
+            $innerPackages += $innerPath
+            $innerArchive = [IO.Compression.ZipFile]::Open(
+                $innerPath,
+                ([IO.Compression.ZipArchiveMode]::Create)
+            )
+            try {
+                $entry = $innerArchive.CreateEntry('AppxManifest.xml')
+                $writer = New-Object IO.StreamWriter($entry.Open())
+                try {
+                    $writer.Write(
+                        "<Package xmlns='http://schemas.microsoft.com/appx/manifest/foundation/windows10'><Identity Name='$PackageIdentity' Publisher='CN=ZiCode Test' Version='$PackageVersion' /></Package>"
+                    )
+                }
+                finally { $writer.Dispose() }
+            }
+            finally { $innerArchive.Dispose() }
+        }
+
+        $outerArchive = [IO.Compression.ZipFile]::Open(
+            $Path,
+            ([IO.Compression.ZipArchiveMode]::Create)
+        )
+        try {
+            foreach ($architecture in @('x64', 'arm64')) {
+                $innerPath = Join-Path $Root "ZiFile-$architecture.msix"
+                [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                    $outerArchive,
+                    $innerPath,
+                    "ZiFile-$PackageVersion-windows-$architecture.msix",
+                    ([IO.Compression.CompressionLevel]::Optimal)
+                ) | Out-Null
+            }
+        }
+        finally { $outerArchive.Dispose() }
+    }
+    finally {
+        foreach ($innerPath in $innerPackages) {
+            if (Test-Path -LiteralPath $innerPath) {
+                Remove-Item -LiteralPath $innerPath -Force
+            }
+        }
+    }
+}
+
 try {
     New-Item -ItemType Directory -Path $wingetFixture -Force | Out-Null
     $wingetVersion = '9.8.7'
     $wingetBundle = Join-Path $wingetFixture 'ZiFile-9.8.7.0-windows.msixbundle'
-    Set-Content -LiteralPath $wingetBundle -Value 'deterministic all-in-one signed-package fixture' -Encoding utf8NoBOM
+    New-WingetMsixBundleFixture `
+        -Path $wingetBundle `
+        -Root $wingetFixture `
+        -PackageIdentity 'ZiCode.ZiFile' `
+        -PackageVersion '9.8.7.0'
     $wingetBundleSha = (Get-FileHash -LiteralPath $wingetBundle -Algorithm SHA256).Hash
     & $wingetGenerator `
         -Version $wingetVersion `
@@ -285,6 +347,7 @@ try {
         -BundleInstallerPath $wingetBundle | ConvertFrom-Json
     if (-not $wingetResult.ready_for_winget_validate -or
         -not $wingetResult.local_bundle_verified -or
+        -not $wingetResult.package_identity_verified -or
         $wingetResult.public_installer_model -cne 'all-in-one-msixbundle' -or
         $wingetResult.manifest_files -ne 4 -or
         $wingetResult.architectures.Count -ne 2) {
@@ -1260,7 +1323,8 @@ foreach ($requiredWingetToken in @(
     './packaging/winget/Generate-Manifests.ps1',
     './packaging/winget/Test-Manifests.ps1',
     'target/winget/manifests/z/ZiCode/ZiFile/$version',
-    '-BundleInstallerPath $bundle.FullName',
+    'BundleInstallerPath = $bundle.FullName',
+    'AllowDevelopmentIdentity',
     'all-in-one MSIX bundle artifact'
 )) {
     if ($releaseWorkflowSource -notmatch [Regex]::Escape($requiredWingetToken)) {

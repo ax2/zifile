@@ -32,9 +32,18 @@ the generated URLs and hashes against the signed local MSIX files:
 ```
 
 The resulting directory is ready for `winget validate --manifest <directory>`.
-The installer manifest declares the same 29 open extensions as
-`OPEN_ARCHIVE_EXTENSIONS`, including RAR/CAB and comic/TAR aliases; the
-preflight rejects any metadata drift before official validation.
+The installer manifest declares the same 31 open extensions as
+`OPEN_ARCHIVE_EXTENSIONS`, including RAR/CAB and comic/TAR aliases. When a
+local bundle is supplied, the preflight also opens both nested MSIX packages
+and requires their `Identity.Name` and four-part `Identity.Version` to match
+the WinGet candidate. Development identities such as `ZiCode.ZiFile.Dev` are
+rejected before official validation, because a development package is not the
+final package submitted to the community repository.
+
+The ordinary unsigned GitHub Release workflow may pass
+`-AllowDevelopmentIdentity` while producing internal evidence for the `.Dev`
+package. That exception is explicit and workflow-only; do not use it when
+preparing a WinGet community submission.
 Submission to `microsoft/winget-pkgs`
 remains a deliberate release action after package signing and installation
 testing; the generator never opens a pull request by itself.

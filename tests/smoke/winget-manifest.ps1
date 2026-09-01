@@ -15,11 +15,67 @@ if (-not $fixture.StartsWith($temporaryRoot, [StringComparison]::OrdinalIgnoreCa
     throw 'Refusing to create the WinGet validation fixture outside the system temporary directory.'
 }
 
+function New-TestMsixBundle {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$PackageIdentity,
+        [Parameter(Mandatory)][string]$PackageVersion
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $innerPackages = @()
+    try {
+        foreach ($architecture in @('x64', 'arm64')) {
+            $innerPath = Join-Path $fixture "ZiFile-$architecture.msix"
+            $innerPackages += $innerPath
+            $innerArchive = [IO.Compression.ZipFile]::Open(
+                $innerPath,
+                ([IO.Compression.ZipArchiveMode]::Create)
+            )
+            try {
+                $entry = $innerArchive.CreateEntry('AppxManifest.xml')
+                $writer = New-Object IO.StreamWriter($entry.Open())
+                try {
+                    $writer.Write(
+                        "<Package xmlns='http://schemas.microsoft.com/appx/manifest/foundation/windows10'><Identity Name='$PackageIdentity' Publisher='CN=ZiCode Test' Version='$PackageVersion' /></Package>"
+                    )
+                }
+                finally { $writer.Dispose() }
+            }
+            finally { $innerArchive.Dispose() }
+        }
+
+        $outerArchive = [IO.Compression.ZipFile]::Open(
+            $Path,
+            ([IO.Compression.ZipArchiveMode]::Create)
+        )
+        try {
+            foreach ($architecture in @('x64', 'arm64')) {
+                $innerPath = Join-Path $fixture "ZiFile-$architecture.msix"
+                [IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                    $outerArchive,
+                    $innerPath,
+                    "ZiFile-9.8.7.0-windows-$architecture.msix",
+                    ([IO.Compression.CompressionLevel]::Optimal)
+                ) | Out-Null
+            }
+        }
+        finally { $outerArchive.Dispose() }
+    }
+    finally {
+        foreach ($innerPath in $innerPackages) {
+            if (Test-Path -LiteralPath $innerPath) {
+                Remove-Item -LiteralPath $innerPath -Force
+            }
+        }
+    }
+}
+
 try {
     New-Item -ItemType Directory -Path $fixture -Force | Out-Null
     $version = '9.8.7'
     $bundle = Join-Path $fixture 'ZiFile-9.8.7.0-windows.msixbundle'
-    [IO.File]::WriteAllText($bundle, 'deterministic all-in-one official WinGet validation fixture')
+    New-TestMsixBundle -Path $bundle -PackageIdentity 'ZiCode.ZiFile' -PackageVersion '9.8.7.0'
     & $generator `
         -Version $version `
         -BundleInstallerUrl "https://github.com/ax2/zifile/releases/download/v$version/$(Split-Path $bundle -Leaf)" `
@@ -34,6 +90,9 @@ try {
         -BundleInstallerPath $bundle | ConvertFrom-Json
     if (-not $preflight.ready_for_winget_validate -or
         -not $preflight.local_bundle_verified -or
+        -not $preflight.package_identity_verified -or
+        @($preflight.package_identity_names).Count -ne 1 -or
+        $preflight.package_identity_names[0] -cne 'ZiCode.ZiFile' -or
         $preflight.public_installer_model -cne 'all-in-one-msixbundle') {
         throw 'ZiFile preflight did not accept the deterministic WinGet candidate.'
     }
@@ -77,6 +136,36 @@ try {
         throw 'ZiFile preflight accepted WinGet metadata with a missing RAR extension.'
     }
 
+    $developmentBundle = Join-Path $fixture 'ZiFile-9.8.7.0-windows-dev.msixbundle'
+    New-TestMsixBundle -Path $developmentBundle -PackageIdentity 'ZiCode.ZiFile.Dev' -PackageVersion '9.8.7.0'
+    $developmentBundleSha = (Get-FileHash -LiteralPath $developmentBundle -Algorithm SHA256).Hash
+    Set-Content -LiteralPath $installerManifest `
+        -Value ($installerSource -replace '(?m)(?<=InstallerSha256: )[A-F0-9]{64}', $developmentBundleSha) `
+        -Encoding utf8NoBOM
+    $developmentBundleRejected = $false
+    try {
+        $null = & $verifier `
+            -ManifestDirectory $manifestDirectory `
+            -Version $version `
+            -BundleInstallerPath $developmentBundle
+    }
+    catch {
+        if ($_.Exception.Message -notmatch 'Identity.Name') { throw }
+        $developmentBundleRejected = $true
+    }
+    if (-not $developmentBundleRejected) {
+        throw 'ZiFile preflight accepted a development MSIX package identity.'
+    }
+    $developmentEvidence = & $verifier `
+        -ManifestDirectory $manifestDirectory `
+        -Version $version `
+        -BundleInstallerPath $developmentBundle `
+        -AllowDevelopmentIdentity | ConvertFrom-Json
+    if (-not $developmentEvidence.package_identity_verified -or
+        $developmentEvidence.package_identity_expected -cne 'ZiCode.ZiFile.Dev') {
+        throw 'ZiFile preflight did not allow the explicit development identity exception for GitHub evidence.'
+    }
+
     [pscustomobject]@{
         schema_version = 1
         winget_version = $wingetVersion
@@ -88,6 +177,8 @@ try {
         local_bundle_verified = $preflight.local_bundle_verified
         official_manifest_validation_passed = $true
         metadata_drift_rejected = $metadataDriftRejected
+        development_identity_rejected = $developmentBundleRejected
+        development_identity_allowed_for_evidence = $true
         public_assets_downloaded = $false
         community_repository_accepted = $false
     } | ConvertTo-Json -Depth 4
