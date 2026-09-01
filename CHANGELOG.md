@@ -6,6 +6,10 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [0.1.15] - 2026-09-01
+
 ### Added
 
 - Add RAR 5 creation through the pure-Rust `rars` backend, including levels
