@@ -176,12 +176,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Download unsigned x64 package
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: windows-x64
           path: release
       - name: Download unsigned ARM64 package
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: windows-arm64
           path: release
@@ -193,7 +193,7 @@ jobs:
           "msix=$($version.msix_version)" >> $env:GITHUB_OUTPUT
       - name: Download signed architecture packages
         if: inputs.signing_provider == 'digicert-stm'
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: signed-windows-*
           path: signed-release
@@ -265,7 +265,7 @@ jobs:
         run: |
           $version = ./scripts/Test-VersionConsistency.ps1 | ConvertFrom-Json
           "msix=$($version.msix_version)" >> $env:GITHUB_OUTPUT
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: windows-${{ matrix.architecture }}
           path: artifacts-${{ matrix.architecture }}
@@ -414,28 +414,28 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Download x64 architecture artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: windows-x64
           path: release
       - name: Download ARM64 architecture artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: windows-arm64
           path: release
       - name: Download SBOM artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: sbom
           path: release
       - name: Download all-in-one bundle
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: windows-all-in-one
           path: release
       - name: Download signed release artifacts
         if: inputs.signing_provider == 'digicert-stm'
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: signed-windows-*
           path: signed-release
@@ -545,12 +545,12 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: windows-*
           path: release
           merge-multiple: true
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           name: sbom
           path: release

@@ -35,14 +35,14 @@ jobs:
           ./tests/helpers/msix-repair/Invoke-Probe.ps1 `
             -HelperPath "$env:RUNNER_TEMP\msix-repair-helper\MsixRepair.exe"
       - name: Download baseline package artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: signed-windows-x64
           path: baseline
           run-id: ${{ inputs.baseline_run_id }}
           github-token: ${{ github.token }}
       - name: Download upgrade package artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: signed-windows-x64
           path: upgrade
