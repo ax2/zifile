@@ -791,6 +791,27 @@ foreach ($requiredPublicReleaseToken in @(
         throw "The stable GitHub release does not publish the unsigned public build: $requiredPublicReleaseToken"
     }
 }
+$publicReleaseSource = [Regex]::Match(
+    $releaseSource,
+    '(?ms)^  publish:.*?(?=^  [A-Za-z0-9_-]+:\s*$|\z)'
+).Value
+foreach ($requiredSignedPublishToken in @(
+    'needs: [windows, bundle, sbom, sign]',
+    "needs.sign.result == 'success' || needs.sign.result == 'skipped'",
+    'Download SBOM artifacts',
+    'Download all-in-one bundle',
+    'Overlay signed portable executables',
+    'Download signed release artifacts',
+    "inputs.signing_provider == 'digicert-stm'"
+)) {
+    if ([string]::IsNullOrWhiteSpace($publicReleaseSource) -or
+        $publicReleaseSource -notmatch [Regex]::Escape($requiredSignedPublishToken)) {
+        throw "The stable GitHub release does not protect signed publication: $requiredSignedPublishToken"
+    }
+}
+if ($publicReleaseSource -match [Regex]::Escape('pattern: windows-*')) {
+    throw 'The stable GitHub release must download unsigned architecture artifacts by exact name so signed artifacts cannot shadow them.'
+}
 $publicReleaseAssetSmokeSource = Get-Content -Raw -LiteralPath $publicReleaseAssetSmoke
 foreach ($requiredPublicReleaseAuditToken in @(
     'Audit user-facing release assets',
