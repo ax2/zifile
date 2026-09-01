@@ -21,6 +21,14 @@ All notable changes to ZiFile are documented here. The format follows
 - Add the `rename` CLI command with repeated `FROM=TO` mappings and advance the
   Worker IPC contract to version 3 for the new request type.
 
+## [0.1.14] - 2026-09-01
+
+### Changed
+
+- Group the desktop archive action toolbar into separate management, edit,
+  batch-rename, and extraction sections for a clearer layout at narrow window
+  widths, while preserving the existing queue and archive-operation behavior.
+
 ## [0.1.13] - 2026-09-01
 
 ### Added
