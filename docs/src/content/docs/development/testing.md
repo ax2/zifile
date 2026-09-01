@@ -85,7 +85,7 @@ CI 另外运行 Windows `performance` job，实际执行 `format_detection` 与 
 
 `archive_throughput` 同时测量 ZIP Deflate、TAR + LZMA-alone 与 TAR + LZ4；后两者使用独立的 1 MiB 样本分别测量创建和校验，确保组合格式也有可重复的吞吐观测。
 
-`tests/smoke/contract-policy.ps1` 锁定 CLI 的 8 个公开命令、16 个创建格式、18 行 `formats` 能力矩阵、双语公开契约文档，以及运行时错误码 1 和参数语法错误码 2；它在 Windows CI 的 Foundation smoke 后运行，最终 1.0 冻结仍需在发布提交上完成。
+`tests/smoke/contract-policy.ps1` 锁定 CLI 的 8 个公开命令、16 个创建格式、18 行 `formats` 能力矩阵、双语公开契约文档，以及运行时错误码 1 和参数语法错误码 2；默认构建并使用 `target/debug/zifile.exe`，也可传入 `-SkipBuild -ExecutablePath <path>` 复用已归档的 CLI 进行验证，避免为纯契约检查保留构建缓存。它在 Windows CI 的 Foundation smoke 后运行，最终 1.0 冻结仍需在发布提交上完成。
 
 共享桌面测试还覆盖拖放分类：有效归档的内容签名优先于扩展名，改名归档仍进入浏览流程；对外层签名相同的改名 TAR+gzip、TAR+Zstandard、TAR+XZ 和 TAR+Bzip2，会在最多 1 MiB 压缩输入与 512 字节解码头的有界探测中识别内层 TAR；已知扩展在探测失败时保留兼容回退，普通文件和归档命名目录不会被误判为可打开归档。
 Iced 和 Dioxus 的入口回归同时锁定探测在异步/阻塞线程池路径上执行，防止文件头读取回到 UI 事件线程。

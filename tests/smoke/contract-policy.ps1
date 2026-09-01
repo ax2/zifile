@@ -1,4 +1,7 @@
-param([switch]$SkipBuild)
+param(
+    [switch]$SkipBuild,
+    [string]$ExecutablePath
+)
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -15,9 +18,15 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Workspace build failed.' }
     }
 
-    $cli = Join-Path $repoRoot 'target\debug\zifile.exe'
+    $cli = if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
+        Join-Path $repoRoot 'target\debug\zifile.exe'
+    } elseif ([IO.Path]::IsPathRooted($ExecutablePath)) {
+        [IO.Path]::GetFullPath($ExecutablePath)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $repoRoot $ExecutablePath))
+    }
     if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
-        throw 'ZiFile CLI executable was not found.'
+        throw "ZiFile CLI executable was not found: $cli"
     }
 
     $rootHelp = (& $cli --help 2>&1) -join "`n"
