@@ -37,7 +37,7 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 
 Foundation smoke 还使用实际 Windows CLI 对主要可创建格式执行完整往返：TAR+Zstandard、TAR+XZ、TAR+Bzip2、TAR+LZ4、gzip、Zstandard、XZ、LZMA、Bzip2、LZ4 和 Brotli；每个场景都创建归档、执行完整性校验、解压，并断言 Unicode 文件或单流输出内容。ZIP、TAR+gzip、TAR+LZMA 和 AES 7z 由同一冒烟流程中的独立场景覆盖，因此这组矩阵不是只检查能力表或“文件存在”。
 
-核心往返测试还覆盖“更新现有归档”：ZIP、7z 和全部 TAR 组合都会验证同名普通文件替换、嵌套新文件加入、选中条目删除、删除最后一个文件以及更新后重新解包；gzip 等单文件流、RAR 和 CAB 则验证明确的只读错误。更新使用同目录临时工作区，失败或取消不得替换原归档；重复或包含关系的删除路径会先规范化，避免重复重建。
+核心往返测试还覆盖“更新现有归档”：ZIP、7z 和全部 TAR 组合都会验证同名普通文件替换、嵌套新文件加入、选中条目删除、删除最后一个文件以及更新后重新解包；RAR 单独验证 RAR 5 创建、密码、列表、完整性校验和选择性解压，CAB 单独验证固定 MSZIP 创建、列表、完整性校验和选择性解压；gzip 等单文件流与 RAR/CAB 则验证更新和重命名的明确错误。更新使用同目录临时工作区，失败或取消不得替换原归档；重复或包含关系的删除路径会先规范化，避免重复重建。
 
 列出和完整性校验分别使用兼容旧入口的 `ListOptions` 与 `TestOptions`，为 ZIP、7z、RAR、CAB、TAR 组合和七种压缩流提供统一进度与协作取消。列出阶段按扫描条目推进，单压缩流还按实际解码字节反馈；无法预知总数时两套 UI 显示“正在扫描”，完成后再发布一致的最终总量。完整性校验和解压的内部预检会复用同一进度通道，但在主体阶段开始时重置已扫描计数，避免流式文件在真正写出前错误显示为 100%。Worker 每 100 ms 发送有界进度，并在操作返回后补发最终快照，避免小归档只出现初始 0%；预取消回归要求在解析前返回 `Cancelled`，各格式往返测试同时验证最终进度不变量。
 
@@ -85,7 +85,7 @@ CI 另外运行 Windows `performance` job，实际执行 `format_detection` 与 
 
 `archive_throughput` 同时测量 ZIP Deflate、TAR + LZMA-alone 与 TAR + LZ4；后两者使用独立的 1 MiB 样本分别测量创建和校验，确保组合格式也有可重复的吞吐观测。
 
-`tests/smoke/contract-policy.ps1` 锁定 CLI 的 8 个公开命令、16 个创建格式、18 行 `formats` 能力矩阵、双语公开契约文档，以及运行时错误码 1 和参数语法错误码 2；它在 Windows CI 的 Foundation smoke 后运行，最终 1.0 冻结仍需在发布提交上完成。
+`tests/smoke/contract-policy.ps1` 锁定 CLI 的 8 个公开命令、18 个创建格式、18 行 `formats` 能力矩阵、双语公开契约文档，以及运行时错误码 1 和参数语法错误码 2；默认构建并使用 `target/debug/zifile.exe`，也可传入 `-SkipBuild -ExecutablePath <path>` 复用已归档的 CLI 进行验证，避免为纯契约检查保留构建缓存。它在 Windows CI 的 Foundation smoke 后运行，最终 1.0 冻结仍需在发布提交上完成。
 
 共享桌面测试还覆盖拖放分类：有效归档的内容签名优先于扩展名，改名归档仍进入浏览流程；对外层签名相同的改名 TAR+gzip、TAR+Zstandard、TAR+XZ 和 TAR+Bzip2，会在最多 1 MiB 压缩输入与 512 字节解码头的有界探测中识别内层 TAR；已知扩展在探测失败时保留兼容回退，普通文件和归档命名目录不会被误判为可打开归档。
 Iced 和 Dioxus 的入口回归同时锁定探测在异步/阻塞线程池路径上执行，防止文件头读取回到 UI 事件线程。
@@ -122,13 +122,13 @@ Windows CI 使用 PowerShell `Compress-Archive`/`Expand-Archive` 和系统 `tar.
 
 新增的官方 7-Zip 语料门禁使用 GitHub Windows Runner 上的 `7z.exe`，覆盖 Copy、LZMA、LZMA2+BCJ、Deflate、BZip2、PPMd，以及带文件名加密的 LZMA2+AES；反向还要求官方 7-Zip 校验并解压 ZiFile 创建的普通与 AES 归档。所有场景逐文件比较 SHA-256，并上传不含密码的 JSON 证据。CI 32836336921 使用 7-Zip 26.02 完成 9/9 场景，证据 JSON SHA-256 为 `06278BB8B96AB683A3C117BA5E30F1B4AB1CF89F1BBF01E72BAC0CC26B49DB14`。
 
-RAR 门禁从固定的 `rars` 源码提交 `7d8f9386ef777a2415da34fe1db193d8471ff7d0` 下载六个夹具，使用硬编码 SHA-256 验证来源后，逐文件比较 ZiFile 与 7-Zip 的解压树。覆盖 RAR 1.3、1.54 多文件、RAR 3 PPMd、RAR 5 压缩与 E8E9 过滤，以及 WinRAR 7.21 加密头/Quick Open；另有三个链接/重定向夹具必须在无输出的情况下拒绝。CI 32853686537 完成全部六个有效场景和三个拒绝场景，证据 JSON SHA-256 为 `4C52D0240B911609C7DDB0CACB2E484F56C8F886E216347603B228261C4EE8EF`。RAR 1.3 因现代 7-Zip 不再读取，改与同一固定上游提交中的已知正确解压树逐文件核对，其余五种有效归档继续与 7-Zip 26.02 交叉验证。
+RAR 门禁从固定的 `rars` 源码提交 `7d8f9386ef777a2415da34fe1db193d8471ff7d0` 下载六个夹具，使用硬编码 SHA-256 验证来源后，逐文件比较 ZiFile 与 7-Zip 的解压树。覆盖 RAR 1.3、1.54 多文件、RAR 3 PPMd、RAR 5 压缩与 E8E9 过滤，以及 WinRAR 7.21 加密头/Quick Open；另有三个链接/重定向夹具必须在无输出的情况下拒绝。新增的本地创建回归会由 ZiFile CLI 生成普通和加密 RAR 5，再由 7-Zip 24.09 测试并解压核对。CI 32853686537 完成全部六个有效场景和三个拒绝场景，证据 JSON SHA-256 为 `4C52D0240B911609C7DDB0CACB2E484F56C8F886E216347603B228261C4EE8EF`。RAR 1.3 因现代 7-Zip 不再读取，改与同一固定上游提交中的已知正确解压树逐文件核对，其余五种有效归档继续与 7-Zip 26.02 交叉验证。
 
-CAB 互操作门禁在 Windows Runner 使用系统 `makecab.exe` 生成 MSZIP 与 LZX Cabinet，再要求 ZiFile 完成签名识别、浏览、校验和解压，并与系统 `expand.exe` 的输出比较 SHA-256。None 压缩由 Rust 集成夹具覆盖；Quantum 与跨 Cabinet 集合明确不支持。每次 CI 上传不含用户数据的结构化 JSON 证据。
+CAB 互操作门禁在 Windows Runner 使用系统 `makecab.exe` 生成 MSZIP 与 LZX Cabinet，再要求 ZiFile 完成签名识别、浏览、校验和解压，并与系统 `expand.exe` 的输出比较 SHA-256；同时由 ZiFile 创建固定 MSZIP Cabinet，再要求 `expand.exe` 成功解压。None 压缩由 Rust 集成夹具覆盖；Quantum 与跨 Cabinet 集合明确不支持。每次 CI 上传不含用户数据的结构化 JSON 证据。
 
 CAB 解码阶段负向回归保留合法元数据并翻转首个 CFDATA 压缩字节，先证明列表仍能读取单个条目，再要求完整性校验失败、选择性解压报错且目标目录为空。该检查证明损坏负载不会越过临时文件提交边界，不把只测损坏头误当成解码器覆盖。
 
-修改时间测试先为源文件和目录设置确定时间，创建 ZIP、7z 与 TAR 家族归档，再要求列表元数据和解压后的文件/目录均保留预期值；独立创建的 RAR 5 与 CAB 夹具覆盖只读 Provider。协议测试会反序列化没有可选时间字段的旧版 `archive_entry` 事件，两套桌面程序还共用格式化测试，明确区分 UTC 与归档格式未保存时区的时间。
+修改时间测试先为源文件和目录设置确定时间，创建 ZIP、7z、RAR 5 与 TAR 家族归档，再要求列表元数据和解压后的文件/目录均保留预期值；独立创建的 RAR 5 与 CAB 夹具继续覆盖读取 Provider。协议测试会反序列化没有可选时间字段的旧版 `archive_entry` 事件，两套桌面程序还共用格式化测试，明确区分 UTC 与归档格式未保存时区的时间。
 
 每次 CI 会编译 libFuzzer 目标；每周定时工作流对路径策略、格式识别和归档解析器各运行 180 秒有界 fuzz，失败时保留崩溃产物 14 天。归档目标用带格式签名的变异输入覆盖 ZIP、7z、RAR、CAB、七个 TAR 格式和七种单流格式，限制输入为 256 KiB、RSS 为 2 GiB、单输入为 10 秒；目标内部还使用 256 条目、4 MiB 展开量、64 倍压缩比和 32 层路径的严格限制。Windows/MSVC 本地 `cargo-fuzz` 因 `sevenz-rust2` DLL 与 libFuzzer 入口点参数冲突无法链接，Rust 编译检查可通过；动态 campaign 以 Linux GNU 定时工作流为验收环境。损坏、截断、炸弹及更多 libarchive 变体仍需继续扩展。
 

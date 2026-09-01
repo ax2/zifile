@@ -953,7 +953,7 @@ fn encrypted_seven_zip_round_trip_reports_encryption_and_requires_password() {
 }
 
 #[test]
-fn rar_is_read_only_and_supports_solid_selected_extraction() {
+fn rar_supports_solid_selected_extraction() {
     let temp = tempfile::tempdir().unwrap();
     let archive = temp.path().join("fixture.rar");
     rar_fixture(&archive, None);
@@ -962,7 +962,7 @@ fn rar_is_read_only_and_supports_solid_selected_extraction() {
     assert!(capabilities.list);
     assert!(capabilities.extract);
     assert!(capabilities.encryption);
-    assert!(!capabilities.create);
+    assert!(capabilities.create);
 
     let info = list_archive(&archive, None).unwrap();
     assert_eq!(info.format, ArchiveFormat::Rar);
@@ -988,22 +988,60 @@ fn rar_is_read_only_and_supports_solid_selected_extraction() {
         fs::read_to_string(output.join("nested/中文.txt")).unwrap(),
         "RAR 安全归档\n"
     );
-
-    let source = temp.path().join("source.txt");
-    fs::write(&source, "RAR creation remains disabled").unwrap();
-    assert!(matches!(
-        create_archive(
-            &[source],
-            temp.path().join("not-created.rar"),
-            ArchiveFormat::Rar,
-            &CreateOptions::default(),
-        ),
-        Err(ZiFileError::UnsupportedOperation(ArchiveFormat::Rar))
-    ));
 }
 
 #[test]
-fn cab_is_read_only_and_supports_safe_selected_extraction() {
+fn rar_creation_round_trip_supports_passwords_and_progress() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("rar-source");
+    fs::create_dir_all(source.join("nested")).unwrap();
+    fs::write(source.join("hello.txt"), "hello from ZiFile RAR\n").unwrap();
+    fs::write(source.join("nested/中文.txt"), "安全 RAR 创建\n").unwrap();
+    let archive = temp.path().join("created.rar");
+    let progress = OperationProgress::default();
+    let summary = create_archive(
+        &[source],
+        &archive,
+        ArchiveFormat::Rar,
+        &CreateOptions {
+            compression_level: 3,
+            password: Some("correct horse".to_owned()),
+            progress: progress.clone(),
+            ..CreateOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(summary.files, 2);
+    assert_eq!(summary.directories, 2);
+    assert_eq!(summary.bytes, 40);
+    assert_eq!(detect_format(&archive).unwrap(), ArchiveFormat::Rar);
+    assert!(list_archive(&archive, None).is_err());
+    assert!(list_archive(&archive, Some("wrong password")).is_err());
+    let info = list_archive(&archive, Some("correct horse")).unwrap();
+    assert_eq!(info.entries.len(), 2);
+    assert!(info.entries.iter().all(|entry| entry.encrypted));
+    assert_eq!(progress.snapshot().processed_entries, 2);
+    assert_eq!(progress.snapshot().processed_bytes, 40);
+
+    let output = temp.path().join("created-rar");
+    let summary = extract_archive(
+        &archive,
+        &output,
+        &ExtractOptions {
+            password: Some("correct horse".to_owned()),
+            ..ExtractOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(summary.files, 2);
+    assert_eq!(
+        fs::read_to_string(output.join("rar-source/nested/中文.txt")).unwrap(),
+        "安全 RAR 创建\n"
+    );
+}
+
+#[test]
+fn cab_supports_creation_and_safe_selected_extraction() {
     let temp = tempfile::tempdir().unwrap();
     let archive = temp.path().join("fixture.cab");
     cab_fixture(
@@ -1017,7 +1055,7 @@ fn cab_is_read_only_and_supports_safe_selected_extraction() {
     let capabilities = ArchiveFormat::Cab.capabilities();
     assert!(capabilities.list);
     assert!(capabilities.extract);
-    assert!(!capabilities.create);
+    assert!(capabilities.create);
     assert!(!capabilities.encryption);
     assert_eq!(detect_format(&archive).unwrap(), ArchiveFormat::Cab);
 
@@ -1046,17 +1084,41 @@ fn cab_is_read_only_and_supports_safe_selected_extraction() {
         "safe cabinet\n"
     );
 
-    let source = temp.path().join("source.txt");
-    fs::write(&source, "CAB creation remains disabled").unwrap();
-    assert!(matches!(
-        create_archive(
-            &[source],
-            temp.path().join("not-created.cab"),
-            ArchiveFormat::Cab,
-            &CreateOptions::default(),
-        ),
-        Err(ZiFileError::UnsupportedOperation(ArchiveFormat::Cab))
-    ));
+    let source = temp.path().join("cab-source");
+    fs::create_dir_all(source.join("nested")).unwrap();
+    fs::write(source.join("hello.txt"), "created by ZiFile\n").unwrap();
+    fs::write(source.join("nested/unicode.txt"), "安全 CAB\n").unwrap();
+    let created = temp.path().join("created.cab");
+    let summary = create_archive(
+        &[source],
+        &created,
+        ArchiveFormat::Cab,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(summary.files, 2);
+    assert_eq!(detect_format(&created).unwrap(), ArchiveFormat::Cab);
+    let created_info = list_archive(&created, None).unwrap();
+    assert_eq!(created_info.entries.len(), 2);
+    assert!(test_archive(&created, None).is_ok());
+
+    let created_output = temp.path().join("created-output");
+    let selected = HashSet::from([PathBuf::from("cab-source/nested/unicode.txt")]);
+    let created_summary = extract_archive(
+        &created,
+        &created_output,
+        &ExtractOptions {
+            selected_paths: Some(selected),
+            ..ExtractOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(created_summary.files, 1);
+    assert_eq!(
+        fs::read_to_string(created_output.join("cab-source/nested/unicode.txt")).unwrap(),
+        "安全 CAB\n"
+    );
+    assert!(!created_output.join("cab-source/hello.txt").exists());
 }
 
 #[test]

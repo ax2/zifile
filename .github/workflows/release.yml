@@ -55,7 +55,7 @@ jobs:
         shell: pwsh
         run: |
           $arguments = @{}
-          if ('${{ github.event_name }}' -ne 'workflow_dispatch') {
+          if ('${{ github.ref }}' -like 'refs/tags/v*') {
             $arguments.ExpectedVersion = '${{ github.ref_name }}'
           }
           $version = ./scripts/Test-VersionConsistency.ps1 @arguments | ConvertFrom-Json
@@ -160,24 +160,53 @@ jobs:
 
   bundle:
     name: Windows all-in-one MSIX bundle
-    needs: windows
+    needs: [windows, sign]
+    if: >-
+      always() &&
+      needs.windows.result == 'success' &&
+      (needs.sign.result == 'success' || needs.sign.result == 'skipped')
     runs-on: windows-2022
     timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v7
+      - name: Download unsigned x64 package
+        uses: actions/download-artifact@v7
         with:
-          pattern: windows-*
+          name: windows-x64
           path: release
-          merge-multiple: true
+      - name: Download unsigned ARM64 package
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-arm64
+          path: release
       - name: Resolve package version
         id: version
         shell: pwsh
         run: |
           $version = ./scripts/Test-VersionConsistency.ps1 | ConvertFrom-Json
           "msix=$($version.msix_version)" >> $env:GITHUB_OUTPUT
+      - name: Download signed architecture packages
+        if: inputs.signing_provider == 'digicert-stm'
+        uses: actions/download-artifact@v7
+        with:
+          pattern: signed-windows-*
+          path: signed-release
+          merge-multiple: true
+      - name: Overlay signed MSIX packages into bundle input
+        if: inputs.signing_provider == 'digicert-stm'
+        shell: pwsh
+        run: |
+          foreach ($architecture in @('x64', 'arm64')) {
+            $name = "ZiFile-${{ steps.version.outputs.msix }}-windows-$architecture.msix"
+            $source = Join-Path 'signed-release' $name
+            $destination = Join-Path 'release' $name
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+              throw "Signed package is missing: $source"
+            }
+            Copy-Item -LiteralPath $source -Destination $destination -Force
+          }
       - name: Build all-in-one MSIX bundle
         shell: pwsh
         run: |
@@ -363,8 +392,15 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
-    needs: [windows, bundle, sbom]
+    if: >-
+      always() &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref_name, '-') &&
+      needs.windows.result == 'success' &&
+      needs.bundle.result == 'success' &&
+      needs.sbom.result == 'success' &&
+      (needs.sign.result == 'success' || needs.sign.result == 'skipped')
+    needs: [windows, bundle, sbom, sign]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -373,15 +409,46 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v7
+      - name: Download x64 architecture artifacts
+        uses: actions/download-artifact@v7
         with:
-          pattern: windows-*
+          name: windows-x64
           path: release
-          merge-multiple: true
-      - uses: actions/download-artifact@v7
+      - name: Download ARM64 architecture artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-arm64
+          path: release
+      - name: Download SBOM artifacts
+        uses: actions/download-artifact@v7
         with:
           name: sbom
           path: release
+      - name: Download all-in-one bundle
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-all-in-one
+          path: release
+      - name: Download signed release artifacts
+        if: inputs.signing_provider == 'digicert-stm'
+        uses: actions/download-artifact@v7
+        with:
+          pattern: signed-windows-*
+          path: signed-release
+          merge-multiple: true
+      - name: Overlay signed portable executables
+        if: inputs.signing_provider == 'digicert-stm'
+        shell: pwsh
+        run: |
+          foreach ($architecture in @('x64', 'arm64')) {
+            $name = "zifile-windows-$architecture.exe"
+            $source = Join-Path 'signed-release' $name
+            $destination = Join-Path 'release' $name
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+              throw "Signed portable executable is missing: $source"
+            }
+            Copy-Item -LiteralPath $source -Destination $destination -Force
+          }
       - name: Generate WinGet submission candidate
         shell: pwsh
         run: |
@@ -450,7 +517,7 @@ jobs:
         with:
           generate_release_notes: true
           body: |
-            This is a public unsigned Windows build for GitHub distribution. It is not a Microsoft Store-certified package. Verify the included SHA256SUMS file before installing.
+            ${{ inputs.signing_provider == 'digicert-stm' && 'This GitHub release uses the protected cloud-signing path. Verify the included SHA256SUMS file before installing; it is not a Microsoft Store-certified package.' || 'This is a public unsigned Windows build for GitHub distribution. It is not a Microsoft Store-certified package. Verify the included SHA256SUMS file before installing.' }}
           prerelease: false
           files: public-release/*
 

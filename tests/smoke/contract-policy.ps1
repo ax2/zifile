@@ -1,4 +1,7 @@
-param([switch]$SkipBuild)
+param(
+    [switch]$SkipBuild,
+    [string]$ExecutablePath
+)
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -15,9 +18,15 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Workspace build failed.' }
     }
 
-    $cli = Join-Path $repoRoot 'target\debug\zifile.exe'
+    $cli = if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
+        Join-Path $repoRoot 'target\debug\zifile.exe'
+    } elseif ([IO.Path]::IsPathRooted($ExecutablePath)) {
+        [IO.Path]::GetFullPath($ExecutablePath)
+    } else {
+        [IO.Path]::GetFullPath((Join-Path $repoRoot $ExecutablePath))
+    }
     if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) {
-        throw 'ZiFile CLI executable was not found.'
+        throw "ZiFile CLI executable was not found: $cli"
     }
 
     $rootHelp = (& $cli --help 2>&1) -join "`n"
@@ -37,7 +46,7 @@ try {
 
     $formatValues = @(
         'zip', 'seven-zip', 'tar', 'tar-gzip', 'tar-zstd', 'tar-xz', 'tar-lzma',
-        'tar-bzip2', 'tar-lz4', 'gzip', 'zstandard', 'xz', 'lzma', 'bzip2', 'lz4', 'brotli'
+        'tar-bzip2', 'tar-lz4', 'gzip', 'zstandard', 'xz', 'lzma', 'bzip2', 'lz4', 'brotli', 'rar', 'cab'
     )
     $formatValueLine = '[possible values: {0}]' -f ($formatValues -join ', ')
     if ($createHelp -notmatch [Regex]::Escape($formatValueLine)) {
@@ -80,8 +89,8 @@ try {
         "Bzip2`tyes`tyes`tyes`tsingle-file`t1-9`tno`tAlpha",
         "LZ4`tyes`tyes`tyes`tsingle-file`tfixed`tno`tAlpha",
         "Brotli`tyes`tyes`tyes`tsingle-file`t0-11`tno`tAlpha",
-        "RAR`tyes`tyes`tno`tnone`tnone`tyes`tBeta",
-        "CAB`tyes`tyes`tno`tnone`tnone`tno`tBeta"
+        "RAR`tyes`tyes`tyes`tfiles-or-directories`t0-5`tyes`tBeta",
+        "CAB`tyes`tyes`tyes`tfiles-or-directories`tfixed`tno`tBeta"
     )
     if ($formatLines.Count -ne $expectedRows.Count) {
         throw "The CLI format matrix row count changed from $($expectedRows.Count) to $($formatLines.Count)."

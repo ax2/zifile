@@ -113,7 +113,7 @@ impl ArchiveFormat {
     ///
     /// Keeping this beside `ALL` prevents the two desktop interfaces from
     /// maintaining subtly different creation menus as new providers arrive.
-    pub const CREATABLE: [Self; 16] = [
+    pub const CREATABLE: [Self; 18] = [
         Self::Zip,
         Self::SevenZip,
         Self::Tar,
@@ -130,12 +130,14 @@ impl ArchiveFormat {
         Self::Bzip2,
         Self::Lz4,
         Self::Brotli,
+        Self::Rar,
+        Self::Cab,
     ];
 
     pub const fn capabilities(self) -> FormatCapabilities {
         match self {
-            Self::Rar => FormatCapabilities::read_only(true, ReleaseStage::Beta),
-            Self::Cab => FormatCapabilities::read_only(false, ReleaseStage::Beta),
+            Self::Rar => FormatCapabilities::read_write(true, ReleaseStage::Beta),
+            Self::Cab => FormatCapabilities::read_write(false, ReleaseStage::Beta),
             Self::SevenZip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
             Self::Zip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
             Self::Tar
@@ -158,7 +160,8 @@ impl ArchiveFormat {
     /// Source shape accepted when creating this format.
     pub const fn create_input(self) -> Option<CreateInputKind> {
         match self {
-            Self::Rar | Self::Cab => None,
+            Self::Rar => Some(CreateInputKind::FilesAndDirectories),
+            Self::Cab => Some(CreateInputKind::FilesAndDirectories),
             Self::Gzip
             | Self::Zstandard
             | Self::Xz
@@ -195,7 +198,8 @@ impl ArchiveFormat {
             Self::TarZstd | Self::Zstandard => Some((0, 22)),
             Self::TarBzip2 | Self::Bzip2 => Some((1, 9)),
             Self::Brotli => Some((0, 11)),
-            Self::Tar | Self::TarLz4 | Self::Lz4 | Self::Rar | Self::Cab => None,
+            Self::Tar | Self::TarLz4 | Self::Lz4 | Self::Cab => None,
+            Self::Rar => Some((0, 5)),
         }
     }
 
@@ -326,16 +330,6 @@ pub struct FormatCapabilities {
 }
 
 impl FormatCapabilities {
-    const fn read_only(encryption: bool, stage: ReleaseStage) -> Self {
-        Self {
-            list: true,
-            extract: true,
-            create: false,
-            encryption,
-            stage,
-        }
-    }
-
     const fn read_write(encryption: bool, stage: ReleaseStage) -> Self {
         Self {
             list: true,
@@ -614,21 +608,21 @@ mod tests {
     }
 
     #[test]
-    fn rar_is_read_only_beta() {
+    fn rar_is_creatable_beta() {
         let capabilities = ArchiveFormat::Rar.capabilities();
         assert!(capabilities.list);
         assert!(capabilities.extract);
-        assert!(!capabilities.create);
+        assert!(capabilities.create);
         assert!(capabilities.encryption);
         assert_eq!(capabilities.stage, ReleaseStage::Beta);
     }
 
     #[test]
-    fn cab_is_unencrypted_read_only_beta() {
+    fn cab_is_unencrypted_creatable_beta() {
         let capabilities = ArchiveFormat::Cab.capabilities();
         assert!(capabilities.list);
         assert!(capabilities.extract);
-        assert!(!capabilities.create);
+        assert!(capabilities.create);
         assert!(!capabilities.encryption);
         assert_eq!(capabilities.stage, ReleaseStage::Beta);
     }
@@ -645,6 +639,8 @@ mod tests {
             ArchiveFormat::TarLzma,
             ArchiveFormat::TarBzip2,
             ArchiveFormat::TarLz4,
+            ArchiveFormat::Rar,
+            ArchiveFormat::Cab,
         ] {
             assert_eq!(
                 format.create_input(),
@@ -662,13 +658,15 @@ mod tests {
         ] {
             assert_eq!(format.create_input(), Some(CreateInputKind::SingleFile));
         }
-        assert_eq!(ArchiveFormat::Rar.create_input(), None);
-        assert_eq!(ArchiveFormat::Cab.create_input(), None);
+        assert_eq!(
+            ArchiveFormat::Rar.create_input(),
+            Some(CreateInputKind::FilesAndDirectories)
+        );
     }
 
     #[test]
     fn creatable_display_order_matches_capabilities() {
-        assert_eq!(ArchiveFormat::CREATABLE.len(), 16);
+        assert_eq!(ArchiveFormat::CREATABLE.len(), 18);
         for format in ArchiveFormat::CREATABLE {
             assert!(format.capabilities().create);
             assert!(format.create_input().is_some());

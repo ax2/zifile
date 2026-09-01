@@ -713,6 +713,14 @@ foreach ($requiredVerifierToken in @(
 if ($releaseSource -notmatch [Regex]::Escape('Test-VersionConsistency.ps1 @arguments')) {
     throw 'The release workflow does not enforce the workspace version source.'
 }
+if ($releaseSource -notmatch [Regex]::Escape(
+        ('if (' + [char]39 + '${{ github.ref }}' + [char]39 + ' -like ' + [char]39 + 'refs/tags/v*' + [char]39 + ')'))) {
+    throw 'The release workflow does not enforce tag/version consistency for manual tag runs.'
+}
+if ($releaseSource -match [Regex]::Escape(
+        ('if (' + [char]39 + '${{ github.event_name }}' + [char]39 + ' -ne ' + [char]39 + 'workflow_dispatch' + [char]39 + ')'))) {
+    throw 'The release workflow must not skip tag/version consistency for workflow_dispatch tag runs.'
+}
 if ($releaseSource -notmatch [Regex]::Escape('Test-ReleaseNotes.ps1 @arguments')) {
     throw 'The release workflow does not enforce versioned release notes.'
 }
@@ -790,6 +798,27 @@ foreach ($requiredPublicReleaseToken in @(
     if ($releaseSource -notmatch [Regex]::Escape($requiredPublicReleaseToken)) {
         throw "The stable GitHub release does not publish the unsigned public build: $requiredPublicReleaseToken"
     }
+}
+$publicReleaseSource = [Regex]::Match(
+    $releaseSource,
+    '(?ms)^  publish:.*?(?=^  [A-Za-z0-9_-]+:\s*$|\z)'
+).Value
+foreach ($requiredSignedPublishToken in @(
+    'needs: [windows, bundle, sbom, sign]',
+    "needs.sign.result == 'success' || needs.sign.result == 'skipped'",
+    'Download SBOM artifacts',
+    'Download all-in-one bundle',
+    'Overlay signed portable executables',
+    'Download signed release artifacts',
+    "inputs.signing_provider == 'digicert-stm'"
+)) {
+    if ([string]::IsNullOrWhiteSpace($publicReleaseSource) -or
+        $publicReleaseSource -notmatch [Regex]::Escape($requiredSignedPublishToken)) {
+        throw "The stable GitHub release does not protect signed publication: $requiredSignedPublishToken"
+    }
+}
+if ($publicReleaseSource -match [Regex]::Escape('pattern: windows-*')) {
+    throw 'The stable GitHub release must download unsigned architecture artifacts by exact name so signed artifacts cannot shadow them.'
 }
 $publicReleaseAssetSmokeSource = Get-Content -Raw -LiteralPath $publicReleaseAssetSmoke
 foreach ($requiredPublicReleaseAuditToken in @(

@@ -13,15 +13,15 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 当前 Unreleased 增量
 
-当前没有等待发布的版本增量。TAR + LZ4 已随 v0.1.13 贯通核心、CLI、两套桌面格式菜单、更新路径、格式检测、往返/冒烟/性能测试和双语文档。
+当前有一个等待发布的版本增量：RAR 5 已加入创建，支持等级 0–5、密码加密文件头、进度、取消和原子输出，并贯通核心、CLI、两套桌面格式菜单、核心往返测试、Windows 冒烟与双语文档；RAR 分卷、恢复记录、更新和重命名限制已明确。Windows CAB 已加入固定 MSZIP 创建，并贯通核心、CLI、两套桌面格式菜单、列表/校验/选择性解压往返测试和双语文档；空目录、密码、更新和重命名限制已明确。v0.1.14 已发布归档操作栏专业化分组；TAR + LZ4 已随 v0.1.13 贯通核心、CLI、两套桌面格式菜单、更新路径、格式检测、往返/冒烟/性能测试和双语文档。
 
 ## 已准备
 
 - `docs/src/content/docs/development/contracts.md` 定义 CLI 命令、格式值、冲突策略、密码输入、退出码、核心 Provider 和 Worker 协议边界。
-- `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、16 个创建格式、18 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
+- `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、18 个创建格式、18 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7`、`v0.1.8`、`v0.1.9`、`v0.1.10`、`v0.1.11`、`v0.1.12` 和 `v0.1.13` 均通过匹配 tag 自动生成公开 GitHub Release。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7`、`v0.1.8`、`v0.1.9`、`v0.1.10`、`v0.1.11`、`v0.1.12`、`v0.1.13` 和 `v0.1.14` 均通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -31,7 +31,15 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.13` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.14` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+
+## 2026-09-01 v0.1.14 归档操作栏专业化与公开版本结果
+
+- 默认 Iced 桌面 UI 将归档管理、编辑、批量重命名和解压操作拆分为响应式工具栏分组，窄窗口下仍保持可用；Worker、队列和归档操作语义不变。
+- PR [#105](https://github.com/ax2/zifile/pull/105) 合并提交为 `835ed9fd7c0f1b20ca3bda462d2492a15eb8a31a`，tag `v0.1.14` 精确指向该提交。
+- [Release workflow 33476898197](https://github.com/ax2/zifile/actions/runs/33476898197) 成功完成双架构构建、测试、资产审计和公开发布。
+- [v0.1.14 Release](https://github.com/ax2/zifile/releases/tag/v0.1.14) 于 `2026-09-01T06:49:56Z` 发布，非草稿、非预发布，严格只公开 all-in-one `ZiFile-0.1.14.0-windows.msixbundle`、两个独立运行 EXE 和 `SHA256SUMS.txt`；没有 DLL、JSON、YAML 或 ZIP。
+- 该版本仍是未签名 GitHub 构建；可信签名、真实前台 UI、物理 ARM64、WACK、WinGet 社区接纳和 Microsoft Store/Partner Center 门禁继续独立保持 pending。
 
 ## 2026-09-01 v0.1.13 TAR + LZ4 与正式公开版本结果
 
@@ -43,7 +51,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 2026-09-01 归档内重命名
 
-- 核心新增 `ArchiveRename` 和 `rename_archive`。ZIP、7z 与 TAR-family 通过同目录临时 staging 完成重命名后再原子替换原归档；目录映射会移动完整子树，单流、RAR 与 CAB 继续只读。
+- 核心新增 `ArchiveRename` 和 `rename_archive`。ZIP、7z 与 TAR-family 通过同目录临时 staging 完成重命名后再原子替换原归档；目录映射会移动完整子树，单流、RAR 与 CAB 更新/重命名继续只读。
 - 重命名映射在 staging 内容变更前统一校验：归档相对路径策略、大小写冲突、重复/重叠源与目标、类型冲突、目标存在、符号链接/重解析点和取消状态均受保护；临时搬移阶段支持批量交换，失败不会提交原归档。
 - Worker IPC 升级到 `PROTOCOL_VERSION = 3`，CLI 新增可重复的 `rename <archive> --rename <FROM=TO>`；默认 Iced UI 和 Dioxus/WebView2 无障碍候选均提供单选项目的双语重命名编辑器，并在完成后重新加载归档。
 - 验证：核心集成测试 55/55、CLI 单测 10/10、Worker 协议单测 4/4，桌面 `cargo check --all-targets --all-features` 通过；真实前台 UI、签名和 Store/WACK 等外部门禁仍未声称完成。

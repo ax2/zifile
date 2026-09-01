@@ -85,14 +85,17 @@ architecture-suffixed portable EXE for x64 and one for ARM64, alongside the sing
 MSIX bundle. The legacy `zifile-worker.exe` remains in build and MSIX evidence for compatibility,
 but is not required by the portable EXE.
 
-Stable tagged GitHub releases build with formal `ZIFILE_MSIX_IDENTITY` and
-`ZIFILE_MSIX_PUBLISHER` plus `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME` environment
-variables, then enter the protected
-`production-signing` Environment. DigiCert Binary Signing signs the staged EXEs,
-DLL, and MSIX with the cloud-held key. `Test-SignedReleaseArtifacts.ps1` requires
-valid signatures, one exact Publisher, and timestamps before regenerating audits
-and checksums; publishing downloads only `signed-windows-*`. Manual workflow runs
-may select `none` for unsigned validation or `digicert-stm` for a protected rehearsal.
+Stable tag pushes build the ordinary unsigned `.Dev` packages. A manual
+workflow dispatch on a stable tag may select `digicert-stm`; that path passes the
+formal `ZIFILE_MSIX_IDENTITY`, `ZIFILE_MSIX_PUBLISHER`, and
+`ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME` values, enters the protected
+`production-signing` Environment, and uses DigiCert Binary Signing for the
+staged EXEs, DLL, and MSIX. `Test-SignedReleaseArtifacts.ps1` requires valid
+signatures, one exact Publisher, and timestamps before regenerating audits and
+checksums. The signed bundle job and stable publish job then explicitly overlay
+the post-signing MSIX/portable EXE files; unsigned architecture artifacts cannot
+shadow the signed inputs. Manual workflow runs may select `none` for unsigned
+validation or `digicert-stm` for a protected rehearsal.
 Hyphenated stage tags such as `v0.1.0-alpha.1` and `v1.0.0-rc.1` publish the unsigned
 dual-architecture build outputs, audits, checksums, SBOMs, and provenance as a GitHub
 pre-release without entering production signing; these packages are for milestone

@@ -3,7 +3,7 @@ title: 快速上手
 description: 使用 ZiFile 浏览、校验、解压和创建压缩文件。
 ---
 
-ZiFile 目前是 Stage 4 公开版本，尚未发布 Microsoft Store 或 WinGet 正式版本。GitHub 用户可从当前的 [v0.1.13 Release](https://github.com/ax2/zifile/releases/tag/v0.1.13) 获取未签名 Windows 构建，并应先按 Release 中的 `SHA256SUMS.txt` 校验文件。需要安装时只需选择包含 x64 与 ARM64 的一体化 `ZiFile-0.1.13.0-windows.msixbundle`；便携版文件为 `zifile-windows-x64.exe` 和 `zifile-windows-arm64.exe`，均为可独立运行的自包含程序，不需要额外的 Worker 或 DLL。不要为了安装开发包而导入未知根证书或关闭 Windows 安全检查。
+ZiFile 目前是 Stage 4 公开版本，尚未发布 Microsoft Store 或 WinGet 正式版本。GitHub 用户可从当前的 [v0.1.14 Release](https://github.com/ax2/zifile/releases/tag/v0.1.14) 获取未签名 Windows 构建，并应先按 Release 中的 `SHA256SUMS.txt` 校验文件。需要安装时只需选择包含 x64 与 ARM64 的一体化 `ZiFile-0.1.14.0-windows.msixbundle`；便携版文件为 `zifile-windows-x64.exe` 和 `zifile-windows-arm64.exe`，均为可独立运行的自包含程序，不需要额外的 Worker 或 DLL。不要为了安装开发包而导入未知根证书或关闭 Windows 安全检查。
 
 ## 打开和检查归档
 
@@ -28,7 +28,7 @@ ZiFile 目前是 Stage 4 公开版本，尚未发布 Microsoft Store 或 WinGet 
 2. 添加文件或文件夹，也可以把来源拖入窗口。
 3. 选择格式、压缩等级和可选密码，再选择保存位置。
 
-ZIP、7z 和 TAR 组合支持多个文件与文件夹。gzip、Zstandard、XZ、LZMA、Bzip2、LZ4 和 Brotli 是单文件流，必须恰好选择一个现有文件；需要压缩目录时，请改用对应 TAR 组合。RAR 与 CAB 只支持读取，不支持创建。
+ZIP、7z、RAR、CAB 和 TAR 组合支持多个文件与文件夹。RAR 创建 RAR 5、等级 0–5 的归档并可加密文件头，但不能保存空目录或原地更新；CAB 使用固定 MSZIP 压缩，不能保存空目录。gzip、Zstandard、XZ、LZMA、Bzip2、LZ4 和 Brotli 是单文件流，必须恰好选择一个现有文件；需要压缩目录时，请改用对应 TAR 组合。
 
 打开 ZIP、7z 或 TAR 组合后，可以选择“添加到压缩文件”或“将文件夹添加到压缩文件”更新原归档，也可以选择条目后使用“移除所选项目”。更新和移除都会在原文件旁的临时工作区中完成解包、合并或删除及重建，只有成功后才替换原文件；单文件流、RAR 和 CAB 不支持更新。
 

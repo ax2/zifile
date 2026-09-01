@@ -241,6 +241,51 @@ try {
         }
     }
 
+    $createdSource = Join-Path $testRoot 'created-input'
+    New-Item -ItemType Directory -Path (Join-Path $createdSource 'nested') -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $createdSource 'hello.txt') -Value 'ZiFile RAR reference' -NoNewline
+    Set-Content -LiteralPath (Join-Path $createdSource 'nested\unicode-测试.txt') -Value 'RAR 5 创建' -NoNewline
+    foreach ($createdCase in @(
+        [ordered]@{ name = 'zifile-created-rar5'; password = $null },
+        [ordered]@{ name = 'zifile-created-rar5-encrypted'; password = 'Reference password' }
+    )) {
+        $archive = Join-Path $testRoot ($createdCase.name + '.rar')
+        if ($null -eq $createdCase.password) {
+            & $cli create $archive $createdSource --format rar --level 3 | Out-Null
+        } else {
+            $createdCase.password | & $cli create $archive $createdSource --format rar --level 3 --password-stdin | Out-Null
+        }
+        if ($LASTEXITCODE -ne 0) { throw "ZiFile could not create RAR case $($createdCase.name)." }
+        $zifileOutput = Join-Path $testRoot ($createdCase.name + '-zifile')
+        if ($null -eq $createdCase.password) {
+            & $cli test $archive | Out-Null
+        } else {
+            $createdCase.password | & $cli test $archive --password-stdin | Out-Null
+        }
+        if ($LASTEXITCODE -ne 0) { throw "ZiFile could not test created RAR case $($createdCase.name)." }
+        if ($null -eq $createdCase.password) {
+            & $cli extract $archive $zifileOutput | Out-Null
+        } else {
+            $createdCase.password | & $cli extract $archive $zifileOutput --password-stdin | Out-Null
+        }
+        if ($LASTEXITCODE -ne 0) { throw "ZiFile could not extract created RAR case $($createdCase.name)." }
+        $sevenZipOutput = Join-Path $testRoot ($createdCase.name + '-7zip')
+        $sevenZipArguments = @('x', $archive, "-o$sevenZipOutput", '-y')
+        if ($null -ne $createdCase.password) { $sevenZipArguments += "-p$($createdCase.password)" }
+        & $sevenZip @sevenZipArguments | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "7-Zip could not extract created RAR case $($createdCase.name)." }
+        $count = Assert-TreesMatch -ExpectedRoot $zifileOutput -ActualRoot $sevenZipOutput
+        $results += [ordered]@{
+            name = $createdCase.name
+            source_path = 'ZiFile CLI RAR 5 writer'
+            reference_tool = '7-Zip'
+            encrypted = $null -ne $createdCase.password
+            files = $count
+            archive_bytes = (Get-Item -LiteralPath $archive).Length
+            archive_sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+        }
+    }
+
     $evidence = [ordered]@{
         schema_version = 1
         generated_at_utc = [DateTime]::UtcNow.ToString('o')

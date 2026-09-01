@@ -118,7 +118,7 @@ Opening an archive, choosing an extraction directory, adding files/folders, and 
 
 Creation sources use the same shared path-identity deduplication function. On Windows, casing and slash-direction differences do not add the same file twice, and the Shell rejects disappeared paths, symbolic links, junctions, and reparse points before launch, so virtual items or stale sources cannot appear usable before the Worker reports an error.
 
-The create-format menu order now comes from the core `ArchiveFormat::CREATABLE` registry. The Iced baseline and Dioxus candidate no longer maintain separate format arrays, so a new creatable provider receives the same stable ordering in both UIs. The contract smoke locks the current sixteen creation formats and prevents the menus from silently diverging from the public capability matrix.
+The create-format menu order now comes from the core `ArchiveFormat::CREATABLE` registry. The Iced baseline and Dioxus candidate no longer maintain separate format arrays, so a new creatable provider receives the same stable ordering in both UIs. The contract smoke locks the current eighteen creation formats and prevents the menus from silently diverging from the public capability matrix.
 
 When saving a new archive, both UIs add the selected format's canonical extension if the name entered in the native save dialog has no extension (for example, `backup` becomes `backup.zip` or `backup.tar.gz`). An explicit user-entered extension is preserved rather than silently replaced.
 

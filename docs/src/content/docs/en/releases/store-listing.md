@@ -19,7 +19,7 @@ Short description: A modern open-source archive utility for Windows 10 and 11. B
 
 ZiFile is a modern open-source archive utility for Windows with clear workflows and cautious security defaults.
 
-Browse archive contents, extract only selected entries, or create ZIP, 7z, TAR, and common compressed streams from files and folders. RAR 1.3 through RAR 7 and Windows CAB archives can be browsed, tested, and extracted but not created. ZIP and 7z support AES encryption, and passwords are never written to logs or settings.
+Browse archive contents, extract only selected entries, or create ZIP, 7z, RAR 5, TAR, fixed-MSZIP Windows CAB archives, and common compressed streams from files and folders. RAR 1.3 through RAR 7 can be browsed, tested, and extracted, while RAR 5 creation supports levels 0–5 and encrypted headers. RAR and CAB do not support update or rename operations and cannot preserve empty directories. ZIP and 7z support AES encryption, and passwords are never written to logs or settings.
 
 ZiFile blocks path traversal, link escapes, reserved Windows names, unsafe overwrites, and excessive archive expansion. Long-running work executes in an isolated background process with visible progress and cancellation.
 
@@ -48,7 +48,7 @@ Leave “What's new in this version” blank for the first submission. Use `MIT 
 - Website: `https://ax2.github.io/zifile/`
 - Privacy: `https://ax2.github.io/zifile/en/product/privacy/`
 
-Certification notes should explain that the app processes only user-selected local files; an isolated Worker included in the package performs long operations; the Explorer extension only starts the visible desktop's create or extract-to-matching-folder flow and never parses archives, performs compression, or handles passwords itself; passwords are passed transiently through in-memory IPC or standard input; RAR is read-only and RAR creation is unsupported; and the MSIX does not declare the Internet client capability.
+Certification notes should explain that the app processes only user-selected local files; an isolated Worker included in the package performs long operations; the Explorer extension only starts the visible desktop's create or extract-to-matching-folder flow and never parses archives, performs compression, or handles passwords itself; passwords are passed transiently through in-memory IPC or standard input; RAR reading covers 1.3–7, new archives use RAR 5, and update/rename are unsupported; and the MSIX does not declare the Internet client capability.
 
 ## Asset status
 

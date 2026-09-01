@@ -3,7 +3,7 @@ title: Getting started
 description: Browse, test, extract, and create archives with ZiFile.
 ---
 
-ZiFile is currently a Stage 4 public release and has not shipped through Microsoft Store or WinGet. GitHub users can obtain the unsigned Windows build from the current [v0.1.13 Release](https://github.com/ax2/zifile/releases/tag/v0.1.13); verify every download with the included `SHA256SUMS.txt` first. For installation, choose the single all-in-one `ZiFile-0.1.13.0-windows.msixbundle`, which contains x64 and ARM64 packages. The portable downloads are `zifile-windows-x64.exe` and `zifile-windows-arm64.exe`; each is a self-contained standalone program and does not need a separate Worker or DLL. Never import an unknown root certificate or disable Windows security checks to install a development package.
+ZiFile is currently a Stage 4 public release and has not shipped through Microsoft Store or WinGet. GitHub users can obtain the unsigned Windows build from the current [v0.1.14 Release](https://github.com/ax2/zifile/releases/tag/v0.1.14); verify every download with the included `SHA256SUMS.txt` first. For installation, choose the single all-in-one `ZiFile-0.1.14.0-windows.msixbundle`, which contains x64 and ARM64 packages. The portable downloads are `zifile-windows-x64.exe` and `zifile-windows-arm64.exe`; each is a self-contained standalone program and does not need a separate Worker or DLL. Never import an unknown root certificate or disable Windows security checks to install a development package.
 
 ## Open and inspect an archive
 
@@ -28,7 +28,7 @@ Work runs in an isolated Worker. Pressing `Escape` or choosing **Cancel** reques
 2. Add files or folders, or drop sources onto the window.
 3. Choose a format, compression level, optional password, and output path.
 
-ZIP, 7z, and TAR compositions accept multiple files and folders. gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli are single-file streams and require exactly one existing file; use the matching TAR composition for a directory. RAR and CAB are read-only and cannot be created.
+ZIP, 7z, RAR, CAB, and TAR compositions accept multiple files and folders. RAR creates RAR 5 archives at levels 0–5 and can encrypt headers, but cannot preserve empty directories or be updated in place; CAB uses fixed MSZIP compression and cannot preserve empty directories. gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli are single-file streams and require exactly one existing file; use the matching TAR composition for a directory.
 
 After opening a ZIP, 7z, or TAR-family archive, use `Add to archive` or `Add folder to archive` to update it in place, or select entries and choose `Remove selected`. Updates and removals extract, merge or delete, and rebuild in a temporary workspace beside the original, replacing the original only after success; single-file streams, RAR, and CAB cannot be updated.
 
