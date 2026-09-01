@@ -13,7 +13,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 当前 Unreleased 增量
 
-当前有一个等待发布的版本增量：RAR 5 已加入创建，支持等级 0–5、密码加密文件头、进度、取消和原子输出，并贯通核心、CLI、两套桌面格式菜单、核心往返测试、Windows 冒烟与双语文档；RAR 分卷、恢复记录、更新和重命名限制已明确。Windows CAB 已加入固定 MSZIP 创建，并贯通核心、CLI、两套桌面格式菜单、列表/校验/选择性解压往返测试和双语文档；空目录、密码、更新和重命名限制已明确。v0.1.14 已发布归档操作栏专业化分组；TAR + LZ4 已随 v0.1.13 贯通核心、CLI、两套桌面格式菜单、更新路径、格式检测、往返/冒烟/性能测试和双语文档。
+当前没有等待发布的功能增量。RAR 5 创建和固定 MSZIP CAB 创建已随 v0.1.15 发布；TAR + LZ4 已随 v0.1.13 发布，v0.1.14 已发布归档操作栏专业化分组。
 
 ## 已准备
 
@@ -21,7 +21,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、18 个创建格式、18 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7`、`v0.1.8`、`v0.1.9`、`v0.1.10`、`v0.1.11`、`v0.1.12`、`v0.1.13` 和 `v0.1.14` 均通过匹配 tag 自动生成公开 GitHub Release。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7`、`v0.1.8`、`v0.1.9`、`v0.1.10`、`v0.1.11`、`v0.1.12`、`v0.1.13`、`v0.1.14` 和 `v0.1.15` 均通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -31,7 +31,15 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.14` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.15` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+
+## 2026-09-01 v0.1.15 RAR 5/CAB 创建与公开版本结果
+
+- RAR 5 创建支持等级 0–5、密码加密文件头、进度、取消和原子输出；RAR 分卷、恢复记录、更新和重命名限制已明确。Windows CAB 创建使用固定 MSZIP，并与核心、CLI、两套桌面 UI、列表/校验/选择性解压往返测试和双语文档贯通；空目录、密码、更新和重命名限制已明确。
+- PR [#106](https://github.com/ax2/zifile/pull/106) 合并提交为 `13f1d0e25c3a546ebe2f88b172feb2479de05d67`，tag `v0.1.15` 精确指向该提交。
+- [Release workflow 33502996127](https://github.com/ax2/zifile/actions/runs/33502996127) 成功完成 SBOM、x64/ARM64 测试和构建、独立 EXE 冒烟/审计、all-in-one bundle、资产审计和公开发布。
+- [v0.1.15 Release](https://github.com/ax2/zifile/releases/tag/v0.1.15) 于 `2026-09-01T12:05:59Z` 发布，非草稿、非预发布，严格只公开 `ZiFile-0.1.15.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`；没有 DLL、JSON、YAML 或 ZIP。
+- 该版本仍是未签名 GitHub 构建；可信签名、真实前台 UI、物理 ARM64、WACK、WinGet 社区接纳和 Microsoft Store/Partner Center 门禁继续独立保持 pending。
 
 ## 2026-09-01 v0.1.14 归档操作栏专业化与公开版本结果
 

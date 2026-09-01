@@ -13,7 +13,7 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 ## Current Unreleased increment
 
-There is one pending release increment: RAR 5 creation now supports levels 0–5, password-protected headers, progress, cancellation and atomic output across the core, CLI, both desktop format menus, core round trips, Windows smoke tests and bilingual documentation; RAR volumes, recovery records, update and rename limits are explicit. Windows CAB now supports fixed-MSZIP creation across the core, CLI, both desktop format menus, list/test/selective-extract round trips, and bilingual documentation; empty-directory, password, update, and rename limits are explicit. v0.1.14 ships the professional grouped archive toolbar; TAR + LZ4 ships in v0.1.13 across the core, CLI, both desktop format menus, the update path, format detection, round-trip/smoke/performance tests, and bilingual documentation.
+There is no pending feature increment. RAR 5 creation and fixed-MSZIP CAB creation shipped in v0.1.15; TAR + LZ4 shipped in v0.1.13, and the professional grouped archive toolbar shipped in v0.1.14.
 
 ## Prepared
 
@@ -21,7 +21,7 @@ There is one pending release increment: RAR 5 creation now supports levels 0–5
 - `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, eighteen creation formats, eighteen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
 - `release/readiness.json` binds stable tags to accessibility, queue, trusted-install, ARM64, screenshot, WACK, WinGet, Store, Partner Center, and signing evidence.
 - The Release workflow derives dual-architecture builds, audits, checksums, SBOMs, provenance, and GitHub Releases from the workspace version; ordinary public releases use unsigned artifacts, while formal signing can be enabled explicitly through workflow inputs.
-- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, `v0.1.8`, `v0.1.9`, `v0.1.10`, `v0.1.11`, `v0.1.12`, `v0.1.13`, and `v0.1.14` have been published as public GitHub Releases from matching tags.
+- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, `v0.1.8`, `v0.1.9`, `v0.1.10`, `v0.1.11`, `v0.1.12`, `v0.1.13`, `v0.1.14`, and `v0.1.15` have been published as public GitHub Releases from matching tags.
 
 ## Required to finish
 
@@ -31,7 +31,15 @@ There is one pending release increment: RAR 5 creation now supports levels 0–5
 
 ## Release result
 
-Stable 1.0 has not been published; `v0.1.14` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+Stable 1.0 has not been published; `v0.1.15` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+
+## 2026-09-01 — v0.1.15 RAR 5/CAB creation and public release result
+
+- RAR 5 creation supports levels 0–5, password-protected headers, progress, cancellation, and atomic output; RAR volume, recovery-record, update, and rename limits are explicit. Windows CAB creation uses fixed MSZIP and is wired through the core, CLI, both desktop UIs, list/test/selective-extract round trips, and bilingual documentation; empty-directory, password, update, and rename limits are explicit.
+- PR [#106](https://github.com/ax2/zifile/pull/106) merged as `13f1d0e25c3a546ebe2f88b172feb2479de05d67`, and tag `v0.1.15` points exactly to that commit.
+- [Release workflow 33502996127](https://github.com/ax2/zifile/actions/runs/33502996127) completed SBOM, x64/ARM64 tests and builds, standalone EXE smoke/audit, the all-in-one bundle, asset audit, and public publication.
+- The [v0.1.15 Release](https://github.com/ax2/zifile/releases/tag/v0.1.15) was published at `2026-09-01T12:05:59Z` as neither a draft nor a prerelease and exposes exactly `ZiFile-0.1.15.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; no DLL, JSON, YAML, or ZIP is public.
+- This remains an unsigned GitHub build; trusted signing, real foreground UI, physical ARM64, WACK, WinGet community acceptance, and Microsoft Store/Partner Center gates remain independently pending.
 
 ## 2026-09-01 — v0.1.14 professional archive toolbar and public release result
 
