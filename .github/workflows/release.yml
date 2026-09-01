@@ -46,7 +46,7 @@ jobs:
         architecture: [x64, arm64]
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.93.0
+      - uses: dtolnay/rust-toolchain@1.100.0
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-${{ matrix.architecture }}
@@ -372,7 +372,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.93.0
+      - uses: dtolnay/rust-toolchain@1.100.0
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-cyclonedx@0.5.9
