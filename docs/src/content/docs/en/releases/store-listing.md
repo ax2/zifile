@@ -19,7 +19,7 @@ Short description: A modern open-source archive utility for Windows 10 and 11. B
 
 ZiFile is a modern open-source archive utility for Windows with clear workflows and cautious security defaults.
 
-Browse archive contents, extract only selected entries, or create ZIP, 7z, TAR, and common compressed streams from files and folders. RAR 1.3 through RAR 7 and Windows CAB archives can be browsed, tested, and extracted but not created. ZIP and 7z support AES encryption, and passwords are never written to logs or settings.
+Browse archive contents, extract only selected entries, or create ZIP, 7z, TAR, fixed-MSZIP Windows CAB archives, and common compressed streams from files and folders. RAR 1.3 through RAR 7 can be browsed, tested, and extracted but not created. CAB does not support passwords, update, or rename operations and cannot preserve empty directories. ZIP and 7z support AES encryption, and passwords are never written to logs or settings.
 
 ZiFile blocks path traversal, link escapes, reserved Windows names, unsafe overwrites, and excessive archive expansion. Long-running work executes in an isolated background process with visible progress and cancellation.
 

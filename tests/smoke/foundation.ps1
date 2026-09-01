@@ -29,7 +29,7 @@ try {
         $formats -notmatch '(?m)^TAR \+ LZ4\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha$' -or
         $formats -notmatch '(?m)^LZ4\tyes\tyes\tyes\tsingle-file\tfixed\tno\tAlpha$' -or
         $formats -notmatch '(?m)^RAR\tyes\tyes\tno\tnone\tnone\tyes\tBeta$' -or
-        $formats -notmatch '(?m)^CAB\tyes\tyes\tno\tnone\tnone\tno\tBeta$'
+        $formats -notmatch '(?m)^CAB\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tBeta$'
     ) {
         throw 'CLI format registry smoke test failed.'
     }
@@ -125,7 +125,8 @@ try {
         @{ Format = 'tar-zstd'; ArchiveName = 'smoke.tar.zst'; Output = 'tar-zstd-output' },
         @{ Format = 'tar-xz'; ArchiveName = 'smoke.tar.xz'; Output = 'tar-xz-output' },
         @{ Format = 'tar-bzip2'; ArchiveName = 'smoke.tar.bz2'; Output = 'tar-bzip2-output' },
-        @{ Format = 'tar-lz4'; ArchiveName = 'smoke.tar.lz4'; Output = 'tar-lz4-output' }
+        @{ Format = 'tar-lz4'; ArchiveName = 'smoke.tar.lz4'; Output = 'tar-lz4-output' },
+        @{ Format = 'cab'; ArchiveName = 'smoke.cab'; Output = 'cab-output' }
     )) {
         Invoke-CliRoundTrip `
             -Format $case.Format `

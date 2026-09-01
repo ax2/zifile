@@ -8,6 +8,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Added
 
+- Add Windows CAB creation with fixed MSZIP compression, shared format-menu
+  coverage, safe listing/testing/extraction verification, and explicit limits
+  for passwords, empty directories, file names, file counts, and file sizes.
 - Add TAR + LZ4 composition creation, listing, integrity testing, extraction,
   update support, CLI selection, and shared desktop format-menu coverage.
 - Add batch rename controls to both desktop archive views. Select at least two

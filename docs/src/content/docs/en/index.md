@@ -19,7 +19,7 @@ hero:
 
 ZiFile is an MIT-licensed project by ZiCode. Its first release focuses on safely browsing, creating, and extracting common archive formats, with room to grow into a trusted set of file operations.
 
-The project is currently in **Stage 4 — public release and 1.0 readiness**. ZIP, 7z, TAR compositions, and the main single-stream formats support real creation, browsing, integrity testing, and safe extraction; RAR 1.3–7 and Windows CAB are available as read-only beta providers. The desktop UI and CLI share the same Rust core, while x64/ARM64 builds, package audits, reproducibility checks, and release rehearsals are automated. Trusted signing, real foreground validation, physical ARM64, WACK, Partner Center, Store, and WinGet remain 1.0 external gates.
+The project is currently in **Stage 4 — public release and 1.0 readiness**. ZIP, 7z, TAR compositions, Windows CAB creation with fixed MSZIP, and the main single-stream formats support real creation, browsing, integrity testing, and safe extraction; RAR 1.3–7 remains a read-only beta provider. The desktop UI and CLI share the same Rust core, while x64/ARM64 builds, package audits, reproducibility checks, and release rehearsals are automated. Trusted signing, real foreground validation, physical ARM64, WACK, Partner Center, Store, and WinGet remain 1.0 external gates.
 
 Start with [Getting started](/zifile/en/guides/getting-started/). See [Troubleshooting](/zifile/en/guides/troubleshooting/) for format, safety-policy, Worker, or development-package failures.
 

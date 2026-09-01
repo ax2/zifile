@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bzip2::read::BzDecoder;
 use bzip2::write::BzEncoder;
-use cab::Cabinet;
+use cab::{Cabinet, CabinetBuilder, CompressionType as CabCompressionType};
 use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -597,7 +597,8 @@ fn create_archive_inner(
         | ArchiveFormat::Bzip2
         | ArchiveFormat::Lz4
         | ArchiveFormat::Brotli => create_stream(sources, destination, format, options),
-        ArchiveFormat::Rar | ArchiveFormat::Cab => Err(ZiFileError::UnsupportedOperation(format)),
+        ArchiveFormat::Cab => create_cab(sources, destination, options),
+        ArchiveFormat::Rar => Err(ZiFileError::UnsupportedOperation(format)),
     }
 }
 
@@ -608,7 +609,8 @@ fn create_archive_inner(
 /// created before the original is atomically replaced. A source file with an
 /// existing archive-relative name is updated; directory/file type collisions
 /// are rejected. RAR, CAB, and single-file stream formats remain read-only for
-/// this operation.
+/// this operation; CAB can be created as a new fixed-layout archive but is not
+/// updated in place.
 pub fn update_archive(
     archive: impl AsRef<Path>,
     additions: &[PathBuf],
@@ -686,7 +688,8 @@ pub fn update_archive(
 /// The archive is extracted into a private staging directory, all rename
 /// mappings are validated, and the rebuilt archive replaces the original only
 /// after encoding succeeds. ZIP, 7z, and TAR-family archives support this
-/// operation; single-file streams and read-only providers do not.
+/// operation; CAB creation is supported, but its fixed container layout is not
+/// safely updated in place. Single-file streams and read-only providers do not.
 pub fn rename_archive(
     archive: impl AsRef<Path>,
     renames: &[ArchiveRename],
@@ -2145,6 +2148,133 @@ fn create_tar(
     };
     persist_archive(temporary, destination)?;
     Ok(summary)
+}
+
+fn create_cab(
+    sources: &[PathBuf],
+    destination: &Path,
+    options: &CreateOptions,
+) -> ZiFileResult<OperationSummary> {
+    if options
+        .password
+        .as_deref()
+        .is_some_and(|value| !value.is_empty())
+    {
+        return Err(ZiFileError::UnsupportedEncryption(ArchiveFormat::Cab));
+    }
+
+    let entries = collect_sources(sources, destination)?;
+    let files: Vec<&SourceEntry> = entries.iter().filter(|entry| !entry.is_directory).collect();
+    if files.is_empty() {
+        return Err(ZiFileError::InvalidInput(
+            "CAB requires at least one file; empty directories cannot be represented".to_owned(),
+        ));
+    }
+    if files.len() > usize::from(u16::MAX) {
+        return Err(ZiFileError::LimitExceeded(
+            "CAB supports at most 65535 files per cabinet".to_owned(),
+        ));
+    }
+
+    for source in &files {
+        let name = archive_name(&source.archive_path);
+        if name.len() > 255 {
+            return Err(ZiFileError::LimitExceeded(format!(
+                "CAB file name exceeds 255 bytes: {name}"
+            )));
+        }
+        if source.size > 0x7fff_8000 {
+            return Err(ZiFileError::LimitExceeded(format!(
+                "CAB file exceeds the 2147450880-byte per-file limit: {name}"
+            )));
+        }
+    }
+
+    for directory in entries.iter().filter(|entry| entry.is_directory) {
+        if !files.iter().any(|file| {
+            file.archive_path.starts_with(&directory.archive_path)
+                && file.archive_path != directory.archive_path
+        }) {
+            return Err(ZiFileError::InvalidInput(format!(
+                "CAB cannot preserve empty directory: {}",
+                archive_name(&directory.archive_path)
+            )));
+        }
+    }
+
+    set_source_totals(&entries, &options.progress);
+
+    // CAB stores files in folders. Split before the folder's 32-bit uncompressed
+    // offset would overflow; the backend then compresses each folder with MSZIP.
+    let mut groups: Vec<Vec<&SourceEntry>> = Vec::new();
+    let mut group = Vec::new();
+    let mut group_size = 0_u64;
+    for source in files.iter().copied() {
+        if !group.is_empty() && group_size.saturating_add(source.size) > u64::from(u32::MAX) {
+            groups.push(group);
+            group = Vec::new();
+            group_size = 0;
+        }
+        group_size = group_size.saturating_add(source.size);
+        group.push(source);
+    }
+    if !group.is_empty() {
+        groups.push(group);
+    }
+
+    let mut builder = CabinetBuilder::new();
+    for group in &groups {
+        let folder = builder.add_folder(CabCompressionType::MsZip);
+        for source in group {
+            let name = archive_name(&source.archive_path);
+            let file = folder.add_file(name);
+            if let Some(modified) = source.modified {
+                let value = time::OffsetDateTime::from(modified);
+                file.set_datetime(time::PrimitiveDateTime::new(value.date(), value.time()));
+            }
+        }
+    }
+
+    let mut temporary = temporary_archive(destination)?;
+    {
+        let mut writer = builder.build(temporary.as_file_mut())?;
+        let mut index = 0_usize;
+        while let Some(mut output) = writer.next_file()? {
+            let source = files.get(index).ok_or_else(|| {
+                ZiFileError::Backend("CAB writer returned more files than planned".to_owned())
+            })?;
+            let expected_name = archive_name(&source.archive_path);
+            if output.file_name() != expected_name {
+                return Err(ZiFileError::Backend(format!(
+                    "CAB writer file order changed: expected {expected_name}, got {}",
+                    output.file_name()
+                )));
+            }
+            let mut input = BufReader::new(File::open(&source.disk_path)?);
+            copy_cancellable(
+                &mut input,
+                &mut output,
+                &options.cancellation,
+                &options.progress,
+            )?;
+            index += 1;
+        }
+        if index != files.len() {
+            return Err(ZiFileError::Backend(format!(
+                "CAB writer accepted {index} files but {} were planned",
+                files.len()
+            )));
+        }
+        writer.finish()?;
+    }
+    persist_archive(temporary, destination)?;
+
+    Ok(OperationSummary {
+        files: files.len() as u64,
+        directories: entries.iter().filter(|entry| entry.is_directory).count() as u64,
+        bytes: files.iter().map(|entry| entry.size).sum(),
+        ..OperationSummary::default()
+    })
 }
 
 fn write_tar<W: Write>(

@@ -37,7 +37,7 @@ description: ZiFile 的单元、属性、互操作、安全、性能与冒烟测
 
 Foundation smoke 还使用实际 Windows CLI 对主要可创建格式执行完整往返：TAR+Zstandard、TAR+XZ、TAR+Bzip2、TAR+LZ4、gzip、Zstandard、XZ、LZMA、Bzip2、LZ4 和 Brotli；每个场景都创建归档、执行完整性校验、解压，并断言 Unicode 文件或单流输出内容。ZIP、TAR+gzip、TAR+LZMA 和 AES 7z 由同一冒烟流程中的独立场景覆盖，因此这组矩阵不是只检查能力表或“文件存在”。
 
-核心往返测试还覆盖“更新现有归档”：ZIP、7z 和全部 TAR 组合都会验证同名普通文件替换、嵌套新文件加入、选中条目删除、删除最后一个文件以及更新后重新解包；gzip 等单文件流、RAR 和 CAB 则验证明确的只读错误。更新使用同目录临时工作区，失败或取消不得替换原归档；重复或包含关系的删除路径会先规范化，避免重复重建。
+核心往返测试还覆盖“更新现有归档”：ZIP、7z 和全部 TAR 组合都会验证同名普通文件替换、嵌套新文件加入、选中条目删除、删除最后一个文件以及更新后重新解包；CAB 单独验证固定 MSZIP 创建、列表、完整性校验和选择性解压；gzip 等单文件流与 RAR 则验证明确的只读错误。更新使用同目录临时工作区，失败或取消不得替换原归档；重复或包含关系的删除路径会先规范化，避免重复重建。
 
 列出和完整性校验分别使用兼容旧入口的 `ListOptions` 与 `TestOptions`，为 ZIP、7z、RAR、CAB、TAR 组合和七种压缩流提供统一进度与协作取消。列出阶段按扫描条目推进，单压缩流还按实际解码字节反馈；无法预知总数时两套 UI 显示“正在扫描”，完成后再发布一致的最终总量。完整性校验和解压的内部预检会复用同一进度通道，但在主体阶段开始时重置已扫描计数，避免流式文件在真正写出前错误显示为 100%。Worker 每 100 ms 发送有界进度，并在操作返回后补发最终快照，避免小归档只出现初始 0%；预取消回归要求在解析前返回 `Cancelled`，各格式往返测试同时验证最终进度不变量。
 
@@ -85,7 +85,7 @@ CI 另外运行 Windows `performance` job，实际执行 `format_detection` 与 
 
 `archive_throughput` 同时测量 ZIP Deflate、TAR + LZMA-alone 与 TAR + LZ4；后两者使用独立的 1 MiB 样本分别测量创建和校验，确保组合格式也有可重复的吞吐观测。
 
-`tests/smoke/contract-policy.ps1` 锁定 CLI 的 8 个公开命令、16 个创建格式、18 行 `formats` 能力矩阵、双语公开契约文档，以及运行时错误码 1 和参数语法错误码 2；默认构建并使用 `target/debug/zifile.exe`，也可传入 `-SkipBuild -ExecutablePath <path>` 复用已归档的 CLI 进行验证，避免为纯契约检查保留构建缓存。它在 Windows CI 的 Foundation smoke 后运行，最终 1.0 冻结仍需在发布提交上完成。
+`tests/smoke/contract-policy.ps1` 锁定 CLI 的 8 个公开命令、17 个创建格式、18 行 `formats` 能力矩阵、双语公开契约文档，以及运行时错误码 1 和参数语法错误码 2；默认构建并使用 `target/debug/zifile.exe`，也可传入 `-SkipBuild -ExecutablePath <path>` 复用已归档的 CLI 进行验证，避免为纯契约检查保留构建缓存。它在 Windows CI 的 Foundation smoke 后运行，最终 1.0 冻结仍需在发布提交上完成。
 
 共享桌面测试还覆盖拖放分类：有效归档的内容签名优先于扩展名，改名归档仍进入浏览流程；对外层签名相同的改名 TAR+gzip、TAR+Zstandard、TAR+XZ 和 TAR+Bzip2，会在最多 1 MiB 压缩输入与 512 字节解码头的有界探测中识别内层 TAR；已知扩展在探测失败时保留兼容回退，普通文件和归档命名目录不会被误判为可打开归档。
 Iced 和 Dioxus 的入口回归同时锁定探测在异步/阻塞线程池路径上执行，防止文件头读取回到 UI 事件线程。

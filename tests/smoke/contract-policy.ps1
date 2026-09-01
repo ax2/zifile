@@ -46,7 +46,7 @@ try {
 
     $formatValues = @(
         'zip', 'seven-zip', 'tar', 'tar-gzip', 'tar-zstd', 'tar-xz', 'tar-lzma',
-        'tar-bzip2', 'tar-lz4', 'gzip', 'zstandard', 'xz', 'lzma', 'bzip2', 'lz4', 'brotli'
+        'tar-bzip2', 'tar-lz4', 'gzip', 'zstandard', 'xz', 'lzma', 'bzip2', 'lz4', 'brotli', 'cab'
     )
     $formatValueLine = '[possible values: {0}]' -f ($formatValues -join ', ')
     if ($createHelp -notmatch [Regex]::Escape($formatValueLine)) {
@@ -90,7 +90,7 @@ try {
         "LZ4`tyes`tyes`tyes`tsingle-file`tfixed`tno`tAlpha",
         "Brotli`tyes`tyes`tyes`tsingle-file`t0-11`tno`tAlpha",
         "RAR`tyes`tyes`tno`tnone`tnone`tyes`tBeta",
-        "CAB`tyes`tyes`tno`tnone`tnone`tno`tBeta"
+        "CAB`tyes`tyes`tyes`tfiles-or-directories`tfixed`tno`tBeta"
     )
     if ($formatLines.Count -ne $expectedRows.Count) {
         throw "The CLI format matrix row count changed from $($expectedRows.Count) to $($formatLines.Count)."

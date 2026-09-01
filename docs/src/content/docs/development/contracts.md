@@ -7,7 +7,7 @@ description: ZiFile 1.0 的 CLI、核心 Provider、IPC 与版本兼容边界。
 
 ## CLI 契约
 
-1.0 候选保留以下命令：`formats`、`detect`、`list`、`test`、`extract`、`create`、`update`、`rename`。创建格式值为 `zip`、`seven-zip`、`tar`、`tar-gzip`、`tar-zstd`、`tar-xz`、`tar-lzma`、`tar-bzip2`、`tar-lz4`、`gzip`、`zstandard`、`xz`、`lzma`、`bzip2`、`lz4` 和 `brotli`；冲突策略为 `overwrite`、`skip`、`rename` 和 `error`。
+1.0 候选保留以下命令：`formats`、`detect`、`list`、`test`、`extract`、`create`、`update`、`rename`。创建格式值为 `zip`、`seven-zip`、`tar`、`tar-gzip`、`tar-zstd`、`tar-xz`、`tar-lzma`、`tar-bzip2`、`tar-lz4`、`gzip`、`zstandard`、`xz`、`lzma`、`bzip2`、`lz4`、`brotli` 和 `cab`；冲突策略为 `overwrite`、`skip`、`rename` 和 `error`。
 
 密码输入只允许显式 `--password-stdin`。CLI 不接受明文密码参数，也不保证交互式提示。
 
@@ -17,7 +17,7 @@ description: ZiFile 1.0 的 CLI、核心 Provider、IPC 与版本兼容边界。
 | `1` | 文件、格式、密码、策略、后端或其他运行时错误 |
 | `2` | Clap 检测到命令行语法或参数错误 |
 
-运行时错误写入标准错误并使用 `error: ` 前缀。普通成功文案面向用户阅读，可在不改变命令语义的情况下改进；自动化不应解析这些自然语言句子。`zifile formats` 是稳定的制表符分隔能力表，包含 `CREATE_INPUT` 列（`files-or-directories`、`single-file` 或 `none`）和 `COMPRESSION_LEVEL` 列（闭区间、`fixed` 或 `none`）。可调格式未指定 `create --level` 或 `update --level` 时使用默认值 6；指定值会根据最终识别的格式校验，越界属于退出码 `1` 的运行时输入错误。`fixed` 格式必须省略这两个命令的 `--level`。CLI 不会静默钳制或忽略显式输入。`update <archive> [<additions>...] [--remove <archive-path>]` 至少需要一个新增来源或移除路径；`rename <archive> --rename <from=to>` 可重复指定映射。两者只重建 ZIP、7z 和 TAR 组合等多项目容器，均先在归档同目录的临时区完成完整操作，成功后才替换原文件，单流、RAR 与 CAB 明确保持只读。重命名目录会移动完整子树，映射冲突、路径不安全或目标已存在都会在提交前拒绝。
+运行时错误写入标准错误并使用 `error: ` 前缀。普通成功文案面向用户阅读，可在不改变命令语义的情况下改进；自动化不应解析这些自然语言句子。`zifile formats` 是稳定的制表符分隔能力表，包含 `CREATE_INPUT` 列（`files-or-directories`、`single-file` 或 `none`）和 `COMPRESSION_LEVEL` 列（闭区间、`fixed` 或 `none`）。可调格式未指定 `create --level` 或 `update --level` 时使用默认值 6；指定值会根据最终识别的格式校验，越界属于退出码 `1` 的运行时输入错误。`fixed` 格式必须省略这两个命令的 `--level`。CLI 不会静默钳制或忽略显式输入。`update <archive> [<additions>...] [--remove <archive-path>]` 至少需要一个新增来源或移除路径；`rename <archive> --rename <from=to>` 可重复指定映射。两者只重建 ZIP、7z 和 TAR 组合等多项目容器，均先在归档同目录的临时区完成完整操作，成功后才替换原文件，单流与 RAR 明确保持只读；CAB 支持新建固定 MSZIP 容器，但不支持更新或重命名。重命名目录会移动完整子树，映射冲突、路径不安全或目标已存在都会在提交前拒绝。
 
 ## 核心 Provider 契约
 

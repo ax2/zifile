@@ -5,10 +5,11 @@ being written from scratch with Rust, including the desktop UI, and is licensed
 under MIT.
 
 The project is currently in **Stage 4 — public 0.1 release and 1.0 readiness**. ZIP, encrypted
-ZIP, 7z, TAR compositions (including TAR + LZMA and TAR + LZ4), standalone LZMA, and common compression streams have working create,
-list, integrity-test and safe-extraction paths shared by the CLI and Iced
-desktop application. RAR 1.3–7 and Windows CAB are available as pure-Rust,
-read-only beta providers.
+ZIP, 7z, TAR compositions (including TAR + LZMA and TAR + LZ4), fixed-MSZIP
+Windows CAB, standalone LZMA, and common compression streams have working
+create, list, integrity-test and safe-extraction paths shared by the CLI and
+Iced desktop application. RAR 1.3–7 remains a pure-Rust, read-only beta
+provider.
 
 The current build is feature-complete for the currently supported archive contract:
 the source, x64/ARM64 builds, package audits, reproducibility checks and release
@@ -104,7 +105,7 @@ pnpm --dir docs build
 | Core model | Real create/list/test/extract operations with shared safety policy |
 | Desktop | Bilingual modern browser/creator, isolated archive worker and Windows taskbar progress |
 | CLI | `formats`, `detect`, `list`, `test`, `extract`, `create`, `update`, and safe in-place `rename` |
-| Archive providers | ZIP/ZIP64/AES, 7z/AES, read-only RAR 1.3 through RAR 7 with encryption, read-only Windows CAB, TAR compositions including TAR + LZMA and TAR + LZ4, standalone LZMA, and common streams |
+| Archive providers | ZIP/ZIP64/AES, 7z/AES, read-only RAR 1.3 through RAR 7 with encryption, Windows CAB creation with MSZIP plus read support for None/MSZIP/LZX, TAR compositions including TAR + LZMA and TAR + LZ4, standalone LZMA, and common streams |
 | Packaging | Real x64/ARM64 build outputs combined into one all-in-one MSIX bundle for users |
 | Distribution | Tag workflow publishes one MSIX bundle, one standalone portable EXE per architecture and one checksum; SBOM, provenance, audits and WinGet candidates remain build evidence |
 

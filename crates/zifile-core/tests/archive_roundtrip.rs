@@ -1003,7 +1003,7 @@ fn rar_is_read_only_and_supports_solid_selected_extraction() {
 }
 
 #[test]
-fn cab_is_read_only_and_supports_safe_selected_extraction() {
+fn cab_supports_creation_and_safe_selected_extraction() {
     let temp = tempfile::tempdir().unwrap();
     let archive = temp.path().join("fixture.cab");
     cab_fixture(
@@ -1017,7 +1017,7 @@ fn cab_is_read_only_and_supports_safe_selected_extraction() {
     let capabilities = ArchiveFormat::Cab.capabilities();
     assert!(capabilities.list);
     assert!(capabilities.extract);
-    assert!(!capabilities.create);
+    assert!(capabilities.create);
     assert!(!capabilities.encryption);
     assert_eq!(detect_format(&archive).unwrap(), ArchiveFormat::Cab);
 
@@ -1046,17 +1046,41 @@ fn cab_is_read_only_and_supports_safe_selected_extraction() {
         "safe cabinet\n"
     );
 
-    let source = temp.path().join("source.txt");
-    fs::write(&source, "CAB creation remains disabled").unwrap();
-    assert!(matches!(
-        create_archive(
-            &[source],
-            temp.path().join("not-created.cab"),
-            ArchiveFormat::Cab,
-            &CreateOptions::default(),
-        ),
-        Err(ZiFileError::UnsupportedOperation(ArchiveFormat::Cab))
-    ));
+    let source = temp.path().join("cab-source");
+    fs::create_dir_all(source.join("nested")).unwrap();
+    fs::write(source.join("hello.txt"), "created by ZiFile\n").unwrap();
+    fs::write(source.join("nested/unicode.txt"), "安全 CAB\n").unwrap();
+    let created = temp.path().join("created.cab");
+    let summary = create_archive(
+        &[source],
+        &created,
+        ArchiveFormat::Cab,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(summary.files, 2);
+    assert_eq!(detect_format(&created).unwrap(), ArchiveFormat::Cab);
+    let created_info = list_archive(&created, None).unwrap();
+    assert_eq!(created_info.entries.len(), 2);
+    assert!(test_archive(&created, None).is_ok());
+
+    let created_output = temp.path().join("created-output");
+    let selected = HashSet::from([PathBuf::from("cab-source/nested/unicode.txt")]);
+    let created_summary = extract_archive(
+        &created,
+        &created_output,
+        &ExtractOptions {
+            selected_paths: Some(selected),
+            ..ExtractOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(created_summary.files, 1);
+    assert_eq!(
+        fs::read_to_string(created_output.join("cab-source/nested/unicode.txt")).unwrap(),
+        "安全 CAB\n"
+    );
+    assert!(!created_output.join("cab-source/hello.txt").exists());
 }
 
 #[test]

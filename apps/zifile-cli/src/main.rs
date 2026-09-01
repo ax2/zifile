@@ -145,6 +145,7 @@ enum FormatArg {
     Bzip2,
     Lz4,
     Brotli,
+    Cab,
 }
 
 impl From<FormatArg> for ArchiveFormat {
@@ -166,6 +167,7 @@ impl From<FormatArg> for ArchiveFormat {
             FormatArg::Bzip2 => Self::Bzip2,
             FormatArg::Lz4 => Self::Lz4,
             FormatArg::Brotli => Self::Brotli,
+            FormatArg::Cab => Self::Cab,
         }
     }
 }
@@ -541,6 +543,7 @@ mod tests {
                 "bzip2",
                 "lz4",
                 "brotli",
+                "cab",
             ]
         );
     }
@@ -618,7 +621,7 @@ mod tests {
         assert!(matrix.contains("TAR\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha"));
         assert!(matrix.contains("LZ4\tyes\tyes\tyes\tsingle-file\tfixed\tno\tAlpha"));
         assert!(matrix.contains("RAR\tyes\tyes\tno\tnone\tnone\tyes\tBeta"));
-        assert!(matrix.contains("CAB\tyes\tyes\tno\tnone\tnone\tno\tBeta"));
+        assert!(matrix.contains("CAB\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tBeta"));
     }
 
     #[test]
