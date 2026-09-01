@@ -17,7 +17,7 @@ description: GitHub、WinGet 与 Microsoft Store 的统一版本发布流程。
 
 GitHub Release 面向用户只保留一个 all-in-one MSIX、一个 x64 独立便携 EXE、一个 ARM64 独立便携 EXE，以及一个 SHA-256 校验文件。审计 JSON、SBOM、来源证明和 WinGet YAML 作为 workflow artifact 保留，不混入 Release assets。GitHub Release 是公开构建的第一落点。WinGet manifest 使用计划 ID `ZiCode.ZiFile` 并引用发行方控制的版本化下载地址。Microsoft Store 以 MSIX 为主。
 
-WinGet 候选只接收公开 all-in-one `.msixbundle` 的 URL、SHA-256 和本地验证路径，不再要求或引用未公开的单架构 MSIX。清单按微软 MSIXBundle 示例保留 x64 与 ARM64 两个安装器节点，两者必须指向同一个 bundle URL 和同一哈希；`Test-Manifests.ps1` 会同时锁定该关系、29 个文件扩展名和本地 bundle 哈希，再交给官方 `winget validate`。
+WinGet 候选只接收公开 all-in-one `.msixbundle` 的 URL、SHA-256 和本地验证路径，不再要求或引用未公开的单架构 MSIX。清单按微软 MSIXBundle 示例保留 x64 与 ARM64 两个安装器节点，两者必须指向同一个 bundle URL 和同一哈希；`Test-Manifests.ps1` 会同时锁定该关系、31 个文件扩展名、本地 bundle 哈希和两个内嵌 MSIX 的包身份，再交给官方 `winget validate`。诸如 `ZiCode.ZiFile.Dev` 的开发身份会在提交前被拒绝。普通未签名 GitHub 证据流程可以显式传入 `-AllowDevelopmentIdentity`，但该例外不能用于社区提交。
 
 ## 主分支保护
 
