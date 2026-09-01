@@ -12,7 +12,7 @@ read-only beta providers.
 
 The current build is feature-complete for the currently supported archive contract:
 the source, x64/ARM64 builds, package audits, reproducibility checks and release
-rehearsals are automated. The public [`v0.1.13` GitHub release](https://github.com/ax2/zifile/releases/tag/v0.1.13)
+rehearsals are automated. The public [`v0.1.14` GitHub release](https://github.com/ax2/zifile/releases/tag/v0.1.14)
 uses unsigned artifacts; a stable 1.0 release is still gated on
 trusted signing, real foreground Windows validation, physical ARM64, WACK,
 Partner Center/Microsoft Store certification and WinGet acceptance.
@@ -121,7 +121,7 @@ RAR creation remains disabled; browsing, testing and selective extraction use th
 pure-Rust permissively licensed `rars` provider behind ZiFile's safety and Worker-isolation
 boundaries. Trusted-package shell activation, signing, accessibility
 certification and Store submission are still in progress, so no trusted
-production package release has been tagged yet.
+production package release has been published yet.
 
 ## Code signing policy
 

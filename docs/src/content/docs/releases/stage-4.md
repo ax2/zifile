@@ -13,7 +13,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 当前 Unreleased 增量
 
-当前没有等待发布的版本增量。TAR + LZ4 已随 v0.1.13 贯通核心、CLI、两套桌面格式菜单、更新路径、格式检测、往返/冒烟/性能测试和双语文档。
+当前没有等待发布的版本增量。v0.1.14 已发布归档操作栏专业化分组；TAR + LZ4 已随 v0.1.13 贯通核心、CLI、两套桌面格式菜单、更新路径、格式检测、往返/冒烟/性能测试和双语文档。
 
 ## 已准备
 
@@ -21,7 +21,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、16 个创建格式、18 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
-- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7`、`v0.1.8`、`v0.1.9`、`v0.1.10`、`v0.1.11`、`v0.1.12` 和 `v0.1.13` 均通过匹配 tag 自动生成公开 GitHub Release。
+- `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7`、`v0.1.8`、`v0.1.9`、`v0.1.10`、`v0.1.11`、`v0.1.12`、`v0.1.13` 和 `v0.1.14` 均通过匹配 tag 自动生成公开 GitHub Release。
 
 ## 必须完成
 
@@ -31,7 +31,15 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.13` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.14` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+
+## 2026-09-01 v0.1.14 归档操作栏专业化与公开版本结果
+
+- 默认 Iced 桌面 UI 将归档管理、编辑、批量重命名和解压操作拆分为响应式工具栏分组，窄窗口下仍保持可用；Worker、队列和归档操作语义不变。
+- PR [#105](https://github.com/ax2/zifile/pull/105) 合并提交为 `835ed9fd7c0f1b20ca3bda462d2492a15eb8a31a`，tag `v0.1.14` 精确指向该提交。
+- [Release workflow 33476898197](https://github.com/ax2/zifile/actions/runs/33476898197) 成功完成双架构构建、测试、资产审计和公开发布。
+- [v0.1.14 Release](https://github.com/ax2/zifile/releases/tag/v0.1.14) 于 `2026-09-01T06:49:56Z` 发布，非草稿、非预发布，严格只公开 all-in-one `ZiFile-0.1.14.0-windows.msixbundle`、两个独立运行 EXE 和 `SHA256SUMS.txt`；没有 DLL、JSON、YAML 或 ZIP。
+- 该版本仍是未签名 GitHub 构建；可信签名、真实前台 UI、物理 ARM64、WACK、WinGet 社区接纳和 Microsoft Store/Partner Center 门禁继续独立保持 pending。
 
 ## 2026-09-01 v0.1.13 TAR + LZ4 与正式公开版本结果
 
