@@ -55,7 +55,7 @@ jobs:
         shell: pwsh
         run: |
           $arguments = @{}
-          if ('${{ github.event_name }}' -ne 'workflow_dispatch') {
+          if ('${{ github.ref }}' -like 'refs/tags/v*') {
             $arguments.ExpectedVersion = '${{ github.ref_name }}'
           }
           $version = ./scripts/Test-VersionConsistency.ps1 @arguments | ConvertFrom-Json

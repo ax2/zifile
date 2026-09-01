@@ -713,6 +713,14 @@ foreach ($requiredVerifierToken in @(
 if ($releaseSource -notmatch [Regex]::Escape('Test-VersionConsistency.ps1 @arguments')) {
     throw 'The release workflow does not enforce the workspace version source.'
 }
+if ($releaseSource -notmatch [Regex]::Escape(
+        ('if (' + [char]39 + '${{ github.ref }}' + [char]39 + ' -like ' + [char]39 + 'refs/tags/v*' + [char]39 + ')'))) {
+    throw 'The release workflow does not enforce tag/version consistency for manual tag runs.'
+}
+if ($releaseSource -match [Regex]::Escape(
+        ('if (' + [char]39 + '${{ github.event_name }}' + [char]39 + ' -ne ' + [char]39 + 'workflow_dispatch' + [char]39 + ')'))) {
+    throw 'The release workflow must not skip tag/version consistency for workflow_dispatch tag runs.'
+}
 if ($releaseSource -notmatch [Regex]::Escape('Test-ReleaseNotes.ps1 @arguments')) {
     throw 'The release workflow does not enforce versioned release notes.'
 }
