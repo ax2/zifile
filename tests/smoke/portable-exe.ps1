@@ -61,9 +61,61 @@ $workerExecutable = Join-Path $temporaryRoot 'zifile-worker.exe'
 $sourceRoot = Join-Path $temporaryRoot 'source'
 $sourceFile = Join-Path $sourceRoot 'hello.txt'
 $archivePath = Join-Path $temporaryRoot 'sample.zip'
+$extractRoot = Join-Path $temporaryRoot 'extracted'
 
 if (-not $temporaryRoot.StartsWith($temporaryBase + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw "Refusing to create the portable smoke fixture outside the system temporary directory: $temporaryRoot"
+}
+
+function Invoke-StandaloneWorker {
+    param(
+        [Parameter(Mandatory)][string]$Executable,
+        [Parameter(Mandatory)][hashtable]$Payload,
+        [Parameter(Mandatory)][string]$OperationName
+    )
+
+    $request = [ordered]@{
+        version = 3
+        payload = $Payload
+    } | ConvertTo-Json -Depth 8 -Compress
+
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $Executable
+    $startInfo.ArgumentList.Add('--zifile-worker')
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+
+    if (-not $process.Start()) {
+        throw "The standalone portable executable did not start for $OperationName."
+    }
+    $process.StandardInput.WriteLine($request)
+    $process.StandardInput.Close()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+        $process.Kill($true)
+        $process.WaitForExit()
+        throw "The standalone $OperationName operation did not finish within $TimeoutSeconds seconds."
+    }
+    $stdout = $stdoutTask.GetAwaiter().GetResult()
+    $stderr = $stderrTask.GetAwaiter().GetResult()
+    $exitCode = $process.ExitCode
+    $process.Dispose()
+
+    if ($exitCode -ne 0) {
+        throw "The standalone $OperationName operation exited with code $exitCode`: $stderr"
+    }
+
+    return @(
+        $stdout -split '\r?\n' |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+            ForEach-Object { $_ | ConvertFrom-Json }
+    )
 }
 
 try {
@@ -83,60 +135,33 @@ try {
             worker_mode = '--zifile-worker'
             separate_worker_present = $false
             execution_skipped = $true
+            operations = @()
+            round_trip_verified = $false
             passed = $true
         } | ConvertTo-Json -Compress
         return
     }
 
-    Set-Content -LiteralPath $sourceFile -Value 'ZiFile standalone smoke test' -Encoding utf8NoBOM
-    Compress-Archive -LiteralPath $sourceFile -DestinationPath $archivePath
-
-    $request = [ordered]@{
-        version = 1
-        payload = [ordered]@{
-            operation = 'list'
-            archive = $archivePath
-            password = $null
-        }
-    } | ConvertTo-Json -Compress
-
-    $startInfo = [Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $portableExecutable
-    $startInfo.ArgumentList.Add('--zifile-worker')
-    $startInfo.UseShellExecute = $false
-    $startInfo.CreateNoWindow = $true
-    $startInfo.RedirectStandardInput = $true
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    $process = [Diagnostics.Process]::new()
-    $process.StartInfo = $startInfo
-
-    if (-not $process.Start()) {
-        throw 'The standalone portable executable did not start.'
+    $expectedContents = 'ZiFile standalone create-list-extract smoke test'
+    [IO.File]::WriteAllText($sourceFile, $expectedContents)
+    $createEvents = Invoke-StandaloneWorker -Executable $portableExecutable -OperationName 'create' -Payload @{
+        operation = 'create'
+        sources = @($sourceFile)
+        destination = $archivePath
+        format = 'Zip'
+        compression_level = 6
+        password = $null
     }
-    $process.StandardInput.WriteLine($request)
-    $process.StandardInput.Close()
-    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-    $stderrTask = $process.StandardError.ReadToEndAsync()
-    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-        $process.Kill($true)
-        $process.WaitForExit()
-        throw "The standalone portable executable did not finish within $TimeoutSeconds seconds."
-    }
-    $stdout = $stdoutTask.GetAwaiter().GetResult()
-    $stderr = $stderrTask.GetAwaiter().GetResult()
-    $exitCode = $process.ExitCode
-    $process.Dispose()
-
-    if ($exitCode -ne 0) {
-        throw "The standalone portable executable exited with code $exitCode`: $stderr"
+    if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf) -or
+        @($createEvents | Where-Object { $_.payload.event -eq 'summary' }).Count -ne 1) {
+        throw 'The standalone portable executable did not create the ZIP archive.'
     }
 
-    $events = @(
-        $stdout -split '\r?\n' |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-            ForEach-Object { $_ | ConvertFrom-Json }
-    )
+    $events = Invoke-StandaloneWorker -Executable $portableExecutable -OperationName 'list' -Payload @{
+        operation = 'list'
+        archive = $archivePath
+        password = $null
+    }
     $eventTypes = @($events | ForEach-Object { $_.payload.event })
     if ($eventTypes -notcontains 'archive_start' -or
         $eventTypes -notcontains 'archive_entry' -or
@@ -153,16 +178,38 @@ try {
         throw "The standalone portable executable did not return the expected archive entry. Entries: $($entryPaths -join ', ')"
     }
 
+    $extractEvents = Invoke-StandaloneWorker -Executable $portableExecutable -OperationName 'extract' -Payload @{
+        operation = 'extract'
+        archive = $archivePath
+        destination = $extractRoot
+        conflict = 'Rename'
+        limits = @{
+            max_entries = 1000000
+            max_expanded_bytes = 549755813888
+            max_expansion_ratio = 1000
+            max_path_depth = 128
+        }
+        password = $null
+        selected_paths = $null
+    }
+    $extractedFile = Join-Path $extractRoot 'hello.txt'
+    if (@($extractEvents | Where-Object { $_.payload.event -eq 'summary' }).Count -ne 1 -or
+        -not (Test-Path -LiteralPath $extractedFile -PathType Leaf) -or
+        [IO.File]::ReadAllText($extractedFile) -cne $expectedContents) {
+        throw 'The standalone portable executable did not reproduce the source through create and extract.'
+    }
+
     [ordered]@{
         schema_version = 1
         executable = [IO.Path]::GetFileName($executable)
         architecture = $Architecture
         pe_machine = ('0x{0:X4}' -f $machine)
-        worker_mode = '--zifile-worker'
-        separate_worker_present = $false
-        archive_entry = 'hello.txt'
-        exit_code = 0
-        passed = $true
+            worker_mode = '--zifile-worker'
+            separate_worker_present = $false
+            archive_entry = 'hello.txt'
+            operations = @('create', 'list', 'extract')
+            round_trip_verified = $true
+            passed = $true
     } | ConvertTo-Json -Compress
 }
 finally {

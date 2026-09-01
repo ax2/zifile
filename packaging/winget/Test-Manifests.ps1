@@ -3,8 +3,6 @@ param(
     [string]$ManifestDirectory,
     [Parameter(Mandatory)]
     [string]$Version,
-    [string]$X64InstallerPath,
-    [string]$Arm64InstallerPath,
     [string]$BundleInstallerPath
 )
 
@@ -20,7 +18,7 @@ $expectedFileExtensions = @(
     'gz', 'tar.gz', 'tgz',
     'zst', 'tar.zst', 'tzst',
     'xz', 'tar.xz', 'txz', 'tar.lzma', 'lzma',
-    'bz', 'bz2', 'tar.bz2', 'tbz', 'tbz2',
+    'bz', 'bz2', 'tar.bz2', 'tbz', 'tbz2', 'tar.lz4', 'tlz4',
     'lz4', 'br'
 )
 $directory = [IO.Path]::GetFullPath($ManifestDirectory)
@@ -127,35 +125,37 @@ if ($installerMatches.Count -ne 2 -or
     throw 'Installer manifest must contain exactly one x64 and one arm64 installer with uppercase SHA-256 values.'
 }
 
-$localPaths = @{ x64 = $X64InstallerPath; arm64 = $Arm64InstallerPath }
 $validated = @()
+$bundleUrls = @()
+$bundleHashes = @()
 foreach ($match in $installerMatches) {
     $architecture = $match.Groups['architecture'].Value
     $url = [uri]$match.Groups['url'].Value
     $sha = $match.Groups['sha'].Value
     $expectedPrefix = "https://github.com/ax2/zifile/releases/download/v$Version/"
-    $isBundle = $url.AbsolutePath.EndsWith('.msixbundle', [StringComparison]::OrdinalIgnoreCase)
     if ($url.Scheme -ne 'https' -or
         -not $url.AbsoluteUri.StartsWith($expectedPrefix, [StringComparison]::Ordinal) -or
-        (-not $isBundle -and -not $url.AbsolutePath.EndsWith("windows-$architecture.msix", [StringComparison]::OrdinalIgnoreCase))) {
-        throw "$architecture installer URL is not a matching versioned ZiFile GitHub Release asset."
+        -not $url.AbsolutePath.EndsWith('.msixbundle', [StringComparison]::OrdinalIgnoreCase)) {
+        throw "$architecture installer URL is not the versioned ZiFile all-in-one MSIX bundle asset."
     }
-    $localPath = if ($isBundle) { $BundleInstallerPath } else { $localPaths[$architecture] }
-    if ($localPath) {
-        $resolved = (Resolve-Path -LiteralPath $localPath -ErrorAction Stop).Path
-        if ($isBundle) {
-            if (-not $resolved.EndsWith('.msixbundle', [StringComparison]::OrdinalIgnoreCase)) {
-                throw 'Local bundle installer name does not match the manifest URL.'
-            }
-        } elseif (-not $resolved.EndsWith("windows-$architecture.msix", [StringComparison]::OrdinalIgnoreCase)) {
-            throw "$architecture local installer name does not match its architecture."
-        }
-        $actualSha = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash
-        if ($actualSha -ne $sha) {
-            throw "$architecture manifest SHA-256 does not match the signed local MSIX."
-        }
-    }
+    $bundleUrls += $url.AbsoluteUri
+    $bundleHashes += $sha
     $validated += $architecture
+}
+if (@($bundleUrls | Sort-Object -Unique).Count -ne 1 -or
+    @($bundleHashes | Sort-Object -Unique).Count -ne 1) {
+    throw 'The x64 and arm64 WinGet entries must reference the same all-in-one MSIX bundle and SHA-256.'
+}
+
+if ($BundleInstallerPath) {
+    $resolvedBundle = (Resolve-Path -LiteralPath $BundleInstallerPath -ErrorAction Stop).Path
+    if (-not $resolvedBundle.EndsWith('.msixbundle', [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Local bundle installer name does not match the manifest URL.'
+    }
+    $actualBundleSha = (Get-FileHash -LiteralPath $resolvedBundle -Algorithm SHA256).Hash
+    if ($actualBundleSha -ne $bundleHashes[0]) {
+        throw 'The WinGet manifest SHA-256 does not match the local all-in-one MSIX bundle.'
+    }
 }
 
 [pscustomobject]@{
@@ -166,7 +166,9 @@ foreach ($match in $installerMatches) {
     manifest_files = $expectedFiles.Count
     architectures = @($validated | Sort-Object)
     file_extensions = $actualFileExtensions
-    local_installers_verified = [bool]($X64InstallerPath -and $Arm64InstallerPath)
+    public_installer_model = 'all-in-one-msixbundle'
+    local_bundle_verified = [bool]$BundleInstallerPath
+    local_installers_verified = [bool]$BundleInstallerPath
     community_repository_path = $directory
     ready_for_winget_validate = $true
 } | ConvertTo-Json -Depth 4

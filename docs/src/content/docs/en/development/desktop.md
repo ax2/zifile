@@ -16,16 +16,31 @@ $password | zifile extract archive.7z output --password-stdin
 
 ## Settings and shortcuts
 
-The first launch selects Simplified Chinese or English from the system locale. Language and light/dark theme can be changed at any time. Only those two preferences are stored in `%LOCALAPPDATA%\ZiFile\settings.conf`; passwords, paths, and recent files are not persisted.
+The first launch selects Simplified Chinese or English from the system locale. Language and light/dark theme can be changed at any time. `%LOCALAPPDATA%\ZiFile\settings.conf` stores those preferences and up to eight local archive paths that were listed successfully; passwords, archive contents, and failed-open paths are never stored. Recent entries use Windows path identity for deduplication and can be reopened, removed individually, or cleared from the home page. These controls remove only local history, not files or the active archive session.
 
-Preferences are written to a temporary file, flushed and synced, then atomically replaced on Windows; save failures are surfaced in both UIs instead of silently leaving a partial settings file.
+Settings are written to a temporary file, flushed and synced, then atomically replaced on Windows. Paths use a bounded hexadecimal field encoding so line breaks or equals signs cannot alter the configuration structure; save failures are surfaced in both UIs instead of silently leaving a partial settings file.
 
 | Shortcut | Action |
 | --- | --- |
 | `Ctrl+O` | Open an archive |
 | `Ctrl+N` | Open the create page |
+| `Ctrl+R` | Reload the current archive |
+| `Ctrl+F` | Focus search for the current archive |
+| `Ctrl+W` | Close the current archive and return home |
 | `Ctrl+A` | Select every entry while the archive region is focused |
+| `Ctrl+I` | Invert every file selection in the current archive |
+| `F1` | Open About and keyboard-shortcut help |
 | `Escape` | Cancel the current cancellable operation |
+
+The archive header also exposes a `Close archive` button. Closing immediately releases the current archive password, metadata, selection, search, and folder-navigation state, then returns home. The current archive cannot be closed while an operation or queue handoff is active.
+
+The archive selection bar provides explicit `Select all`, `Select none`, and `Invert selection` actions. Their scope is every regular file in the archive, independent of the current folder, search query, or page; directories remain navigation nodes. `Ctrl+A` selects all and `Ctrl+I` inverts selection, with each bulk change reporting the new selected count in the status region.
+
+`Extract to named folder` skips the folder picker and extracts every entry to a matching directory beside the archive: `sample.zip` uses `sample/`, while `backup.tar.gz` uses `backup/`. It shares naming rules with the File Explorer command and keeps the current conflict policy, operation queue, isolated Worker, and post-completion `Show output` action. Use `Extract all` when choosing a different destination.
+
+For ZIP, 7z, and TAR-family containers, the archive page also provides `Add to archive`, `Add folder to archive`, and `Remove selected`. ZiFile creates a bounded temporary workspace beside the original, fully extracts the archive, then merges new sources or removes the selected archive-relative paths and their descendants before rebuilding the same format. The original is replaced only after rebuilding, validation, and cancellation checks succeed. A new regular file with the same relative path updates the previous file; file/directory type collisions, links, RAR/CAB, and single-file streams are rejected explicitly, and a failure leaves the original archive intact.
+
+When at least two regular files are selected, the archive page also enables `Batch rename`. Find/replace, prefix, and suffix rules affect filenames while preserving their containing directories. Unchanged entries are removed before submission, and the core archive-relative validation, collision checks, and atomic replacement protection are reused. Changing directories, reloading, changing the selection, or closing the archive clears unsubmitted batch rules.
 
 Search is immediate and results are paged at 500 rows, keeping 100,000-entry archives bounded. Safety limits still apply during listing. Worker byte progress, or entry progress when bytes are unavailable, is mirrored to the Windows taskbar.
 
@@ -41,12 +56,15 @@ table.
 
 After opening an archive, `Show in File Explorer` in the header opens its
 containing folder and selects the current file. This is a local action; a
-launch failure is surfaced as an error status, and the path is not written to
-settings or logs.
+launch failure is surfaced as an error status. Successfully opening the archive
+already updates recent history under the policy above; `Show in File Explorer`
+does not add another settings entry or log record.
 
 ## Operation queue
 
-Open, reload, test, extract, and create requests may be submitted while work is running. A 32-item in-memory FIFO executes snapshots in order. Clearing removes only waiting work; cancel affects only the current Worker and then advances the queue. Paths and passwords are released after clearing, completion, or exit and are never written to settings or logs.
+Open, reload, test, extract, create, and update requests may be submitted while work is running. A 32-item in-memory FIFO executes snapshots in order. Clearing removes only waiting work; cancel affects only the current Worker and then advances the queue. Both desktop UIs clear the create-form password as soon as a create request is accepted for execution or queuing, while retaining the input when a full queue rejects the request for retry. Request snapshots release paths and passwords after clearing, completion, or exit. Settings and logs do not retain the queue, passwords, create sources, or output destinations; only a successfully listed archive path is persisted under the recent-history policy above.
+
+After successful creation or extraction, the status bar provides a bilingual `Show output` action that selects the generated archive or extraction directory in File Explorer. Starting new work clears the old output action; failures, cancellation, and Worker protocol result-type mismatches never leave a clickable success path, so status text and follow-up action cannot refer to different jobs.
 
 While integrity testing, extraction, or creation is running, large archives use
 a lightweight summary instead of rebuilding the entry table on every progress
@@ -58,6 +76,10 @@ Unit tests cover FIFO ordering, capacity, stale completions, clearing, and paylo
 The Windows 11 Explorer extension is a pure-Rust COM DLL with two modern commands registered for selected files, selected folders, and folder backgrounds. “Create archive with ZiFile” sends up to 256 selected sources to the create page; on a folder background it sends the current folder as the source. “Extract to matching folder with ZiFile” is shown only for one supported archive and launches the visible desktop with `--extract-here`. The DLL keeps Explorer's menu-building path bounded: when Explorer does not permit slow state evaluation it returns `E_PENDING`, and it resolves filesystem paths only for the allowed state pass or after invocation. After signature-first listing succeeds, the desktop selects every regular file and extracts to a sibling folder matching the archive stem with rename-on-conflict behavior. Progress, cancellation, limits, and password retry remain in the desktop and isolated Worker; the DLL never parses archives or handles passwords. Real Explorer activation still requires a trusted installed package.
 
 When opening fails, the desktop distinguishes likely password-related archive errors from corruption, unknown formats, and ordinary I/O failures. Only the former presents password input and an Unlock retry, avoiding a misleading encryption diagnosis for every failure. Asynchronous Worker results also verify the active operation id before mutation, so an old task cannot overwrite the current UI state.
+
+Password fields for unlocking, testing/extracting, and creating encrypted archives provide a **Show password** checkbox and remain masked by default. Visibility is session-only and is never saved. It resets to masked when the archive or password is cleared, a create request is accepted, or the user selects a format without encryption. The accessible candidate uses native checkboxes, explicit labels, and `aria-controls` to scope each toggle to its password field.
+
+When an encrypted file list is waiting for a password, pressing `Enter` in the input performs the same reload as **Unlock archive**. The accessible candidate ignores IME composition and modified Enter keys, and neither UI submits another request while work is already running.
 
 When a replacement archive is opened while another operation is active, the
 default Iced UI keeps the currently visible archive until the replacement list
@@ -96,7 +118,7 @@ Opening an archive, choosing an extraction directory, adding files/folders, and 
 
 Creation sources use the same shared path-identity deduplication function. On Windows, casing and slash-direction differences do not add the same file twice, and the Shell rejects disappeared paths, symbolic links, junctions, and reparse points before launch, so virtual items or stale sources cannot appear usable before the Worker reports an error.
 
-The create-format menu order now comes from the core `ArchiveFormat::CREATABLE` registry. The Iced baseline and Dioxus candidate no longer maintain separate format arrays, so a new creatable provider receives the same stable ordering in both UIs. The contract smoke locks the current fifteen creation formats and prevents the menus from silently diverging from the public capability matrix.
+The create-format menu order now comes from the core `ArchiveFormat::CREATABLE` registry. The Iced baseline and Dioxus candidate no longer maintain separate format arrays, so a new creatable provider receives the same stable ordering in both UIs. The contract smoke locks the current sixteen creation formats and prevents the menus from silently diverging from the public capability matrix.
 
 When saving a new archive, both UIs add the selected format's canonical extension if the name entered in the native save dialog has no extension (for example, `backup` becomes `backup.zip` or `backup.tar.gz`). An explicit user-entered extension is preserved rather than silently replaced.
 

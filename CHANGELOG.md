@@ -4,6 +4,170 @@ All notable changes to ZiFile are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Add TAR + LZ4 composition creation, listing, integrity testing, extraction,
+  update support, CLI selection, and shared desktop format-menu coverage.
+- Add batch rename controls to both desktop archive views. Select at least two
+  regular files, then combine find/replace with optional prefix and suffix
+  rules; unchanged entries are skipped and the resulting mappings use the same
+  atomic update and collision checks as single-entry rename.
+- Add atomic archive-relative file and directory renaming for ZIP, 7z, and
+  TAR-family containers through the core API, Worker, CLI, and both desktop
+  UIs. Directory mappings move their complete subtree, batch swaps are staged
+  safely, and invalid or colliding mappings leave the original archive intact.
+- Add the `rename` CLI command with repeated `FROM=TO` mappings and advance the
+  Worker IPC contract to version 3 for the new request type.
+
+## [0.1.13] - 2026-09-01
+
+### Added
+
+- Add TAR + LZ4 composition creation, listing, integrity testing, extraction,
+  update support, CLI selection, and shared desktop format-menu coverage.
+
+## [0.1.12] - 2026-09-01
+
+### Added
+
+- Add desktop batch rename rules for selected archive files. Find/replace,
+  prefix, and suffix inputs produce explicit mappings, skip unchanged entries,
+  and reuse the existing atomic update and collision checks.
+
+## [0.1.11] - 2026-09-01
+
+### Added
+
+- Add atomic archive-relative file and directory renaming for ZIP, 7z, and
+  TAR-family containers through the core API, Worker, CLI, and both desktop
+  UIs.
+
+## [0.1.10] - 2026-08-31
+
+### Added
+
+- Add safe removal of selected archive entries for ZIP, 7z, and TAR-family
+  containers through the core API, Worker, CLI, and both desktop UIs. Removal
+  accepts archive-relative paths, removes nested descendants as one operation,
+  and atomically replaces the original only after a successful rebuild.
+
+## [0.1.9] - 2026-08-31
+
+### Added
+
+- Add safe in-place archive updates for ZIP, 7z, and TAR-family containers in
+  the core API, Worker, CLI, and both desktop UIs. Updates merge selected files
+  or folders in a sibling staging directory and replace the original only
+  after a complete rebuild succeeds; single-file streams, RAR, and CAB remain
+  read-only.
+
+## [0.1.8] - 2026-08-31
+
+### Added
+
+- Expose an explicit, busy-safe retry action after a non-password archive-open
+  failure while retaining the dedicated unlock flow for encrypted file lists.
+
+- Add official project, documentation, and localized privacy links to both About
+  pages, with fixed HTTPS destinations and visible launch failure feedback.
+
+- Require an exact password confirmation before creating encrypted ZIP or 7z
+  archives in both desktop UIs. Mismatches are shown inline, block the save
+  dialog, and both transient values are released after an accepted request.
+
+### Changed
+
+- Explicitly disable the Iced close-archive action while an archive operation
+  is busy, keeping the unavailable state consistent with the accessible UI.
+
+- Show expanded size, packed size, and a localized smaller/larger percentage in
+  both archive headers, including busy-state summaries and empty archives.
+
+- Keep visible bilingual labels above the default archive password and search
+  inputs, so their purpose remains clear after placeholder text disappears.
+
+- Give the extraction conflict-policy selector a visible bilingual label in both
+  desktop UIs instead of relying on option names or an accessibility-only name.
+
+- Render regular archive names as text while keeping directory names as explicit
+  navigation buttons, so the file table no longer presents non-actions as
+  disabled controls.
+
+## [0.1.7] - 2026-08-31
+
+### Added
+
+- Add a bilingual recent-archives section to both desktop home pages. The eight
+  most recently opened archives are persisted only after successful listing,
+  deduplicated with Windows path identity, reusable with one click, removable
+  individually or clearable without affecting files or active archive state.
+- Align the README, bilingual privacy policy, and desktop documentation with
+  recent-path persistence, including local retention, user controls, and the
+  explicit statement that hexadecimal field encoding is not encryption.
+- Add explicit Select all, Select none, and Invert selection actions to both
+  archive views, with `Ctrl+I`, bilingual status feedback, semantic shortcut
+  metadata, and a 100,000-entry inversion benchmark.
+- Strengthen the standalone x64 Release EXE smoke from read-only listing to a
+  create-list-extract ZIP round trip in a directory without a separate Worker.
+
+## [0.1.6] - 2026-08-31
+
+### Added
+
+- Add `Ctrl+R` to reload the current archive in both desktop UIs, expose the
+  shortcut on semantic reload controls, and include it in bilingual shortcut
+  help and user documentation.
+- Add `Ctrl+F` to move directly to the loaded archive's search field in both
+  desktop UIs while preserving the current query, with semantic metadata and
+  bilingual help.
+- Add an explicit Close archive action and `Ctrl+W` to both desktop UIs. Closing
+  returns home and releases the archive password, metadata, selection, search,
+  and folder-navigation session state; active work prevents closure.
+- Add one-click extraction to a matching sibling folder in both desktop UIs,
+  reusing the shell command's compound-extension naming, conflict policy,
+  operation queue, isolated Worker, and completed-output discovery.
+
+## [0.1.5] - 2026-08-31
+
+### Added
+
+- Show non-empty create-source validation failures inline in the Iced create
+  page while keeping the Create action disabled until the sources are valid.
+- Add a bilingual keyboard-shortcut reference to both desktop About pages for
+  open, create, archive selection, help, and operation cancellation. Regression
+  tests keep the visible key combinations aligned with the implemented maps.
+- Add a bilingual status-bar action in both desktop UIs that reveals the most
+  recent successfully created archive or extraction destination in File
+  Explorer. New work, failures, and protocol mismatches clear the action.
+
+### Changed
+
+- Generate and verify WinGet candidates from the same public all-in-one MSIX
+  bundle used by GitHub Releases, without unpublished per-architecture MSIX
+  inputs.
+- Clear the create-form password in both desktop UIs immediately after a create
+  request is accepted for execution or queuing, while retaining it when a full
+  queue rejects the request so the user can retry.
+- Retry the pinned WinGet validation-client repair up to three times with
+  bounded backoff for transient CDN connection failures, and record the retry
+  limit in validation evidence.
+
+## [0.1.4] - 2026-08-30
+
+### Added
+
+- Show non-empty create-source validation failures inline in the Iced create
+  page while keeping the Create action disabled until the sources are valid.
+### Changed
+
+- Retry the pinned WinGet validation-client repair up to three times with
+  bounded backoff for transient CDN connection failures, and record the retry
+  limit in validation evidence.
+- Keep public release assets limited to the all-in-one MSIX bundle, standalone
+  x64/ARM64 executables, and `SHA256SUMS.txt`.
+
 ## [0.1.3] - 2026-08-30
 
 ### Added
@@ -415,7 +579,3 @@ All notable changes to ZiFile are documented here. The format follows
   single-file stream formats before opening a save dialog or starting the Worker.
 - The Cargo workspace version is the single source for packages, documentation, tags,
   Release runs, and deterministic four-part MSIX version mapping.
-
-## [Unreleased]
-
-Future changes will be recorded here.

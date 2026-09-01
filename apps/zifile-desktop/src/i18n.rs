@@ -75,7 +75,20 @@ impl Locale {
             Text::License => ("License", "许可证"),
             Text::SupportedFormatFamilies => ("Supported format families", "支持的格式系列"),
             Text::ProjectWebsite => ("Project website", "项目网站"),
+            Text::KeyboardShortcuts => ("Keyboard shortcuts", "键盘快捷键"),
+            Text::ShortcutOpen => ("Open an archive", "打开压缩文件"),
+            Text::ShortcutCreate => ("Create an archive", "创建压缩文件"),
+            Text::ShortcutReload => ("Reload the current archive", "重新加载当前压缩文件"),
+            Text::ShortcutSearch => ("Focus archive search", "聚焦压缩文件搜索"),
+            Text::ShortcutClose => ("Close the current archive", "关闭当前压缩文件"),
+            Text::ShortcutSelectAll => ("Select all archive entries", "选择全部压缩项目"),
+            Text::ShortcutInvertSelection => ("Invert archive selection", "反选压缩项目"),
+            Text::ShortcutAbout => ("Open About and shortcut help", "打开关于与快捷键帮助"),
+            Text::ShortcutCancel => ("Cancel the current operation", "取消当前操作"),
             Text::NoArchive => ("No archive open", "尚未打开压缩文件"),
+            Text::SelectAll => ("Select all", "全选"),
+            Text::SelectNone => ("Select none", "全不选"),
+            Text::InvertSelection => ("Invert selection", "反选"),
             Text::NoArchiveDescription => (
                 "Open an archive to inspect its contents and extract files.",
                 "打开压缩文件以查看内容并解压所需文件。",
@@ -95,15 +108,53 @@ impl Locale {
             ),
             Text::UnlockArchive => ("Unlock archive", "解锁压缩文件"),
             Text::OpenAnother => ("Open another", "打开其他文件"),
+            Text::CloseArchive => ("Close archive", "关闭压缩文件"),
+            Text::ArchiveClosed => ("Archive closed", "已关闭压缩文件"),
             Text::RevealInExplorer => ("Show in File Explorer", "在资源管理器中显示"),
             Text::RevealedInExplorer => ("Opened the containing folder", "已打开所在文件夹"),
             Text::RevealInExplorerFailed => ("Could not open File Explorer", "无法打开资源管理器"),
+            Text::RevealOutput => ("Show output", "查看输出"),
+            Text::OutputRevealed => (
+                "Opened the output in File Explorer",
+                "已在资源管理器中打开输出",
+            ),
             Text::TestArchive => ("Test archive", "校验压缩文件"),
+            Text::AddToArchive => ("Add to archive", "添加到压缩文件"),
+            Text::AddFolderToArchive => ("Add folder to archive", "将文件夹添加到压缩文件"),
+            Text::RemoveSelected => ("Remove selected", "删除所选项目"),
+            Text::ConfirmRemoveSelected => ("Remove now", "立即删除"),
+            Text::RemoveSelectedPrompt => (
+                "Remove the selected archive entries?",
+                "确定删除所选压缩项目吗？",
+            ),
+            Text::RenameSelected => ("Rename selected", "重命名所选项目"),
+            Text::ConfirmRenameSelected => ("Rename now", "立即重命名"),
+            Text::CancelRename => ("Cancel rename", "取消重命名"),
+            Text::RenameTarget => ("New archive path", "新的归档路径"),
+            Text::RenamePrompt => (
+                "Enter a safe archive-relative path for the selected entry.",
+                "请输入所选项目的新归档相对路径。",
+            ),
+            Text::BatchRenameSelected => ("Batch rename", "批量重命名"),
+            Text::BatchRenamePrompt => (
+                "Transform the selected filenames. The archive will be rebuilt atomically.",
+                "转换所选文件名；压缩文件将以原子方式重建。",
+            ),
+            Text::BatchRenameFind => ("Find in filename", "文件名中查找"),
+            Text::BatchRenameReplace => ("Replace with", "替换为"),
+            Text::BatchRenamePrefix => ("Prefix", "前缀"),
+            Text::BatchRenameSuffix => ("Suffix", "后缀"),
+            Text::ConfirmBatchRenameSelected => ("Apply batch rename", "应用批量重命名"),
+            Text::CancelBatchRenameSelected => ("Cancel batch rename", "取消批量重命名"),
+            Text::UpdateArchiveDialog => ("Add to archive", "添加到压缩文件"),
             Text::Selected => ("selected", "项已选择"),
             Text::PasswordEncrypted => ("Password (if encrypted)", "密码（如已加密）"),
+            Text::ShowPassword => ("Show password", "显示密码"),
             Text::Reload => ("Reload", "重新加载"),
             Text::ExtractSelected => ("Extract selected", "解压所选项目"),
             Text::ExtractAll => ("Extract all", "解压全部"),
+            Text::ExtractToNamedFolder => ("Extract to named folder", "解压到同名文件夹"),
+            Text::ConflictPolicy => ("Conflict policy", "文件冲突策略"),
             Text::Name => ("Name", "名称"),
             Text::Original => ("Original", "原始大小"),
             Text::Packed => ("Packed", "压缩大小"),
@@ -160,6 +211,11 @@ impl Locale {
                 "密码 · 此格式不支持加密",
             ),
             Text::NoEncryption => ("Leave empty for no encryption", "留空表示不加密"),
+            Text::ConfirmPassword => ("Confirm password", "确认密码"),
+            Text::PasswordMismatch => (
+                "The password confirmation does not match.",
+                "两次输入的密码不一致。",
+            ),
             Text::CreateAction => ("Create archive", "创建压缩文件"),
             Text::ChooseExtractionFolder => ("Choose extraction folder", "选择解压目录"),
             Text::AddFilesDialog => ("Add files to archive", "添加要压缩的文件"),
@@ -331,6 +387,58 @@ pub fn create_source_summary(locale: Locale, count: usize) -> String {
     }
 }
 
+pub fn archive_size_summary(locale: Locale, expanded: u64, packed: u64) -> String {
+    let expanded_text = format_bytes(expanded);
+    let packed_text = format_bytes(packed);
+    if expanded == 0 {
+        return match locale {
+            Locale::En => format!("{expanded_text} expanded · {packed_text} packed"),
+            Locale::ZhCn => format!("展开后 {expanded_text} · 压缩后 {packed_text}"),
+        };
+    }
+    let (percent, comparison) = if packed <= expanded {
+        (
+            (expanded - packed) as f64 / expanded as f64 * 100.0,
+            match locale {
+                Locale::En => "smaller",
+                Locale::ZhCn => "缩小",
+            },
+        )
+    } else {
+        (
+            (packed - expanded) as f64 / expanded as f64 * 100.0,
+            match locale {
+                Locale::En => "larger",
+                Locale::ZhCn => "增大",
+            },
+        )
+    };
+    match locale {
+        Locale::En => {
+            format!("{expanded_text} expanded · {packed_text} packed · {percent:.1}% {comparison}")
+        }
+        Locale::ZhCn => {
+            format!("展开后 {expanded_text} · 压缩后 {packed_text} · {comparison} {percent:.1}%")
+        }
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        let unit_label = UNITS.get(unit).copied().unwrap_or("TB");
+        format!("{value:.1} {unit_label}")
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Text {
     ArchiveStudio,
@@ -360,7 +468,20 @@ pub enum Text {
     License,
     SupportedFormatFamilies,
     ProjectWebsite,
+    KeyboardShortcuts,
+    ShortcutOpen,
+    ShortcutCreate,
+    ShortcutReload,
+    ShortcutSearch,
+    ShortcutClose,
+    ShortcutSelectAll,
+    ShortcutInvertSelection,
+    ShortcutAbout,
+    ShortcutCancel,
     NoArchive,
+    SelectAll,
+    SelectNone,
+    InvertSelection,
     NoArchiveDescription,
     OpeningArchiveDescription,
     BusyArchiveDescription,
@@ -368,15 +489,40 @@ pub enum Text {
     EncryptedArchiveDescription,
     UnlockArchive,
     OpenAnother,
+    CloseArchive,
+    ArchiveClosed,
     RevealInExplorer,
     RevealedInExplorer,
     RevealInExplorerFailed,
+    RevealOutput,
+    OutputRevealed,
     TestArchive,
+    AddToArchive,
+    AddFolderToArchive,
+    RemoveSelected,
+    ConfirmRemoveSelected,
+    RemoveSelectedPrompt,
+    RenameSelected,
+    ConfirmRenameSelected,
+    CancelRename,
+    RenameTarget,
+    RenamePrompt,
+    BatchRenameSelected,
+    BatchRenamePrompt,
+    BatchRenameFind,
+    BatchRenameReplace,
+    BatchRenamePrefix,
+    BatchRenameSuffix,
+    ConfirmBatchRenameSelected,
+    CancelBatchRenameSelected,
+    UpdateArchiveDialog,
     Selected,
     PasswordEncrypted,
+    ShowPassword,
     Reload,
     ExtractSelected,
     ExtractAll,
+    ExtractToNamedFolder,
     Name,
     Original,
     Packed,
@@ -409,6 +555,8 @@ pub enum Text {
     PasswordOptional,
     PasswordUnavailable,
     NoEncryption,
+    ConfirmPassword,
+    PasswordMismatch,
     CreateAction,
     ChooseExtractionFolder,
     AddFilesDialog,
@@ -417,6 +565,7 @@ pub enum Text {
     OpenDialog,
     SupportedArchives,
     AllFiles,
+    ConflictPolicy,
     ConflictOverwrite,
     ConflictSkip,
     ConflictRename,
@@ -451,6 +600,20 @@ mod tests {
         assert_eq!(Locale::ZhCn.text(Text::Home), "首页");
         assert_eq!(Locale::En.text(Text::ClearSearch), "Clear search");
         assert_eq!(Locale::ZhCn.text(Text::ClearSearch), "清除搜索");
+        assert_eq!(Locale::En.text(Text::ConflictPolicy), "Conflict policy");
+        assert_eq!(Locale::ZhCn.text(Text::ConflictPolicy), "文件冲突策略");
+        assert_eq!(
+            archive_size_summary(Locale::En, 1_000, 500),
+            "1000 B expanded · 500 B packed · 50.0% smaller"
+        );
+        assert_eq!(
+            archive_size_summary(Locale::ZhCn, 1_000, 1_250),
+            "展开后 1000 B · 压缩后 1.2 KB · 增大 25.0%"
+        );
+        assert_eq!(
+            archive_size_summary(Locale::En, 0, 0),
+            "0 B expanded · 0 B packed"
+        );
         assert_eq!(
             Locale::En.text(Text::OpeningArchiveDescription),
             "Opening this archive…"
@@ -495,6 +658,11 @@ mod tests {
         assert_eq!(Locale::En.text(Text::About), "About");
         assert_eq!(Locale::ZhCn.text(Text::AboutHeading), "关于 ZiFile");
         assert_eq!(Locale::ZhCn.text(Text::License), "许可证");
+        assert_eq!(
+            Locale::En.text(Text::KeyboardShortcuts),
+            "Keyboard shortcuts"
+        );
+        assert_eq!(Locale::ZhCn.text(Text::ShortcutCancel), "取消当前操作");
         assert_eq!(Locale::En.text(Text::Checksum), "SHA-256");
         assert_eq!(Locale::ZhCn.text(Text::Checksum), "SHA-256 校验和");
         assert_eq!(Locale::En.text(Text::CopyChecksum), "Copy checksum");
@@ -506,6 +674,11 @@ mod tests {
         assert_eq!(
             Locale::ZhCn.text(Text::RevealedInExplorer),
             "已打开所在文件夹"
+        );
+        assert_eq!(Locale::En.text(Text::RevealOutput), "Show output");
+        assert_eq!(
+            Locale::ZhCn.text(Text::OutputRevealed),
+            "已在资源管理器中打开输出"
         );
         assert!(Locale::ZhCn.text(Text::PrivacyDescription).contains("本机"));
         assert_eq!(Locale::ZhCn.toggle(), Locale::En);

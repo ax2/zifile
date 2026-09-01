@@ -34,6 +34,11 @@ Goal: safely open, list, create, and extract common archives.
 - [x] TAR and gzip/zstd/xz/LZMA/bzip2 stream composition; standalone LZMA-alone creation is also available, while lz4/brotli remain single-stream formats.
 - [x] Signature-based format detection.
 - [x] Archive browser, selected extraction, destination and conflict policies.
+- [x] Add safe in-place updates and selected-entry removal for ZIP, 7z, and
+  TAR-family multi-entry archives; single streams, RAR, and CAB remain
+  explicitly read-only.
+- [x] Add atomic archive-relative file and directory renaming, including safe
+  batch mappings and directory subtree moves, for the same updateable formats.
 - [x] Background execution with cooperative cancellation.
 - [x] Determinate byte/entry progress for extraction and creation.
 - [ ] Queued multi-operation scheduling (bounded FIFO scheduler and both UI
@@ -113,7 +118,7 @@ Goal: stable public release.
 ## Post-1.0
 
 - Broader RAR multivolume and recovery-record compatibility after the beta read-only provider stabilizes.
-- Duplicate analysis, batch rename, and file preview; decoded-content SHA-256
+- Duplicate analysis and file preview; decoded-content SHA-256
   checksums are now part of integrity-test results.
 - Optional stronger worker isolation with AppContainer.
 - ARM64 performance tuning and expanded enterprise deployment guidance.
