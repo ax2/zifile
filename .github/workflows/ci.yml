@@ -71,7 +71,7 @@ jobs:
       - name: Official WinGet manifest validation
         shell: pwsh
         run: ./tests/smoke/winget-manifest.ps1
-      - uses: dtolnay/rust-toolchain@1.93.0
+      - uses: dtolnay/rust-toolchain@1.100.0
         with:
           components: clippy,rustfmt
       - uses: Swatinem/rust-cache@v2
@@ -152,7 +152,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.93.0
+      - uses: dtolnay/rust-toolchain@1.100.0
       - uses: Swatinem/rust-cache@v2
       - name: Build CLI
         run: cargo build -p zifile-cli --locked
@@ -176,7 +176,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.93.0
+      - uses: dtolnay/rust-toolchain@1.100.0
       - uses: Swatinem/rust-cache@v2
       - name: Run format-detection benchmark
         shell: pwsh
