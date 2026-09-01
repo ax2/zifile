@@ -9,6 +9,12 @@ The signing boundary is defined by [ADR-0006](/zifile/en/architecture/adr-0006-r
 
 The public [Code signing policy](/zifile/en/development/code-signing-policy/) records the SignPath Foundation application status, release roles, provenance boundary, privacy statement, and the separate Partner Center MSIX identity. SignPath Foundation is not connected to the production workflow until the application is accepted and the MSIX identity decision is reviewed.
 
+## Post-build cleanup
+
+After a local build or documentation verification, run `./scripts/Clean-BuildArtifacts.ps1` to remove only the fixed generated directories: Cargo `target`, documentation dependencies/output, the MSIX test helper's `bin/obj`, and `dist`. The script requires a repository marker and rejects paths outside the repository; it does not remove source files, `release/` records, Stage archives, or the retained Windows runnable directory. Use `-KeepDist` when local installer output must be kept temporarily.
+
+CI runs a safety-scope regression for the cleanup script, and Windows Release invokes it after architecture artifacts have been uploaded.
+
 GitHub Release user assets contain one all-in-one MSIX bundle, one standalone portable EXE for each of x64 and ARM64, and one SHA-256 file. Internal audits, SBOMs, provenance, and WinGet YAML remain workflow artifacts rather than Release assets. GitHub Release is the first public channel. WinGet uses planned ID `ZiCode.ZiFile`; Microsoft Store uses MSIX.
 
 The WinGet candidate accepts only the public all-in-one `.msixbundle` URL, SHA-256, and local verification path; it no longer requires or references unpublished per-architecture MSIX files. Following Microsoft's MSIXBundle example, the manifest retains x64 and ARM64 installer nodes that must point to the same bundle URL and hash. `Test-Manifests.ps1` locks that relationship, all 31 file extensions, the local bundle hash, and both nested MSIX package identities before official `winget validate` runs. Development identities such as `ZiCode.ZiFile.Dev` are rejected before submission. The ordinary unsigned GitHub evidence path may opt into `-AllowDevelopmentIdentity`; that explicit exception is not valid for a community submission.
