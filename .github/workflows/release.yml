@@ -529,7 +529,7 @@ jobs:
         with:
           generate_release_notes: true
           body: |
-            ${{ inputs.signing_provider == 'digicert-stm' && 'This GitHub release uses the protected cloud-signing path. Verify the included SHA256SUMS file before installing; it is not a Microsoft Store-certified package.' || 'This is a public unsigned Windows build for GitHub distribution. It is not a Microsoft Store-certified package. Verify the included SHA256SUMS file before installing.' }}
+            ${{ inputs.signing_provider == 'digicert-stm' && 'This GitHub release uses the protected cloud-signing path. Verify the included SHA256SUMS file before installing; it is not a Microsoft Store-certified package.' || 'Free code signing provided by SignPath.io, certificate by SignPath Foundation. The application is being prepared and is not yet approved; this is a public unsigned Windows build for GitHub distribution. It is not a Microsoft Store-certified package. Verify the included SHA256SUMS file before installing.' }}
           prerelease: false
           files: public-release/*
 
@@ -582,6 +582,6 @@ jobs:
         with:
           generate_release_notes: true
           body: |
-            Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+            Free code signing provided by SignPath.io, certificate by SignPath Foundation. The application is being prepared and is not yet approved; this is a public unsigned Windows build for GitHub distribution. It is not a Microsoft Store-certified package. Verify the included SHA256SUMS file before installing.
           prerelease: true
           files: public-release/*
