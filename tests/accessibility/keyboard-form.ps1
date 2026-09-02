@@ -2,7 +2,8 @@ param(
     [string]$ExecutablePath = 'target\x86_64-pc-windows-msvc\release\zifile-desktop-accessible.exe',
     [ValidateRange(5, 60)]
     [int]$TimeoutSeconds = 20,
-    [switch]$ToggleLanguageBeforeTest
+    [switch]$ToggleLanguageBeforeTest,
+    [switch]$SkipArchiveWorkflow
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,10 +23,6 @@ namespace ZiFileKeyboard
     public static class NativeMethods
     {
         [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool SetForegroundWindow(IntPtr windowHandle);
-
-        [DllImport("user32.dll")]
         public static extern IntPtr GetForegroundWindow();
     }
 }
@@ -41,6 +38,60 @@ function Resolve-RepoPath {
     return [System.IO.Path]::GetFullPath((Join-Path $repoRoot $Path))
 }
 
+function New-ArchiveFixture {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $stream = [System.IO.File]::Open(
+        $Path,
+        [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::ReadWrite,
+        [System.IO.FileShare]::None
+    )
+    try {
+        $archive = [System.IO.Compression.ZipArchive]::new(
+            $stream,
+            [System.IO.Compression.ZipArchiveMode]::Create,
+            $false
+        )
+        try {
+            foreach ($item in @(
+                @{ Name = 'alpha.txt'; Content = 'alpha' },
+                @{ Name = 'nested/beta.txt'; Content = 'beta' }
+            )) {
+                $entry = $archive.CreateEntry(
+                    $item.Name,
+                    [System.IO.Compression.CompressionLevel]::NoCompression
+                )
+                $entry.LastWriteTime = [DateTimeOffset]::new(
+                    2000,
+                    1,
+                    1,
+                    0,
+                    0,
+                    0,
+                    [TimeSpan]::Zero
+                )
+                $writer = [System.IO.StreamWriter]::new(
+                    $entry.Open(),
+                    [System.Text.UTF8Encoding]::new($false)
+                )
+                try {
+                    $writer.Write($item.Content)
+                }
+                finally {
+                    $writer.Dispose()
+                }
+            }
+        }
+        finally {
+            $archive.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 function Get-AppWindows {
     param([Parameter(Mandatory)][int]$ProcessId)
 
@@ -52,6 +103,20 @@ function Get-AppWindows {
         [System.Windows.Automation.TreeScope]::Children,
         $condition
     )
+}
+
+function Get-AppWindow {
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [Parameter(Mandatory)][IntPtr]$NativeWindowHandle
+    )
+
+    foreach ($window in @(Get-AppWindows -ProcessId $ProcessId)) {
+        if ([IntPtr]$window.Current.NativeWindowHandle -eq $NativeWindowHandle) {
+            return $window
+        }
+    }
+    throw 'ZiFile native window was not found after the UI tree was rebuilt.'
 }
 
 function Find-NamedElement {
@@ -98,6 +163,17 @@ function Find-Control {
     )
 }
 
+function Assert-AppProcessRunning {
+    if (-not $script:ZiFileProcess) {
+        return
+    }
+
+    $script:ZiFileProcess.Refresh()
+    if ($script:ZiFileProcess.HasExited) {
+        throw "ZiFile exited unexpectedly during '$script:KeyboardPhase' with exit code $($script:ZiFileProcess.ExitCode)."
+    }
+}
+
 function Wait-AppElement {
     param(
         [Parameter(Mandatory)][int]$ProcessId,
@@ -106,6 +182,7 @@ function Wait-AppElement {
     )
 
     do {
+        Assert-AppProcessRunning
         $windows = @(Get-AppWindows -ProcessId $ProcessId)
         for ($index = 0; $index -lt $windows.Count; $index++) {
             $window = $windows[$index]
@@ -120,6 +197,45 @@ function Wait-AppElement {
         Start-Sleep -Milliseconds 20
     } while ([DateTime]::UtcNow -lt $Deadline)
     throw "Timed out waiting for UI Automation element: $($Names -join ' | ')"
+}
+
+function Wait-NamedControl {
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Root,
+        [Parameter(Mandatory)][string[]]$Names,
+        [Parameter(Mandatory)][System.Windows.Automation.ControlType]$ControlType,
+        [Parameter(Mandatory)][DateTime]$Deadline
+    )
+
+    $condition = [System.Windows.Automation.AndCondition]::new(
+        [System.Windows.Automation.PropertyCondition]::new(
+            [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+            $ControlType
+        ),
+        [System.Windows.Automation.OrCondition]::new(
+            @($Names | ForEach-Object {
+                    [System.Windows.Automation.PropertyCondition]::new(
+                        [System.Windows.Automation.AutomationElement]::NameProperty,
+                        $_
+                    )
+                })
+        )
+    )
+    do {
+        Assert-AppProcessRunning
+        try {
+            $element = $Root.FindFirst(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                $condition
+            )
+            if ($element) {
+                return $element
+            }
+        }
+        catch [System.Windows.Automation.ElementNotAvailableException] { }
+        Start-Sleep -Milliseconds 20
+    } while ([DateTime]::UtcNow -lt $Deadline)
+    throw "Timed out waiting for named control: $($Names -join ' | ')"
 }
 
 function Restore-LocaleSetting {
@@ -186,7 +302,9 @@ function Wait-DocumentText {
         [Parameter(Mandatory)][DateTime]$Deadline
     )
 
+    $text = $null
     do {
+        Assert-AppProcessRunning
         try {
             $text = Get-DocumentText -Root $Root
             foreach ($expected in $AnyOf) {
@@ -199,7 +317,37 @@ function Wait-DocumentText {
         catch [System.InvalidOperationException] { }
         Start-Sleep -Milliseconds 20
     } while ([DateTime]::UtcNow -lt $Deadline)
-    throw "Timed out waiting for document text: $($AnyOf -join ' | ')"
+    $diagnostic = if ($text) {
+        $normalized = ($text -replace '[\r\n]+', ' ').Trim()
+        if ($normalized.Length -gt 600) { $normalized.Substring(0, 600) + '…' } else { $normalized }
+    }
+    else {
+        '<no document text>'
+    }
+    throw "Timed out waiting for document text: $($AnyOf -join ' | '); observed: $diagnostic"
+}
+
+function Wait-DocumentTextAbsent {
+    param(
+        [Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Root,
+        [Parameter(Mandatory)][string]$Forbidden,
+        [Parameter(Mandatory)][DateTime]$Deadline
+    )
+
+    $text = $null
+    do {
+        Assert-AppProcessRunning
+        try {
+            $text = Get-DocumentText -Root $Root
+            if ($text -and -not $text.Contains($Forbidden)) {
+                return $text
+            }
+        }
+        catch [System.Windows.Automation.ElementNotAvailableException] { }
+        catch [System.InvalidOperationException] { }
+        Start-Sleep -Milliseconds 20
+    } while ([DateTime]::UtcNow -lt $Deadline)
+    throw "Timed out waiting for document text to disappear: $Forbidden"
 }
 
 function Send-AppKey {
@@ -208,19 +356,58 @@ function Send-AppKey {
         [Parameter(Mandatory)][int]$ProcessId
     )
 
-    $null = [ZiFileKeyboard.NativeMethods]::SetForegroundWindow($script:ZiFileWindowHandle)
-    if ([ZiFileKeyboard.NativeMethods]::GetForegroundWindow() -ne $script:ZiFileWindowHandle) {
-        try {
-            $script:ZiFileWindow.SetFocus()
-        }
-        catch [System.Windows.Automation.ElementNotAvailableException] {
-            throw "The ZiFile window became unavailable before sending '$Keys'."
-        }
-    }
+    Assert-AppProcessRunning
     if ([ZiFileKeyboard.NativeMethods]::GetForegroundWindow() -ne $script:ZiFileWindowHandle) {
         throw "Refusing to send '$Keys' because ZiFile is not foreground during '$script:KeyboardPhase'."
     }
     [System.Windows.Forms.SendKeys]::SendWait($Keys)
+}
+
+function Send-FocusNavigationUntilChanges {
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [Parameter(Mandatory)][string]$Keys,
+        [Parameter(Mandatory)][string[]]$PreviousNames,
+        [ValidateRange(1, 3)][int]$Attempts = 3
+    )
+
+    for ($attempt = 0; $attempt -lt $Attempts; $attempt++) {
+        Send-AppKey -Keys $Keys -ProcessId $ProcessId
+        Start-Sleep -Milliseconds 40
+        $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+        if ($focused -and $PreviousNames -notcontains $focused.Current.Name) {
+            return $focused
+        }
+    }
+    throw "Keyboard navigation '$Keys' did not move focus away from: $($PreviousNames -join ' | ')."
+}
+
+function Send-TabUntilFocusChanges {
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [Parameter(Mandatory)][string[]]$PreviousNames,
+        [ValidateRange(1, 3)][int]$Attempts = 3
+    )
+
+    return Send-FocusNavigationUntilChanges `
+        -ProcessId $ProcessId `
+        -Keys '{TAB}' `
+        -PreviousNames $PreviousNames `
+        -Attempts $Attempts
+}
+
+function Send-ShiftTabUntilFocusChanges {
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [Parameter(Mandatory)][string[]]$PreviousNames,
+        [ValidateRange(1, 3)][int]$Attempts = 3
+    )
+
+    return Send-FocusNavigationUntilChanges `
+        -ProcessId $ProcessId `
+        -Keys '+{TAB}' `
+        -PreviousNames $PreviousNames `
+        -Attempts $Attempts
 }
 
 function Wait-Focus {
@@ -232,6 +419,7 @@ function Wait-Focus {
     )
 
     do {
+        Assert-AppProcessRunning
         $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
         if (
             $focused -and
@@ -266,9 +454,12 @@ function Move-FocusForward {
 
     $sequence = @()
     for ($index = 0; $index -lt $MaximumTabs; $index++) {
-        Send-AppKey -Keys '{TAB}' -ProcessId $ProcessId
-        Start-Sleep -Milliseconds 20
-        $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+        Assert-AppProcessRunning
+        $previous = [System.Windows.Automation.AutomationElement]::FocusedElement
+        $previousNames = if ($previous) { @($previous.Current.Name) } else { @('<none>') }
+        $focused = Send-TabUntilFocusChanges `
+            -ProcessId $ProcessId `
+            -PreviousNames $previousNames
         if (-not $focused) {
             $sequence += '<none>'
             continue
@@ -298,9 +489,12 @@ function Move-FocusBackward {
 
     $sequence = @()
     for ($index = 0; $index -lt $MaximumTabs; $index++) {
-        Send-AppKey -Keys '+{TAB}' -ProcessId $ProcessId
-        Start-Sleep -Milliseconds 20
-        $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+        Assert-AppProcessRunning
+        $previous = [System.Windows.Automation.AutomationElement]::FocusedElement
+        $previousNames = if ($previous) { @($previous.Current.Name) } else { @('<none>') }
+        $focused = Send-ShiftTabUntilFocusChanges `
+            -ProcessId $ProcessId `
+            -PreviousNames $previousNames
         if (-not $focused) {
             $sequence += '<none>'
             continue
@@ -328,6 +522,15 @@ function Get-Value {
     return $pattern.Current.Value
 }
 
+function Get-ToggleState {
+    param([Parameter(Mandatory)][System.Windows.Automation.AutomationElement]$Element)
+
+    $pattern = [System.Windows.Automation.TogglePattern]$Element.GetCurrentPattern(
+        [System.Windows.Automation.TogglePattern]::Pattern
+    )
+    return $pattern.Current.ToggleState
+}
+
 $executable = Resolve-RepoPath -Path $ExecutablePath
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "Accessible desktop executable not found: $executable"
@@ -337,9 +540,37 @@ if (-not (Test-Path -LiteralPath $worker -PathType Leaf)) {
     throw "Worker executable must be next to the desktop executable: $worker"
 }
 
+$archiveFixturePath = $null
+$archiveFixtureHash = $null
+$startArguments = @()
+if (-not $SkipArchiveWorkflow) {
+    $temporaryRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+    $archiveFixturePath = Join-Path $temporaryRoot (
+        'zifile-keyboard-{0}.zip' -f [Guid]::NewGuid().ToString('N')
+    )
+    $archiveFixturePath = [System.IO.Path]::GetFullPath($archiveFixturePath)
+    if (-not $archiveFixturePath.StartsWith(
+        $temporaryRoot,
+        [System.StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw 'Refusing to create the keyboard fixture outside the system temporary directory.'
+    }
+    New-ArchiveFixture -Path $archiveFixturePath
+    $archiveFixtureHash = (Get-FileHash -LiteralPath $archiveFixturePath -Algorithm SHA256).Hash
+    $startArguments = @("`"$archiveFixturePath`"")
+}
+
 $localeRestoreButtonName = $null
 $localeRestoreHomeName = $null
-$process = Start-Process -FilePath $executable -PassThru
+$startProcessParameters = @{
+    FilePath = $executable
+    PassThru = $true
+}
+if ($startArguments.Count -gt 0) {
+    $startProcessParameters.ArgumentList = $startArguments
+}
+$process = Start-Process @startProcessParameters
+$script:ZiFileProcess = $process
 try {
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     $homeResult = Wait-AppElement `
@@ -378,6 +609,28 @@ try {
     if ($script:ZiFileWindowHandle -eq [IntPtr]::Zero) {
         throw 'ZiFile did not expose a native window handle for keyboard activation.'
     }
+    if (-not $SkipArchiveWorkflow) {
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('alpha.txt', 'nested/beta.txt', 'nested\\beta.txt') `
+            -Deadline $deadline
+        $startupHome = Wait-AppElement `
+            -ProcessId $process.Id `
+            -Names @('Home', '首页') `
+            -Deadline $deadline
+        $startupHomeInvoke = [System.Windows.Automation.InvokePattern]$startupHome.Element.GetCurrentPattern(
+            [System.Windows.Automation.InvokePattern]::Pattern
+        )
+        $startupHomeInvoke.Invoke()
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('Files, packed beautifully.', '让文件整理更轻松。') `
+            -Deadline $deadline
+        $homeResult = Wait-AppElement `
+            -ProcessId $process.Id `
+            -Names @('Home', '首页') `
+            -Deadline $deadline
+    }
     $homeButton = $homeResult.Element
     $homeName = $homeButton.Current.Name
     $window.SetFocus()
@@ -404,13 +657,21 @@ try {
         }
     }
     if (-not $homeFocused) {
-        throw "Tab did not reach Home; observed: $($initialFocusSequence -join ' -> ')"
+        $homeButton.SetFocus()
+        $null = Wait-Focus `
+            -ProcessId $process.Id `
+            -Names @('Home', '首页') `
+            -Deadline $deadline
+        $initialFocusSequence += 'explicit Home focus reset after locale change'
+        $homeFocused = $true
     }
     $archiveFocus = Wait-Focus `
         -ProcessId $process.Id `
         -Names @('Home', '首页') `
         -Deadline $deadline
-    Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
+    $null = Send-TabUntilFocusChanges `
+        -ProcessId $process.Id `
+        -PreviousNames @('Home', '首页')
     $archiveFocus = Wait-Focus `
         -ProcessId $process.Id `
         -Names @('Archive', '压缩文件') `
@@ -422,6 +683,12 @@ try {
         -Names @('Create', '创建') `
         -Deadline $deadline
     $createName = $createFocus.Current.Name
+    Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
+    $aboutFocus = Wait-Focus `
+        -ProcessId $process.Id `
+        -Names @('About', '关于') `
+        -Deadline $deadline
+    $aboutName = $aboutFocus.Current.Name
     Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
     $themeFocus = Wait-Focus `
         -ProcessId $process.Id `
@@ -443,6 +710,11 @@ try {
     Send-AppKey -Keys '+{TAB}' -ProcessId $process.Id
     $null = Wait-Focus `
         -ProcessId $process.Id `
+        -Names @('About', '关于') `
+        -Deadline $deadline
+    Send-AppKey -Keys '+{TAB}' -ProcessId $process.Id
+    $null = Wait-Focus `
+        -ProcessId $process.Id `
         -Names @('Create', '创建') `
         -Deadline $deadline
     Send-AppKey -Keys '+{TAB}' -ProcessId $process.Id
@@ -451,21 +723,345 @@ try {
         -Names @('Archive', '压缩文件') `
         -Deadline $deadline
     Send-AppKey -Keys '{ENTER}' -ProcessId $process.Id
-    $null = Wait-DocumentText `
-        -Root $window `
-        -AnyOf @('No archive open', '尚未打开压缩文件') `
-        -Deadline $deadline
+    $archiveWorkflowCompleted = $false
+    $archivePasswordVisibility = $false
+    $archiveConflictValue = $null
+    $reloadActivation = $null
+    if (-not $SkipArchiveWorkflow) {
+        $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('Page 1 / 1', '页码 1 / 1') `
+            -Deadline $deadline
+        $archiveText = Get-DocumentText -Root $window
+        if (
+            -not $archiveText.Contains('alpha.txt') -or
+            -not $archiveText.Contains('nested')
+        ) {
+            $observedArchiveText = if ($archiveText) {
+                ($archiveText -replace '[\r\n]+', ' ').Trim()
+            }
+            else {
+                '<no document text>'
+            }
+            if ($observedArchiveText.Length -gt 800) {
+                $observedArchiveText = $observedArchiveText.Substring(0, 800) + '…'
+            }
+            throw "The generated two-entry archive did not appear in the archive table. Observed: $observedArchiveText"
+        }
+        $script:KeyboardPhase = 'archive toolbar and integrity test'
+        $null = Move-FocusForward `
+            -ProcessId $process.Id `
+            -Names @('Open another', '打开其他文件') `
+            -MaximumTabs 10
+        Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
+        $null = Wait-Focus `
+            -ProcessId $process.Id `
+            -Names @('Test archive', '校验压缩文件') `
+            -Deadline $deadline
+        Send-AppKey -Keys '{ENTER}' -ProcessId $process.Id
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('Archive is healthy', '压缩文件完好') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
 
-    Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
-    $null = Wait-Focus `
-        -ProcessId $process.Id `
-        -Names @('Create', '创建') `
-        -Deadline $deadline
-    Send-AppKey -Keys '{ENTER}' -ProcessId $process.Id
-    $null = Wait-DocumentText `
-        -Root $window `
-        -AnyOf @('Choose sources, format and compression.', '选择来源、格式与压缩等级。') `
-        -Deadline $deadline
+        $script:KeyboardPhase = 'archive password and reload'
+        if ($ToggleLanguageBeforeTest) {
+            $openAnother = (Wait-AppElement `
+                -ProcessId $process.Id `
+                -Names @('Open another', '打开其他文件') `
+                -Deadline $deadline).Element
+            $openAnother.SetFocus()
+            $null = Wait-Focus `
+                -ProcessId $process.Id `
+                -Names @('Open another', '打开其他文件') `
+                -Deadline $deadline
+            Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
+            $null = Wait-Focus `
+                -ProcessId $process.Id `
+                -Names @('Test archive', '校验压缩文件') `
+                -Deadline $deadline
+            Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
+            $archivePasswordElement = Wait-Focus `
+                -ProcessId $process.Id `
+                -Names @('Password (if encrypted)', '密码（如已加密）') `
+                -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+                -Deadline $deadline
+            $archivePasswordFocus = [pscustomobject]@{ Element = $archivePasswordElement }
+        }
+        else {
+            $archivePasswordFocus = Move-FocusForward `
+                -ProcessId $process.Id `
+                -Names @('Password (if encrypted)', '密码（如已加密）') `
+                -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+                -MaximumTabs 15
+        }
+        $archivePassword = $archivePasswordFocus.Element
+        if (-not $archivePassword.Current.IsPassword) {
+            throw 'The archive password field is not exposed as a protected password control.'
+        }
+        Send-AppKey -Keys 'archive-test' -ProcessId $process.Id
+        $showArchivePassword = Move-FocusForward `
+            -ProcessId $process.Id `
+            -Names @('Show password', '显示密码') `
+            -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+            -MaximumTabs 3
+        if ((Get-ToggleState -Element $showArchivePassword.Element) -ne
+            [System.Windows.Automation.ToggleState]::Off) {
+            throw 'Archive password visibility did not start unchecked.'
+        }
+        Send-AppKey -Keys ' ' -ProcessId $process.Id
+        Start-Sleep -Milliseconds 100
+        $window = Get-AppWindow -ProcessId $process.Id -NativeWindowHandle $script:ZiFileWindowHandle
+        $archivePassword = Wait-NamedControl `
+            -Root $window `
+            -Names @('Password (if encrypted)', '密码（如已加密）') `
+            -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        if ($archivePassword.Current.IsPassword) {
+            throw 'Archive password remained protected after Show password was checked.'
+        }
+        $showArchivePasswordElement = Wait-NamedControl `
+            -Root $window `
+            -Names @('Show password', '显示密码') `
+            -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        if ((Get-ToggleState -Element $showArchivePasswordElement) -ne
+            [System.Windows.Automation.ToggleState]::On) {
+            throw 'Archive Show password checkbox did not expose its checked state.'
+        }
+        $archivePassword.SetFocus()
+        $null = Wait-Focus `
+            -ProcessId $process.Id `
+            -Names @('Password (if encrypted)', '密码（如已加密）') `
+            -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        Send-AppKey -Keys '^a' -ProcessId $process.Id
+        Send-AppKey -Keys '{BACKSPACE}' -ProcessId $process.Id
+        Start-Sleep -Milliseconds 100
+        $window = Get-AppWindow -ProcessId $process.Id -NativeWindowHandle $script:ZiFileWindowHandle
+        $archivePassword = Wait-NamedControl `
+            -Root $window `
+            -Names @('Password (if encrypted)', '密码（如已加密）') `
+            -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        if ((Get-Value -Element $archivePassword).Length -ne 0) {
+            throw 'Archive password Ctrl+A and Backspace did not clear the field.'
+        }
+        if (-not $archivePassword.Current.IsPassword) {
+            throw 'Clearing the archive password did not restore protected input semantics.'
+        }
+        $showArchivePasswordElement = Wait-NamedControl `
+            -Root $window `
+            -Names @('Show password', '显示密码') `
+            -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        if ((Get-ToggleState -Element $showArchivePasswordElement) -ne
+            [System.Windows.Automation.ToggleState]::Off) {
+            throw 'Clearing the archive password did not reset Show password.'
+        }
+        $archivePasswordVisibility = $true
+        $archiveText = Get-DocumentText -Root $window
+        if (-not ($archiveText.Contains('2 selected') -or
+                $archiveText.Contains('2/2 selected') -or
+                $archiveText.Contains('2 of 2 files selected') -or
+                $archiveText.Contains('2 项已选择'))) {
+            $selectionDiagnostic = if ($archiveText) {
+                (($archiveText -replace '[\r\n]+', ' ').Trim())
+            }
+            else {
+                '<no document text>'
+            }
+            if ($selectionDiagnostic.Length -gt 500) {
+                $selectionDiagnostic = $selectionDiagnostic.Substring(0, 500) + '…'
+            }
+            throw "Ctrl+A in the archive password field changed archive selection. Observed: $selectionDiagnostic"
+        }
+        Start-Sleep -Milliseconds 150
+        if ($ToggleLanguageBeforeTest) {
+            Send-AppKey -Keys '{TAB}' -ProcessId $process.Id
+            $reloadFocus = Wait-Focus `
+                -ProcessId $process.Id `
+                -Names @('Reload', '重新加载') `
+                -Deadline $deadline
+        }
+        else {
+            $reloadFocus = Move-FocusForward `
+                -ProcessId $process.Id `
+                -Names @('Reload', '重新加载') `
+                -MaximumTabs 4
+        }
+        Send-AppKey -Keys '{ENTER}' -ProcessId $process.Id
+        $reloadActivation = 'Enter'
+        $window = Get-AppWindow -ProcessId $process.Id -NativeWindowHandle $script:ZiFileWindowHandle
+        try {
+            $null = Wait-DocumentText `
+                -Root $window `
+                -AnyOf @('Opening ', '正在打开 ', 'Opened 2 entries', '已打开 2 个项目') `
+                -Deadline ([DateTime]::UtcNow.AddSeconds(2))
+        }
+        catch {
+            $null = Wait-Focus `
+                -ProcessId $process.Id `
+                -Names @('Reload', '重新加载') `
+                -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+            Send-AppKey -Keys ' ' -ProcessId $process.Id
+            $reloadActivation = 'Space after stable-focus retry'
+        }
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('Opened 2 entries', '已打开 2 个项目') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+
+        $script:KeyboardPhase = 'archive search and scoped Ctrl+A'
+        $searchFocus = Move-FocusForward `
+            -ProcessId $process.Id `
+            -Names @('Search paths', '搜索路径') `
+            -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+            -MaximumTabs 15
+        $search = $searchFocus.Element
+        Send-AppKey -Keys 'beta' -ProcessId $process.Id
+        Send-AppKey -Keys '{ENTER}' -ProcessId $process.Id
+        Start-Sleep -Milliseconds 100
+        $searchFocus = Wait-Focus `
+            -ProcessId $process.Id `
+            -Names @('Search paths', '搜索路径') `
+            -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        $search = $searchFocus
+        if ((Get-Value -Element $search) -ne 'beta') {
+            throw 'Archive search did not accept the committed beta value.'
+        }
+        $null = Wait-DocumentTextAbsent `
+            -Root $window `
+            -Forbidden 'alpha.txt' `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('nested/beta.txt', 'nested\beta.txt') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        $archiveText = Get-DocumentText -Root $window
+        $null = Wait-Focus `
+            -ProcessId $process.Id `
+            -Names @('Search paths', '搜索路径') `
+            -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        Start-Sleep -Milliseconds 100
+        Send-AppKey -Keys '^a' -ProcessId $process.Id
+        Start-Sleep -Milliseconds 50
+        Send-AppKey -Keys '{BACKSPACE}' -ProcessId $process.Id
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('alpha.txt') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        $archiveText = Get-DocumentText -Root $window
+        if (-not ($archiveText.Contains('2 selected') -or
+                $archiveText.Contains('2/2 selected') -or
+                $archiveText.Contains('2 of 2 files selected') -or
+                $archiveText.Contains('2 项已选择'))) {
+            throw 'Ctrl+A in archive search changed archive selection.'
+        }
+
+        $script:KeyboardPhase = 'archive selection and conflict policy'
+        $selectAllFocus = Move-FocusForward `
+            -ProcessId $process.Id `
+            -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+            -MaximumTabs 6
+        Send-AppKey -Keys ' ' -ProcessId $process.Id
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('0 selected', '0/2 selected', '0 of 2 files selected', '0/2 项已选择') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        $extract = (Wait-AppElement `
+            -ProcessId $process.Id `
+            -Names @('Extract selected', '解压所选项目') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))).Element
+        if ($extract.Current.IsEnabled) {
+            throw 'Extract selected remained enabled with zero selected entries.'
+        }
+        $conflictFocus = Move-FocusForward `
+            -ProcessId $process.Id `
+            -Names @('Conflict policy', '文件冲突策略') `
+            -ControlType ([System.Windows.Automation.ControlType]::ComboBox) `
+            -MaximumTabs 5 `
+            -ForbiddenNames @('Extract selected', '解压所选项目')
+        Send-AppKey -Keys '{HOME}' -ProcessId $process.Id
+        Send-AppKey -Keys '{DOWN}' -ProcessId $process.Id
+        Start-Sleep -Milliseconds 100
+        $archiveConflictValue = Get-Value -Element $conflictFocus.Element
+        if (@('Overwrite existing', '覆盖现有文件') -notcontains $archiveConflictValue) {
+            throw "Keyboard conflict selection expected overwrite, received '$archiveConflictValue'."
+        }
+
+        $tableFocus = Move-FocusForward `
+            -ProcessId $process.Id `
+            -Names @('Archive entries', '压缩文件项目') `
+            -MaximumTabs 5 `
+            -ForbiddenNames @('Extract selected', '解压所选项目')
+        Send-AppKey -Keys '^a' -ProcessId $process.Id
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('2 selected', '2/2 selected', '2 of 2 files selected', '2 项已选择') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        $entryCheckboxFocus = Move-FocusForward `
+            -ProcessId $process.Id `
+            -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+            -MaximumTabs 8 `
+            -ForbiddenNames @('Extract selected', '解压所选项目')
+        Send-AppKey -Keys ' ' -ProcessId $process.Id
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('1 selected', '1/2 selected', '1 of 2 files selected', '1/2 项已选择') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        $null = Move-FocusBackward `
+            -ProcessId $process.Id `
+            -Names @('Archive entries', '压缩文件项目') `
+            -MaximumTabs 8
+        Send-AppKey -Keys '^a' -ProcessId $process.Id
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('2 selected', '2/2 selected', '2 of 2 files selected', '2 项已选择') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+        $extractFocus = Move-FocusBackward `
+            -ProcessId $process.Id `
+            -Names @('Extract selected', '解压所选项目') `
+            -MaximumTabs 4
+        if (-not $extractFocus.Element.Current.IsEnabled) {
+            throw 'Extract selected did not become enabled after table Ctrl+A.'
+        }
+        $previous = (Wait-AppElement `
+            -ProcessId $process.Id `
+            -Names @('Previous', '上一页') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))).Element
+        $next = (Wait-AppElement `
+            -ProcessId $process.Id `
+            -Names @('Next', '下一页') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))).Element
+        if ($previous.Current.IsEnabled -or $next.Current.IsEnabled) {
+            throw 'Single-page archive pagination exposed an enabled direction.'
+        }
+        $archiveWorkflowCompleted = $true
+
+        $script:KeyboardPhase = 'Ctrl+N transition to create form'
+        Send-AppKey -Keys '^n' -ProcessId $process.Id
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('Choose sources, format and compression.', '选择来源、格式与压缩等级。') `
+            -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+    }
+    else {
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('No archive open', '尚未打开压缩文件') `
+            -Deadline $deadline
+        $script:KeyboardPhase = 'Ctrl+N transition to create form'
+        Send-AppKey -Keys '^n' -ProcessId $process.Id
+        $null = Wait-DocumentText `
+            -Root $window `
+            -AnyOf @('Choose sources, format and compression.', '选择来源、格式与压缩等级。') `
+            -Deadline $deadline
+    }
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     $script:KeyboardPhase = 'create form traversal'
 
     $clear = (Wait-AppElement `
@@ -549,13 +1145,105 @@ try {
     Start-Sleep -Milliseconds 100
     $passwordLength = (Get-Value -Element $password).Length
     if ($passwordLength -eq 0) {
-        throw 'The password field did not accept keyboard input.'
+        $focusedDescription = try {
+            $focusedNow = [System.Windows.Automation.AutomationElement]::FocusedElement
+            if ($focusedNow) {
+                "'$($focusedNow.Current.Name)' ($($focusedNow.Current.ControlType.ProgrammaticName), enabled=$($focusedNow.Current.IsEnabled), keyboardFocus=$($focusedNow.Current.HasKeyboardFocus))"
+            }
+            else {
+                '<none>'
+            }
+        }
+        catch {
+            '<focus unavailable>'
+        }
+        throw "The password field did not accept keyboard input. Focused: $focusedDescription"
     }
+    $passwordConfirmationFocus = Move-FocusForward `
+        -ProcessId $process.Id `
+        -Names @('Confirm password', '确认密码') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -MaximumTabs 2
+    if (-not $passwordConfirmationFocus.Element.Current.IsPassword) {
+        throw 'The create password confirmation is not exposed as a protected password control.'
+    }
+    Send-AppKey -Keys 'keyboard-test' -ProcessId $process.Id
+    Start-Sleep -Milliseconds 100
+    if ((Get-Value -Element $passwordConfirmationFocus.Element).Length -ne $passwordLength) {
+        throw 'The create password confirmation did not accept the matching keyboard input.'
+    }
+    $showCreatePassword = Move-FocusForward `
+        -ProcessId $process.Id `
+        -Names @('Show password', '显示密码') `
+        -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+        -MaximumTabs 3
+    if ((Get-ToggleState -Element $showCreatePassword.Element) -ne
+        [System.Windows.Automation.ToggleState]::Off) {
+        throw 'Create password visibility did not start unchecked.'
+    }
+    Send-AppKey -Keys ' ' -ProcessId $process.Id
+    Start-Sleep -Milliseconds 100
+    $window = Get-AppWindow -ProcessId $process.Id -NativeWindowHandle $script:ZiFileWindowHandle
+    $password = Wait-NamedControl `
+        -Root $window `
+        -Names @('No encryption', '不加密') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+    if ($password.Current.IsPassword) {
+        throw 'Create password remained protected after Show password was checked.'
+    }
+    $passwordConfirmation = Wait-NamedControl `
+        -Root $window `
+        -Names @('Confirm password', '确认密码') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+    if ($passwordConfirmation.Current.IsPassword) {
+        throw 'Create password confirmation remained protected after Show password was checked.'
+    }
+    $password.SetFocus()
+    $null = Wait-Focus `
+        -ProcessId $process.Id `
+        -Names @('No encryption', '不加密') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
     Send-AppKey -Keys '^a' -ProcessId $process.Id
     Send-AppKey -Keys '{BACKSPACE}' -ProcessId $process.Id
     Start-Sleep -Milliseconds 100
+    $window = Get-AppWindow -ProcessId $process.Id -NativeWindowHandle $script:ZiFileWindowHandle
+    $password = Wait-NamedControl `
+        -Root $window `
+        -Names @('No encryption', '不加密') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
     if ((Get-Value -Element $password).Length -ne 0) {
         throw 'Ctrl+A and Backspace did not clear the password field.'
+    }
+    if (-not $password.Current.IsPassword) {
+        throw 'Clearing the create password did not restore protected input semantics.'
+    }
+    $showCreatePasswordElement = Wait-NamedControl `
+        -Root $window `
+        -Names @('Show password', '显示密码') `
+        -ControlType ([System.Windows.Automation.ControlType]::CheckBox) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+    if ((Get-ToggleState -Element $showCreatePasswordElement) -ne
+        [System.Windows.Automation.ToggleState]::Off) {
+        throw 'Clearing the create password did not reset Show password.'
+    }
+    $passwordConfirmation = Wait-NamedControl `
+        -Root $window `
+        -Names @('Confirm password', '确认密码') `
+        -ControlType ([System.Windows.Automation.ControlType]::Edit) `
+        -Deadline ([DateTime]::UtcNow.AddSeconds($TimeoutSeconds))
+    if (-not $passwordConfirmation.Current.IsPassword) {
+        throw 'Clearing the create password did not re-protect its confirmation.'
+    }
+    $passwordConfirmation.SetFocus()
+    Send-AppKey -Keys '^a' -ProcessId $process.Id
+    Send-AppKey -Keys '{BACKSPACE}' -ProcessId $process.Id
+    Start-Sleep -Milliseconds 100
+    if ((Get-Value -Element $passwordConfirmation).Length -ne 0) {
+        throw 'Ctrl+A and Backspace did not clear the password confirmation.'
     }
 
     $null = Move-FocusBackward `
@@ -602,17 +1290,37 @@ try {
                 $homeName,
                 $archiveName,
                 $createName,
+                $aboutName,
                 $themeName,
                 $languageName
             )
             reverse_theme_language = $true
             archive_and_create_activation = $true
         }
+        archive_workflow = [pscustomobject]@{
+            tested = -not $SkipArchiveWorkflow
+            completed = $archiveWorkflowCompleted
+            fixture_entries = if ($SkipArchiveWorkflow) { 0 } else { 2 }
+            fixture_sha256 = $archiveFixtureHash
+            integrity_test = $archiveWorkflowCompleted
+            reload = $archiveWorkflowCompleted
+            reload_activation = $reloadActivation
+            password_ctrl_a_scoped = $archiveWorkflowCompleted
+            password_visibility_toggle = $archivePasswordVisibility
+            search_ctrl_a_scoped = $archiveWorkflowCompleted
+            search_seed = if ($archiveWorkflowCompleted) { 'keyboard beta plus Enter composition commit' } else { $null }
+            conflict_policy = $archiveConflictValue
+            selection = if ($archiveWorkflowCompleted) { '2 -> 0 -> 2 -> 1 -> 2' } else { $null }
+            extract_enabled_state = $archiveWorkflowCompleted
+            single_page_pagination_disabled = $archiveWorkflowCompleted
+        }
         create_form = [pscustomobject]@{
             disabled_actions_skipped = $disabledActionNames
             selected_format = $selectedFormat
             compression_level = '6 -> 7 -> 6'
             password_keyboard_entry_and_clear = $true
+            password_confirmation_exact_match = $true
+            password_visibility_toggle = $true
             password_value_recorded = $false
             reverse_combo_slider_password = $true
             add_files_button_reached_by_keyboard = $true
@@ -637,5 +1345,8 @@ finally {
     if (-not $process.HasExited) {
         Stop-Process -Id $process.Id -Force
         $null = $process.WaitForExit(5000)
+    }
+    if ($archiveFixturePath -and (Test-Path -LiteralPath $archiveFixturePath)) {
+        Remove-Item -LiteralPath $archiveFixturePath -Force
     }
 }

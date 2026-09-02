@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "version": "0.1.15",
+  "tag": "v0.1.15",
+  "release_url": "https://github.com/ax2/zifile/releases/tag/v0.1.15",
+  "published_at": "2026-09-01T12:05:59Z",
+  "assets": [
+    {
+      "name": "ZiFile-0.1.15.0-windows.msixbundle",
+      "sha256": "8e5ff86acdc01ef3fe04211a754961314b86a7ef995cd898abd8e358d300a4fb"
+    },
+    {
+      "name": "zifile-windows-x64.exe",
+      "sha256": "89a7fc603ebb201f109ce24219da70a38417c10d11611ed98f7c787001cb47fd"
+    },
+    {
+      "name": "zifile-windows-arm64.exe",
+      "sha256": "29ea4d56e1cb07568e3c0b447f67642de60514dda8583818adc06a50c37d60b5"
+    },
+    {
+      "name": "SHA256SUMS.txt",
+      "sha256": "b0d57f15b117daa5cefad1fa3befa80d0972c9232da081ec3abfc36aa70d596e"
+    }
+  ]
+}

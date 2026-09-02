@@ -30,10 +30,16 @@ Goal: safely open, list, create, and extract common archives.
 
 - [x] ZIP read/write, including ZIP64 and AES-encrypted entries.
 - [x] 7z read/write with optional AES encryption.
-- [x] Beta read-only RAR 1.3–7 browse/test/selective extraction with password support; creation stays disabled.
-- [x] TAR and gzip/zstd/xz/bzip2 stream composition; lz4/brotli are available as single streams.
+- [x] Beta RAR 1.3–7 browse/test/selective extraction with password support, plus RAR 5 creation at levels 0–5 with optional encrypted headers; update and rename remain unsupported.
+- [x] TAR and gzip/zstd/xz/LZMA/bzip2 stream composition; standalone LZMA-alone creation is also available, while lz4/brotli remain single-stream formats.
+- [x] Beta Windows CAB creation with fixed MSZIP compression, plus None/MSZIP/LZX read support; empty directories, passwords, updates, and renames remain explicitly unsupported for CAB.
 - [x] Signature-based format detection.
 - [x] Archive browser, selected extraction, destination and conflict policies.
+- [x] Add safe in-place updates and selected-entry removal for ZIP, 7z, and
+  TAR-family multi-entry archives; single streams, RAR, and CAB remain
+  explicitly read-only for update operations.
+- [x] Add atomic archive-relative file and directory renaming, including safe
+  batch mappings and directory subtree moves, for the same updateable formats.
 - [x] Background execution with cooperative cancellation.
 - [x] Determinate byte/entry progress for extraction and creation.
 - [ ] Queued multi-operation scheduling (bounded FIFO scheduler and both UI
@@ -57,9 +63,10 @@ Goal: complete the Windows-focused daily workflow.
 - [x] Password flow avoids logging or persisting secrets.
 - [x] Windows archive file associations and desktop drag-and-drop.
 - [x] Windows taskbar progress and packaged `zifile.exe` App Execution Alias.
-- [ ] Windows 11 File Explorer `IExplorerCommand` context menu extension (Rust DLL and MSIX
-  registration implemented; trusted-package Explorer activation tracked by
-  [#12](https://github.com/ax2/zifile/issues/12)).
+- [x] Windows 11 File Explorer `IExplorerCommand` context menu extension for selected files,
+  folders, and folder backgrounds (Rust DLL, bounded path forwarding, and MSIX
+  registration implemented; trusted-package Explorer activation and lifecycle
+  evidence remain tracked by [#12](https://github.com/ax2/zifile/issues/12)).
 - [x] Isolated worker process with versioned IPC, cancellation and Windows Job Object limits.
 - [x] x64/ARM64 MSIX and standalone executable packaging.
 - [ ] Signed install, upgrade, repair and uninstall tests ([#12](https://github.com/ax2/zifile/issues/12); trusted-package lifecycle harness
@@ -79,11 +86,14 @@ supported Windows 10/11 environments.
 Goal: distribution, accessibility, localization, and hardening.
 
 - [x] Simplified Chinese and English desktop UI with persisted language/theme preferences.
+- [x] Add matching bilingual About pages to both desktop interfaces with runtime version, MIT license, core format count, project/privacy identity, responsive semantic markup, and an `F1` entry point.
 - [x] Build an opt-in Dioxus/WebView2 accessibility candidate with semantic archive and create workflows over the isolated Worker.
 - [x] Add candidate CSP/offline resource policy, native drop handling, core shortcuts and local x64 MSIX validation.
 - [x] Verify candidate archive-scoped Ctrl+A and dynamic selection labels in a real UI Automation session.
 - [x] Add repeatable bilingual keyboard traversal for candidate navigation and the native create form, including disabled-control skipping and foreground-window protection.
 - [x] Cross-build, package, attest and checksum the candidate MSIX and executables for x64 and ARM64.
+- [x] Ship and machine-audit the complete minimum Windows high-DPI icon matrix: Store scale variants, 100/200/400 percent package logos, and all app-list target sizes in default, dark-unplated, and light-unplated forms.
+- [x] Embed and machine-audit a reviewed 16/24/32/48/256 multi-resolution Win32 icon for title bars, Explorer, and shell surfaces.
 - [ ] Run the candidate MSIX and runnable directory on physical ARM64 Windows hardware ([#13](https://github.com/ax2/zifile/issues/13)).
 - [x] Complete equivalent Simplified Chinese and English product documentation.
 - [ ] Complete full keyboard traversal, Narrator, Accessibility Insights, high-contrast, IME and per-monitor DPI verification before replacing Iced ([#14](https://github.com/ax2/zifile/issues/14)).
@@ -104,11 +114,12 @@ Goal: stable public release.
 - [ ] Resolve release-blocking compatibility and accessibility issues ([#19](https://github.com/ax2/zifile/issues/19)).
 - [ ] Complete user, security, contributor, and release documentation ([#19](https://github.com/ax2/zifile/issues/19)); contributor setup, exact CI commands, provider/UI evidence rules, bilingual pages, PR-template drift checks, and a machine-checked private-reporting policy are implemented, while final 1.0 release pages remain pending.
 - [ ] Publish GitHub, WinGet, and Microsoft Store releases from one version source ([#19](https://github.com/ax2/zifile/issues/19)).
-- [x] Add a machine-readable 1.0 readiness manifest and make stable tags reject every unresolved external gate.
+- [x] Add a machine-readable 1.0 readiness manifest and make formal publishing optionally reject every unresolved external gate.
 
 ## Post-1.0
 
-- Broader RAR multivolume and recovery-record compatibility after the beta read-only provider stabilizes.
-- Checksums, duplicate analysis, batch rename, and file preview.
+- Broader RAR multivolume and recovery-record compatibility after the beta provider stabilizes.
+- Duplicate analysis and file preview; decoded-content SHA-256
+  checksums are now part of integrity-test results.
 - Optional stronger worker isolation with AppContainer.
 - ARM64 performance tuning and expanded enterprise deployment guidance.

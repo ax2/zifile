@@ -16,7 +16,7 @@ CLI ------------------------------------------------------------------------┘
 
 ## Desktop and scheduler
 
-Iced is the current baseline; Dioxus/WebView2 validates a semantic Windows accessibility path. Both use the same Worker IPC and a 32-operation in-memory FIFO scheduler. Open, reload, test, extract, and create requests are snapshotted and run in order. Monotonic IDs prevent stale completion events from advancing the queue. Clearing pending work does not cancel the active Worker, and queued paths or passwords are never persisted.
+Iced is the current baseline; Dioxus/WebView2 validates a semantic Windows accessibility path. Both use the same Worker IPC and a 32-operation in-memory FIFO scheduler. Open, reload, test, extract, create, and update requests are snapshotted and run in order. Updates unpack, merge, and rebuild in a sibling staging directory before atomically replacing the original archive. Monotonic IDs prevent stale completion events from advancing the queue. Clearing pending work does not cancel the active Worker, and queued paths or passwords are never persisted.
 
 ## Worker boundary
 

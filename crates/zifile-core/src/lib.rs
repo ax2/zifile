@@ -1,3 +1,14 @@
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing,
+        clippy::undocumented_unsafe_blocks
+    )
+)]
+
 //! Core domain model for ZiFile.
 //!
 //! This crate deliberately contains no UI or platform code. Archive backends
@@ -16,10 +27,12 @@ mod archive;
 mod path_policy;
 
 pub use archive::{
-    ArchiveEntryInfo, ArchiveInfo, CancellationToken, ConflictPolicy, CreateOptions,
-    ExtractOptions, OperationProgress, OperationSummary, ProgressSnapshot, create_archive,
-    extract_archive, list_archive, list_archive_with_limits, test_archive,
-    test_archive_with_limits,
+    ArchiveEntryInfo, ArchiveInfo, ArchiveRename, ArchiveTimestamp, ArchiveTimestampOffset,
+    ArchiveTimestampPrecision, CancellationToken, ConflictPolicy, CreateOptions, ExtractOptions,
+    ListOptions, OperationProgress, OperationSummary, ProgressSnapshot, TestOptions, UpdateOptions,
+    create_archive, extract_archive, list_archive, list_archive_with_limits,
+    list_archive_with_options, rename_archive, test_archive, test_archive_with_limits,
+    test_archive_with_options, update_archive,
 };
 pub use path_policy::safe_relative_path;
 
@@ -32,63 +45,172 @@ pub enum ArchiveFormat {
     TarGzip,
     TarZstd,
     TarXz,
+    TarLzma,
     TarBzip2,
+    TarLz4,
     Gzip,
     Zstandard,
     Xz,
+    Lzma,
     Bzip2,
     Lz4,
     Brotli,
     Rar,
+    Cab,
 }
+
+/// Extensions shown by desktop open dialogs for formats ZiFile can inspect.
+/// Existing files are still detected by content signatures before hints.
+pub const OPEN_ARCHIVE_EXTENSIONS: &[&str] = &[
+    "zip", "zipx", "cbz", "epub", "7z", "cb7", "rar", "cbr", "cab", "tar", "cbt", "gz", "tar.gz",
+    "tgz", "zst", "tar.zst", "tzst", "xz", "tar.xz", "txz", "tar.lzma", "lzma", "bz", "bz2",
+    "tar.bz2", "tbz", "tbz2", "tar.lz4", "tlz4", "lz4", "br",
+];
+
+/// Compound suffixes whose outer stream is a TAR archive.
+///
+/// This is shared by extension detection and desktop matching-folder naming;
+/// keeping aliases here prevents those user-facing paths from drifting apart.
+pub const COMPOUND_ARCHIVE_EXTENSIONS: &[(&str, ArchiveFormat)] = &[
+    (".tar.gz", ArchiveFormat::TarGzip),
+    (".tgz", ArchiveFormat::TarGzip),
+    (".tar.zst", ArchiveFormat::TarZstd),
+    (".tzst", ArchiveFormat::TarZstd),
+    (".tar.xz", ArchiveFormat::TarXz),
+    (".txz", ArchiveFormat::TarXz),
+    (".tar.lzma", ArchiveFormat::TarLzma),
+    (".tar.bz2", ArchiveFormat::TarBzip2),
+    (".tbz2", ArchiveFormat::TarBzip2),
+    (".tbz", ArchiveFormat::TarBzip2),
+    (".tar.lz4", ArchiveFormat::TarLz4),
+    (".tlz4", ArchiveFormat::TarLz4),
+];
 
 impl ArchiveFormat {
     /// Stable display order used by both CLI and desktop UI.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 18] = [
         Self::Zip,
         Self::SevenZip,
         Self::Tar,
         Self::TarGzip,
         Self::TarZstd,
         Self::TarXz,
+        Self::TarLzma,
         Self::TarBzip2,
+        Self::TarLz4,
         Self::Gzip,
         Self::Zstandard,
         Self::Xz,
+        Self::Lzma,
         Self::Bzip2,
         Self::Lz4,
         Self::Brotli,
         Self::Rar,
+        Self::Cab,
+    ];
+
+    /// Stable display order for formats that support archive creation.
+    ///
+    /// Keeping this beside `ALL` prevents the two desktop interfaces from
+    /// maintaining subtly different creation menus as new providers arrive.
+    pub const CREATABLE: [Self; 18] = [
+        Self::Zip,
+        Self::SevenZip,
+        Self::Tar,
+        Self::TarGzip,
+        Self::TarZstd,
+        Self::TarXz,
+        Self::TarLzma,
+        Self::TarBzip2,
+        Self::TarLz4,
+        Self::Gzip,
+        Self::Zstandard,
+        Self::Xz,
+        Self::Lzma,
+        Self::Bzip2,
+        Self::Lz4,
+        Self::Brotli,
+        Self::Rar,
+        Self::Cab,
     ];
 
     pub const fn capabilities(self) -> FormatCapabilities {
         match self {
-            Self::Rar => FormatCapabilities::read_only(true, ReleaseStage::Beta),
+            Self::Rar => FormatCapabilities::read_write(true, ReleaseStage::Beta),
+            Self::Cab => FormatCapabilities::read_write(false, ReleaseStage::Beta),
             Self::SevenZip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
             Self::Zip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
-            Self::Tar | Self::TarGzip | Self::TarZstd | Self::TarXz | Self::TarBzip2 => {
-                FormatCapabilities::read_write(false, ReleaseStage::Alpha)
-            }
-            Self::Gzip | Self::Zstandard | Self::Xz | Self::Bzip2 | Self::Lz4 | Self::Brotli => {
-                FormatCapabilities::read_write(false, ReleaseStage::Alpha)
-            }
+            Self::Tar
+            | Self::TarGzip
+            | Self::TarZstd
+            | Self::TarXz
+            | Self::TarLzma
+            | Self::TarBzip2
+            | Self::TarLz4 => FormatCapabilities::read_write(false, ReleaseStage::Alpha),
+            Self::Gzip
+            | Self::Zstandard
+            | Self::Xz
+            | Self::Lzma
+            | Self::Bzip2
+            | Self::Lz4
+            | Self::Brotli => FormatCapabilities::read_write(false, ReleaseStage::Alpha),
         }
     }
 
     /// Source shape accepted when creating this format.
     pub const fn create_input(self) -> Option<CreateInputKind> {
         match self {
-            Self::Rar => None,
-            Self::Gzip | Self::Zstandard | Self::Xz | Self::Bzip2 | Self::Lz4 | Self::Brotli => {
-                Some(CreateInputKind::SingleFile)
-            }
+            Self::Rar => Some(CreateInputKind::FilesAndDirectories),
+            Self::Cab => Some(CreateInputKind::FilesAndDirectories),
+            Self::Gzip
+            | Self::Zstandard
+            | Self::Xz
+            | Self::Lzma
+            | Self::Bzip2
+            | Self::Lz4
+            | Self::Brotli => Some(CreateInputKind::SingleFile),
             Self::Zip
             | Self::SevenZip
             | Self::Tar
             | Self::TarGzip
             | Self::TarZstd
             | Self::TarXz
-            | Self::TarBzip2 => Some(CreateInputKind::FilesAndDirectories),
+            | Self::TarLzma
+            | Self::TarBzip2
+            | Self::TarLz4 => Some(CreateInputKind::FilesAndDirectories),
+        }
+    }
+
+    /// Inclusive compression-level bounds exposed to callers when the selected
+    /// encoder has a user-adjustable level. Formats with fixed compression or
+    /// no compression return `None` so UIs do not present a control that has no
+    /// effect.
+    pub const fn compression_level_range(self) -> Option<(u8, u8)> {
+        match self {
+            Self::Zip
+            | Self::SevenZip
+            | Self::TarGzip
+            | Self::TarXz
+            | Self::TarLzma
+            | Self::Gzip
+            | Self::Xz
+            | Self::Lzma => Some((0, 9)),
+            Self::TarZstd | Self::Zstandard => Some((0, 22)),
+            Self::TarBzip2 | Self::Bzip2 => Some((1, 9)),
+            Self::Brotli => Some((0, 11)),
+            Self::Tar | Self::TarLz4 | Self::Lz4 | Self::Cab => None,
+            Self::Rar => Some((0, 5)),
+        }
+    }
+
+    /// Clamp a persisted or externally supplied level to this format's
+    /// supported range. Fixed-level formats preserve the value because their
+    /// encoders intentionally ignore it.
+    pub const fn clamp_compression_level(self, level: u8) -> u8 {
+        match self.compression_level_range() {
+            Some((minimum, _)) if level < minimum => minimum,
+            Some((_, maximum)) if level > maximum => maximum,
+            _ => level,
         }
     }
 
@@ -100,15 +222,50 @@ impl ArchiveFormat {
             Self::TarGzip => "tar.gz",
             Self::TarZstd => "tar.zst",
             Self::TarXz => "tar.xz",
+            Self::TarLzma => "tar.lzma",
             Self::TarBzip2 => "tar.bz2",
+            Self::TarLz4 => "tar.lz4",
             Self::Gzip => "gz",
             Self::Zstandard => "zst",
             Self::Xz => "xz",
+            Self::Lzma => "lzma",
             Self::Bzip2 => "bz2",
             Self::Lz4 => "lz4",
             Self::Brotli => "br",
             Self::Rar => "rar",
+            Self::Cab => "cab",
         }
+    }
+
+    pub const fn is_tar_composition(self) -> bool {
+        matches!(
+            self,
+            Self::Tar
+                | Self::TarGzip
+                | Self::TarZstd
+                | Self::TarXz
+                | Self::TarLzma
+                | Self::TarBzip2
+                | Self::TarLz4
+        )
+    }
+
+    /// Whether an existing multi-entry archive can be rebuilt in place through
+    /// the safe update path. Single-file streams and read-only providers stay
+    /// explicitly out of this operation.
+    pub const fn supports_update(self) -> bool {
+        matches!(
+            self,
+            Self::Zip
+                | Self::SevenZip
+                | Self::Tar
+                | Self::TarGzip
+                | Self::TarZstd
+                | Self::TarXz
+                | Self::TarLzma
+                | Self::TarBzip2
+                | Self::TarLz4
+        )
     }
 }
 
@@ -128,14 +285,18 @@ impl fmt::Display for ArchiveFormat {
             Self::TarGzip => "TAR + gzip",
             Self::TarZstd => "TAR + Zstandard",
             Self::TarXz => "TAR + XZ",
+            Self::TarLzma => "TAR + LZMA",
             Self::TarBzip2 => "TAR + Bzip2",
+            Self::TarLz4 => "TAR + LZ4",
             Self::Gzip => "gzip",
             Self::Zstandard => "Zstandard",
-            Self::Xz => "XZ/LZMA",
+            Self::Xz => "XZ",
+            Self::Lzma => "LZMA",
             Self::Bzip2 => "Bzip2",
             Self::Lz4 => "LZ4",
             Self::Brotli => "Brotli",
             Self::Rar => "RAR",
+            Self::Cab => "CAB",
         })
     }
 }
@@ -169,16 +330,6 @@ pub struct FormatCapabilities {
 }
 
 impl FormatCapabilities {
-    const fn read_only(encryption: bool, stage: ReleaseStage) -> Self {
-        Self {
-            list: true,
-            extract: true,
-            create: false,
-            encryption,
-            stage,
-        }
-    }
-
     const fn read_write(encryption: bool, stage: ReleaseStage) -> Self {
         Self {
             list: true,
@@ -224,6 +375,8 @@ pub enum ZiFileError {
     UnsafePath(String),
     #[error("symbolic and hard-link entries are not extracted: {0}")]
     LinkEntry(String),
+    #[error("the extraction destination contains a symbolic link or reparse point: {0}")]
+    UnsafeDestination(std::path::PathBuf),
     #[error("the archive contains an unsupported special entry: {0}")]
     UnsupportedEntry(String),
     #[error("a configured safety limit was exceeded: {0}")]
@@ -251,13 +404,19 @@ pub enum ZiFileError {
 pub type ZiFileResult<T> = Result<T, ZiFileError>;
 
 /// Detects a format from its signature, using the extension only where a
-/// stream format and a TAR composition share the same signature.
+/// stream format and a TAR composition share the same signature. When a
+/// compressed stream has no compound-extension hint, a bounded decoded TAR
+/// header probe distinguishes a renamed TAR composition from a single stream.
 pub fn detect_format(path: impl AsRef<Path>) -> ZiFileResult<ArchiveFormat> {
     let path = path.as_ref();
     let mut file = File::open(path)?;
     let mut header = [0_u8; 512];
     let count = file.read(&mut header)?;
-    let bytes = &header[..count];
+    let bytes = header.get(..count).ok_or_else(|| {
+        ZiFileError::Backend(
+            "reader returned more bytes than the supplied header buffer".to_owned(),
+        )
+    })?;
     let extension_hint = detect_format_from_path(path);
 
     let detected = if bytes.starts_with(b"PK\x03\x04")
@@ -269,41 +428,78 @@ pub fn detect_format(path: impl AsRef<Path>) -> ZiFileResult<ArchiveFormat> {
         Some(ArchiveFormat::SevenZip)
     } else if bytes.starts_with(b"Rar!\x1A\x07") || bytes.starts_with(b"RE~^") {
         Some(ArchiveFormat::Rar)
+    } else if bytes.starts_with(b"MSCF") {
+        Some(ArchiveFormat::Cab)
     } else if bytes.starts_with(b"\x1F\x8B") {
         Some(if extension_hint == Some(ArchiveFormat::TarGzip) {
             ArchiveFormat::TarGzip
         } else {
-            ArchiveFormat::Gzip
+            detect_tar_composition(path, ArchiveFormat::TarGzip).unwrap_or(ArchiveFormat::Gzip)
         })
     } else if bytes.starts_with(b"\x28\xB5\x2F\xFD") {
         Some(if extension_hint == Some(ArchiveFormat::TarZstd) {
             ArchiveFormat::TarZstd
         } else {
-            ArchiveFormat::Zstandard
+            detect_tar_composition(path, ArchiveFormat::TarZstd).unwrap_or(ArchiveFormat::Zstandard)
         })
     } else if bytes.starts_with(b"\xFD7zXZ\x00") {
         Some(if extension_hint == Some(ArchiveFormat::TarXz) {
             ArchiveFormat::TarXz
         } else {
-            ArchiveFormat::Xz
+            detect_tar_composition(path, ArchiveFormat::TarXz).unwrap_or(ArchiveFormat::Xz)
         })
     } else if bytes.starts_with(b"BZh") {
         Some(if extension_hint == Some(ArchiveFormat::TarBzip2) {
             ArchiveFormat::TarBzip2
         } else {
-            ArchiveFormat::Bzip2
+            detect_tar_composition(path, ArchiveFormat::TarBzip2).unwrap_or(ArchiveFormat::Bzip2)
         })
     } else if bytes.starts_with(b"\x04\x22\x4D\x18") {
-        Some(ArchiveFormat::Lz4)
-    } else if bytes.len() >= 262 && &bytes[257..262] == b"ustar" {
+        Some(if extension_hint == Some(ArchiveFormat::TarLz4) {
+            ArchiveFormat::TarLz4
+        } else {
+            detect_tar_composition(path, ArchiveFormat::TarLz4).unwrap_or(ArchiveFormat::Lz4)
+        })
+    } else if bytes.get(257..262) == Some(b"ustar") {
         Some(ArchiveFormat::Tar)
     } else if extension_hint == Some(ArchiveFormat::Brotli) {
         // Brotli intentionally has no universal magic bytes.
         Some(ArchiveFormat::Brotli)
+    } else if matches!(
+        extension_hint,
+        Some(ArchiveFormat::Lzma | ArchiveFormat::TarLzma)
+    ) && is_lzma_alone_path(path)
+    {
+        // LZMA-alone has no magic bytes; unlike ordinary XZ, its container is
+        // identified by the dedicated `.lzma` extension and decoded separately.
+        Some(extension_hint.unwrap_or(ArchiveFormat::Lzma))
     } else {
         None
     };
     detected.ok_or(ZiFileError::UnknownFormat)
+}
+
+const COMPOSITION_PROBE_INPUT_LIMIT: u64 = 1024 * 1024;
+
+fn detect_tar_composition(path: &Path, format: ArchiveFormat) -> Option<ArchiveFormat> {
+    let input = File::open(path).ok()?.take(COMPOSITION_PROBE_INPUT_LIMIT);
+    let mut decoder: Box<dyn Read> = match format {
+        ArchiveFormat::TarGzip => Box::new(flate2::read::GzDecoder::new(input)),
+        ArchiveFormat::TarZstd => Box::new(zstd::stream::read::Decoder::new(input).ok()?),
+        ArchiveFormat::TarXz => Box::new(xz2::read::XzDecoder::new(input)),
+        ArchiveFormat::TarBzip2 => Box::new(bzip2::read::BzDecoder::new(input)),
+        ArchiveFormat::TarLz4 => Box::new(lz4_flex::frame::FrameDecoder::new(input)),
+        _ => return None,
+    };
+    let mut header = [0_u8; 512];
+    decoder.read_exact(&mut header).ok()?;
+    (header.get(257..262) == Some(b"ustar")).then_some(format)
+}
+
+fn is_lzma_alone_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("lzma"))
 }
 
 /// Detect a format from a path without opening the file.
@@ -318,34 +514,27 @@ pub fn detect_format_from_path(path: impl AsRef<Path>) -> Option<ArchiveFormat> 
         .to_string_lossy()
         .to_ascii_lowercase();
 
-    let compound = [
-        (".tar.gz", ArchiveFormat::TarGzip),
-        (".tgz", ArchiveFormat::TarGzip),
-        (".tar.zst", ArchiveFormat::TarZstd),
-        (".tzst", ArchiveFormat::TarZstd),
-        (".tar.xz", ArchiveFormat::TarXz),
-        (".txz", ArchiveFormat::TarXz),
-        (".tar.bz2", ArchiveFormat::TarBzip2),
-        (".tbz2", ArchiveFormat::TarBzip2),
-        (".tbz", ArchiveFormat::TarBzip2),
-    ];
-
-    if let Some((_, format)) = compound.iter().find(|(suffix, _)| name.ends_with(suffix)) {
+    if let Some((_, format)) = COMPOUND_ARCHIVE_EXTENSIONS
+        .iter()
+        .find(|(suffix, _)| name.ends_with(*suffix))
+    {
         return Some(*format);
     }
 
     let extension = Path::new(&name).extension()?.to_string_lossy();
     match extension.as_ref() {
-        "zip" | "cbz" | "epub" => Some(ArchiveFormat::Zip),
+        "zip" | "zipx" | "cbz" | "epub" => Some(ArchiveFormat::Zip),
         "7z" | "cb7" => Some(ArchiveFormat::SevenZip),
         "tar" | "cbt" => Some(ArchiveFormat::Tar),
         "gz" => Some(ArchiveFormat::Gzip),
         "zst" => Some(ArchiveFormat::Zstandard),
-        "xz" | "lzma" => Some(ArchiveFormat::Xz),
+        "xz" => Some(ArchiveFormat::Xz),
+        "lzma" => Some(ArchiveFormat::Lzma),
         "bz" | "bz2" => Some(ArchiveFormat::Bzip2),
         "lz4" => Some(ArchiveFormat::Lz4),
         "br" => Some(ArchiveFormat::Brotli),
         "rar" | "cbr" => Some(ArchiveFormat::Rar),
+        "cab" => Some(ArchiveFormat::Cab),
         _ => None,
     }
 }
@@ -364,6 +553,18 @@ mod tests {
             detect_format_from_path("backup.tar.zst"),
             Some(ArchiveFormat::TarZstd)
         );
+        assert_eq!(
+            detect_format_from_path("backup.TAR.XZ"),
+            Some(ArchiveFormat::TarXz)
+        );
+        assert_eq!(
+            detect_format_from_path("backup.tar.bz2"),
+            Some(ArchiveFormat::TarBzip2)
+        );
+        assert_eq!(
+            detect_format_from_path("backup.tar.lz4"),
+            Some(ArchiveFormat::TarLz4)
+        );
     }
 
     #[test]
@@ -373,9 +574,31 @@ mod tests {
             Some(ArchiveFormat::Zip)
         );
         assert_eq!(
+            detect_format_from_path("extended.ZIPX"),
+            Some(ArchiveFormat::Zip)
+        );
+        assert_eq!(
             detect_format_from_path("comic.cb7"),
             Some(ArchiveFormat::SevenZip)
         );
+        assert_eq!(
+            detect_format_from_path("driver.CAB"),
+            Some(ArchiveFormat::Cab)
+        );
+        assert_eq!(
+            detect_format_from_path("backup.tar.lzma"),
+            Some(ArchiveFormat::TarLzma)
+        );
+        assert_eq!(
+            detect_format_from_path("payload.LZMA"),
+            Some(ArchiveFormat::Lzma)
+        );
+        for extension in OPEN_ARCHIVE_EXTENSIONS {
+            assert!(
+                detect_format_from_path(format!("sample.{extension}")).is_some(),
+                "desktop extension is not recognized: {extension}"
+            );
+        }
     }
 
     #[test]
@@ -385,12 +608,22 @@ mod tests {
     }
 
     #[test]
-    fn rar_is_read_only_beta() {
+    fn rar_is_creatable_beta() {
         let capabilities = ArchiveFormat::Rar.capabilities();
         assert!(capabilities.list);
         assert!(capabilities.extract);
-        assert!(!capabilities.create);
+        assert!(capabilities.create);
         assert!(capabilities.encryption);
+        assert_eq!(capabilities.stage, ReleaseStage::Beta);
+    }
+
+    #[test]
+    fn cab_is_unencrypted_creatable_beta() {
+        let capabilities = ArchiveFormat::Cab.capabilities();
+        assert!(capabilities.list);
+        assert!(capabilities.extract);
+        assert!(capabilities.create);
+        assert!(!capabilities.encryption);
         assert_eq!(capabilities.stage, ReleaseStage::Beta);
     }
 
@@ -403,7 +636,11 @@ mod tests {
             ArchiveFormat::TarGzip,
             ArchiveFormat::TarZstd,
             ArchiveFormat::TarXz,
+            ArchiveFormat::TarLzma,
             ArchiveFormat::TarBzip2,
+            ArchiveFormat::TarLz4,
+            ArchiveFormat::Rar,
+            ArchiveFormat::Cab,
         ] {
             assert_eq!(
                 format.create_input(),
@@ -414,13 +651,101 @@ mod tests {
             ArchiveFormat::Gzip,
             ArchiveFormat::Zstandard,
             ArchiveFormat::Xz,
+            ArchiveFormat::Lzma,
             ArchiveFormat::Bzip2,
             ArchiveFormat::Lz4,
             ArchiveFormat::Brotli,
         ] {
             assert_eq!(format.create_input(), Some(CreateInputKind::SingleFile));
         }
-        assert_eq!(ArchiveFormat::Rar.create_input(), None);
+        assert_eq!(
+            ArchiveFormat::Rar.create_input(),
+            Some(CreateInputKind::FilesAndDirectories)
+        );
+    }
+
+    #[test]
+    fn creatable_display_order_matches_capabilities() {
+        assert_eq!(ArchiveFormat::CREATABLE.len(), 18);
+        for format in ArchiveFormat::CREATABLE {
+            assert!(format.capabilities().create);
+            assert!(format.create_input().is_some());
+        }
+        for format in ArchiveFormat::ALL {
+            if !ArchiveFormat::CREATABLE.contains(&format) {
+                assert!(!format.capabilities().create);
+                assert_eq!(format.create_input(), None);
+            }
+        }
+    }
+
+    #[test]
+    fn update_capability_is_limited_to_multi_entry_containers() {
+        for format in [
+            ArchiveFormat::Zip,
+            ArchiveFormat::SevenZip,
+            ArchiveFormat::Tar,
+            ArchiveFormat::TarGzip,
+            ArchiveFormat::TarZstd,
+            ArchiveFormat::TarXz,
+            ArchiveFormat::TarLzma,
+            ArchiveFormat::TarBzip2,
+            ArchiveFormat::TarLz4,
+        ] {
+            assert!(format.supports_update(), "{format} should be updateable");
+        }
+        for format in [
+            ArchiveFormat::Gzip,
+            ArchiveFormat::Zstandard,
+            ArchiveFormat::Xz,
+            ArchiveFormat::Lzma,
+            ArchiveFormat::Bzip2,
+            ArchiveFormat::Lz4,
+            ArchiveFormat::Brotli,
+            ArchiveFormat::Rar,
+            ArchiveFormat::Cab,
+        ] {
+            assert!(
+                !format.supports_update(),
+                "{format} should remain read-only"
+            );
+        }
+    }
+
+    #[test]
+    fn compression_level_contract_matches_each_encoder() {
+        for format in [
+            ArchiveFormat::Zip,
+            ArchiveFormat::SevenZip,
+            ArchiveFormat::TarGzip,
+            ArchiveFormat::TarXz,
+            ArchiveFormat::TarLzma,
+            ArchiveFormat::Gzip,
+            ArchiveFormat::Xz,
+        ] {
+            assert_eq!(format.compression_level_range(), Some((0, 9)));
+            assert_eq!(format.clamp_compression_level(22), 9);
+        }
+        for format in [ArchiveFormat::TarZstd, ArchiveFormat::Zstandard] {
+            assert_eq!(format.compression_level_range(), Some((0, 22)));
+            assert_eq!(format.clamp_compression_level(22), 22);
+        }
+        for format in [ArchiveFormat::TarBzip2, ArchiveFormat::Bzip2] {
+            assert_eq!(format.compression_level_range(), Some((1, 9)));
+            assert_eq!(format.clamp_compression_level(0), 1);
+        }
+        assert_eq!(
+            ArchiveFormat::Brotli.compression_level_range(),
+            Some((0, 11))
+        );
+        assert_eq!(ArchiveFormat::Brotli.clamp_compression_level(22), 11);
+        for format in [
+            ArchiveFormat::Tar,
+            ArchiveFormat::TarLz4,
+            ArchiveFormat::Lz4,
+        ] {
+            assert_eq!(format.compression_level_range(), None);
+        }
     }
 
     #[test]

@@ -1,6 +1,158 @@
-use zifile_core::{ArchiveEntryInfo, ArchiveInfo};
+use std::borrow::Cow;
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+
+use zifile_core::{ArchiveEntryInfo, ArchiveInfo, ArchiveRename, ArchiveTimestamp};
 
 pub const ENTRIES_PER_PAGE: usize = 500;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EntrySort {
+    #[default]
+    Name,
+    Size,
+    Packed,
+    Modified,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortDirection {
+    #[default]
+    Ascending,
+    Descending,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowserEntry<'a> {
+    pub path: Cow<'a, Path>,
+    pub size: u64,
+    pub compressed_size: u64,
+    pub is_directory: bool,
+    pub encrypted: bool,
+    pub checksum: Option<String>,
+    pub modified: Option<ArchiveTimestamp>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DirectorySelection {
+    pub selected: usize,
+    pub total: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BatchRenameError {
+    NoSelection,
+    NoChanges,
+    InvalidSelection(PathBuf),
+}
+
+/// Builds deterministic same-directory rename mappings for the selected files.
+///
+/// The transformation applies find/replace to each filename, then adds the
+/// optional prefix and suffix. Directory components are never changed here;
+/// the core rename validator remains responsible for archive safety, collisions
+/// and atomic commit semantics.
+pub fn batch_rename_mappings(
+    archive: &ArchiveInfo,
+    selected: &HashSet<PathBuf>,
+    find: &str,
+    replace: &str,
+    prefix: &str,
+    suffix: &str,
+) -> Result<Vec<ArchiveRename>, BatchRenameError> {
+    if selected.is_empty() {
+        return Err(BatchRenameError::NoSelection);
+    }
+
+    let mut sources = selected.iter().cloned().collect::<Vec<_>>();
+    sources.sort();
+    let mut mappings = Vec::with_capacity(sources.len());
+    for source in sources {
+        let Some(entry) = archive
+            .entries
+            .iter()
+            .find(|entry| entry.path == source && !entry.is_directory)
+        else {
+            return Err(BatchRenameError::InvalidSelection(source));
+        };
+        let Some(file_name) = entry.path.file_name() else {
+            return Err(BatchRenameError::InvalidSelection(entry.path.clone()));
+        };
+        let file_name = file_name.to_string_lossy();
+        let replaced = if find.is_empty() {
+            file_name.to_string()
+        } else {
+            file_name.replace(find, replace)
+        };
+        let target_name = format!("{prefix}{replaced}{suffix}");
+        if target_name.is_empty() {
+            return Err(BatchRenameError::InvalidSelection(entry.path.clone()));
+        }
+        let target = entry
+            .path
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .join(target_name);
+        if target != entry.path {
+            mappings.push(ArchiveRename {
+                from: entry.path.clone(),
+                to: target,
+            });
+        }
+    }
+
+    if mappings.is_empty() {
+        Err(BatchRenameError::NoChanges)
+    } else {
+        Ok(mappings)
+    }
+}
+
+impl DirectorySelection {
+    pub const fn all_selected(self) -> bool {
+        self.total > 0 && self.selected == self.total
+    }
+
+    pub const fn partially_selected(self) -> bool {
+        self.selected > 0 && self.selected < self.total
+    }
+}
+
+impl BrowserEntry<'_> {
+    pub fn into_owned(self) -> BrowserEntry<'static> {
+        BrowserEntry {
+            path: Cow::Owned(self.path.into_owned()),
+            size: self.size,
+            compressed_size: self.compressed_size,
+            is_directory: self.is_directory,
+            encrypted: self.encrypted,
+            checksum: self.checksum,
+            modified: self.modified,
+        }
+    }
+}
+
+impl SortDirection {
+    pub const fn toggle(self) -> Self {
+        match self {
+            Self::Ascending => Self::Descending,
+            Self::Descending => Self::Ascending,
+        }
+    }
+}
+
+pub fn next_sort(
+    current: EntrySort,
+    direction: SortDirection,
+    requested: EntrySort,
+) -> (EntrySort, SortDirection) {
+    if current == requested {
+        (current, direction.toggle())
+    } else {
+        (requested, SortDirection::Ascending)
+    }
+}
 
 pub fn filtered_entry_count(archive: &ArchiveInfo, filter: &str) -> usize {
     let filter_lower = filter.to_lowercase();
@@ -16,14 +168,232 @@ pub fn filtered_entry_page<'a>(
     filter: &str,
     page: usize,
 ) -> Vec<&'a ArchiveEntryInfo> {
+    sorted_filtered_entry_page(
+        archive,
+        filter,
+        page,
+        EntrySort::Name,
+        SortDirection::Ascending,
+    )
+}
+
+pub fn sorted_filtered_entry_page<'a>(
+    archive: &'a ArchiveInfo,
+    filter: &str,
+    page: usize,
+    sort: EntrySort,
+    direction: SortDirection,
+) -> Vec<&'a ArchiveEntryInfo> {
     let filter_lower = filter.to_lowercase();
-    archive
+    let mut entries = archive
         .entries
         .iter()
         .filter(|entry| entry_matches_filter(entry, &filter_lower))
+        .collect::<Vec<_>>();
+    entries.sort_unstable_by(|left, right| compare_entries(left, right, sort, direction));
+    entries
+        .into_iter()
         .skip(page.saturating_mul(ENTRIES_PER_PAGE))
         .take(ENTRIES_PER_PAGE)
         .collect()
+}
+
+pub fn browser_entry_count(archive: &ArchiveInfo, directory: &Path, filter: &str) -> usize {
+    browser_entries(archive, directory, filter).len()
+}
+
+pub fn directory_breadcrumbs(directory: &Path) -> Vec<(String, PathBuf)> {
+    let mut path = PathBuf::new();
+    directory
+        .components()
+        .map(|component| {
+            path.push(component.as_os_str());
+            (
+                component.as_os_str().to_string_lossy().into_owned(),
+                path.clone(),
+            )
+        })
+        .collect()
+}
+
+pub fn child_directory_selections(
+    archive: &ArchiveInfo,
+    directory: &Path,
+    selected: &HashSet<PathBuf>,
+) -> HashMap<PathBuf, DirectorySelection> {
+    let mut selections = HashMap::<PathBuf, DirectorySelection>::new();
+    for entry in archive.entries.iter().filter(|entry| !entry.is_directory) {
+        let Ok(relative) = entry.path.strip_prefix(directory) else {
+            continue;
+        };
+        let mut components = relative.components();
+        let Some(first) = components.next() else {
+            continue;
+        };
+        if components.next().is_none() {
+            continue;
+        }
+        let aggregate = selections
+            .entry(directory.join(first.as_os_str()))
+            .or_default();
+        aggregate.total += 1;
+        aggregate.selected += usize::from(selected.contains(&entry.path));
+    }
+    selections
+}
+
+pub fn descendant_file_paths(archive: &ArchiveInfo, directory: &Path) -> Vec<PathBuf> {
+    archive
+        .entries
+        .iter()
+        .filter(|entry| !entry.is_directory)
+        .filter(|entry| {
+            entry
+                .path
+                .strip_prefix(directory)
+                .is_ok_and(|relative| !relative.as_os_str().is_empty())
+        })
+        .map(|entry| entry.path.clone())
+        .collect()
+}
+
+pub fn browser_entry_page<'a>(
+    archive: &'a ArchiveInfo,
+    directory: &Path,
+    filter: &str,
+    page: usize,
+    sort: EntrySort,
+    direction: SortDirection,
+) -> Vec<BrowserEntry<'a>> {
+    let mut entries = browser_entries(archive, directory, filter);
+    entries.sort_unstable_by(|left, right| compare_browser_entries(left, right, sort, direction));
+    entries
+        .into_iter()
+        .skip(page.saturating_mul(ENTRIES_PER_PAGE))
+        .take(ENTRIES_PER_PAGE)
+        .collect()
+}
+
+fn browser_entries<'a>(
+    archive: &'a ArchiveInfo,
+    directory: &Path,
+    filter: &str,
+) -> Vec<BrowserEntry<'a>> {
+    let filter_lower = filter.to_lowercase();
+    if !filter_lower.is_empty() {
+        return archive
+            .entries
+            .iter()
+            .filter(|entry| entry_matches_filter(entry, &filter_lower))
+            .map(real_browser_entry)
+            .collect();
+    }
+
+    let mut files = Vec::new();
+    let mut directories: HashMap<PathBuf, Option<&ArchiveEntryInfo>> = HashMap::new();
+    for entry in &archive.entries {
+        let Ok(relative) = entry.path.strip_prefix(directory) else {
+            continue;
+        };
+        let mut components = relative.components();
+        let Some(first) = components.next() else {
+            continue;
+        };
+        let child_path = directory.join(first.as_os_str());
+        if components.next().is_some() {
+            directories.entry(child_path).or_insert(None);
+        } else if entry.is_directory {
+            directories.insert(child_path, Some(entry));
+        } else {
+            files.push(real_browser_entry(entry));
+        }
+    }
+    if !directories.is_empty() {
+        files.retain(|entry| !directories.contains_key(entry.path.as_ref()));
+    }
+    files.extend(directories.into_iter().map(|(path, explicit)| {
+        explicit.map_or_else(
+            || BrowserEntry {
+                path: Cow::Owned(path),
+                size: 0,
+                compressed_size: 0,
+                is_directory: true,
+                encrypted: false,
+                checksum: None,
+                modified: None,
+            },
+            real_browser_entry,
+        )
+    }));
+    files
+}
+
+fn real_browser_entry(entry: &ArchiveEntryInfo) -> BrowserEntry<'_> {
+    BrowserEntry {
+        path: Cow::Borrowed(&entry.path),
+        size: entry.size,
+        compressed_size: entry.compressed_size,
+        is_directory: entry.is_directory,
+        encrypted: entry.encrypted,
+        checksum: entry.checksum.clone(),
+        modified: entry.modified,
+    }
+}
+
+fn compare_entries(
+    left: &ArchiveEntryInfo,
+    right: &ArchiveEntryInfo,
+    sort: EntrySort,
+    direction: SortDirection,
+) -> Ordering {
+    let directory_order = right.is_directory.cmp(&left.is_directory);
+    if directory_order != Ordering::Equal {
+        return directory_order;
+    }
+    let order = match sort {
+        EntrySort::Name => left.path.cmp(&right.path),
+        EntrySort::Size => left.size.cmp(&right.size),
+        EntrySort::Packed => left.compressed_size.cmp(&right.compressed_size),
+        EntrySort::Modified => match (left.modified, right.modified) {
+            (Some(left), Some(right)) => left.cmp(&right),
+            (Some(_), None) => return Ordering::Less,
+            (None, Some(_)) => return Ordering::Greater,
+            (None, None) => Ordering::Equal,
+        },
+    };
+    let order = match direction {
+        SortDirection::Ascending => order,
+        SortDirection::Descending => order.reverse(),
+    };
+    order.then_with(|| left.path.cmp(&right.path))
+}
+
+fn compare_browser_entries(
+    left: &BrowserEntry<'_>,
+    right: &BrowserEntry<'_>,
+    sort: EntrySort,
+    direction: SortDirection,
+) -> Ordering {
+    let directory_order = right.is_directory.cmp(&left.is_directory);
+    if directory_order != Ordering::Equal {
+        return directory_order;
+    }
+    let order = match sort {
+        EntrySort::Name => left.path.cmp(&right.path),
+        EntrySort::Size => left.size.cmp(&right.size),
+        EntrySort::Packed => left.compressed_size.cmp(&right.compressed_size),
+        EntrySort::Modified => match (left.modified, right.modified) {
+            (Some(left), Some(right)) => left.cmp(&right),
+            (Some(_), None) => return Ordering::Less,
+            (None, Some(_)) => return Ordering::Greater,
+            (None, None) => Ordering::Equal,
+        },
+    };
+    let order = match direction {
+        SortDirection::Ascending => order,
+        SortDirection::Descending => order.reverse(),
+    };
+    order.then_with(|| left.path.cmp(&right.path))
 }
 
 fn entry_matches_filter(entry: &ArchiveEntryInfo, filter_lower: &str) -> bool {
@@ -54,6 +424,8 @@ mod tests {
                     compressed_size: 1,
                     is_directory: false,
                     encrypted: false,
+                    checksum: None,
+                    modified: None,
                 })
                 .collect(),
             total_size: 100_000,
@@ -74,5 +446,317 @@ mod tests {
     fn page_offset_saturates_without_panicking() {
         let archive = large_archive();
         assert!(filtered_entry_page(&archive, "", usize::MAX).is_empty());
+    }
+
+    #[test]
+    fn sorting_is_bounded_and_keeps_missing_modified_times_last() {
+        let mut archive = large_archive();
+        archive.entries[0].modified = Some(zifile_core::ArchiveTimestamp {
+            year: 2024,
+            month: 1,
+            day: 2,
+            hour: 3,
+            minute: 4,
+            second: 6,
+            nanosecond: 0,
+            offset: zifile_core::ArchiveTimestampOffset::Unspecified,
+            precision: zifile_core::ArchiveTimestampPrecision::TwoSeconds,
+        });
+        let modified = sorted_filtered_entry_page(
+            &archive,
+            "",
+            0,
+            EntrySort::Modified,
+            SortDirection::Descending,
+        );
+        assert_eq!(modified.len(), ENTRIES_PER_PAGE);
+        assert_eq!(modified[0].path, PathBuf::from("folder/file-000000.txt"));
+        let sizes =
+            sorted_filtered_entry_page(&archive, "", 0, EntrySort::Size, SortDirection::Descending);
+        assert_eq!(sizes.len(), ENTRIES_PER_PAGE);
+        assert_eq!(
+            next_sort(EntrySort::Name, SortDirection::Ascending, EntrySort::Name,),
+            (EntrySort::Name, SortDirection::Descending)
+        );
+        assert_eq!(
+            next_sort(
+                EntrySort::Name,
+                SortDirection::Descending,
+                EntrySort::Modified,
+            ),
+            (EntrySort::Modified, SortDirection::Ascending)
+        );
+    }
+
+    #[test]
+    fn folder_browser_synthesizes_directories_and_searches_globally() {
+        let archive = ArchiveInfo {
+            path: PathBuf::from("folders.zip"),
+            format: ArchiveFormat::Zip,
+            entries: vec![
+                ArchiveEntryInfo {
+                    path: PathBuf::from("root.txt"),
+                    size: 4,
+                    compressed_size: 3,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+                ArchiveEntryInfo {
+                    path: PathBuf::from("docs/readme.txt"),
+                    size: 8,
+                    compressed_size: 6,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+                ArchiveEntryInfo {
+                    path: PathBuf::from("docs/reference/api.txt"),
+                    size: 12,
+                    compressed_size: 9,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+            ],
+            total_size: 24,
+            compressed_size: 18,
+        };
+
+        let root = browser_entry_page(
+            &archive,
+            Path::new(""),
+            "",
+            0,
+            EntrySort::Name,
+            SortDirection::Ascending,
+        );
+        assert_eq!(root.len(), 2);
+        assert_eq!(root[0].path.as_ref(), Path::new("docs"));
+        assert!(root[0].is_directory);
+        assert_eq!(root[1].path.as_ref(), Path::new("root.txt"));
+
+        let docs = browser_entry_page(
+            &archive,
+            Path::new("docs"),
+            "",
+            0,
+            EntrySort::Name,
+            SortDirection::Ascending,
+        );
+        assert_eq!(docs.len(), 2);
+        assert_eq!(docs[0].path.as_ref(), Path::new("docs/reference"));
+        assert!(docs[0].is_directory);
+        assert_eq!(docs[1].path.as_ref(), Path::new("docs/readme.txt"));
+
+        let search = browser_entry_page(
+            &archive,
+            Path::new("docs/reference"),
+            "readme",
+            0,
+            EntrySort::Name,
+            SortDirection::Ascending,
+        );
+        assert_eq!(search.len(), 1);
+        assert_eq!(search[0].path.as_ref(), Path::new("docs/readme.txt"));
+        assert_eq!(browser_entry_count(&archive, Path::new("docs"), ""), 2);
+
+        let mut selected = HashSet::from([
+            PathBuf::from("docs/readme.txt"),
+            PathBuf::from("docs/reference/api.txt"),
+        ]);
+        let root_selection = child_directory_selections(&archive, Path::new(""), &selected);
+        assert_eq!(
+            root_selection[Path::new("docs")],
+            DirectorySelection {
+                selected: 2,
+                total: 2
+            }
+        );
+        assert!(root_selection[Path::new("docs")].all_selected());
+        selected.remove(Path::new("docs/readme.txt"));
+        let partial = child_directory_selections(&archive, Path::new(""), &selected);
+        assert!(partial[Path::new("docs")].partially_selected());
+        assert_eq!(
+            descendant_file_paths(&archive, Path::new("docs")),
+            vec![
+                PathBuf::from("docs/readme.txt"),
+                PathBuf::from("docs/reference/api.txt")
+            ]
+        );
+    }
+
+    #[test]
+    fn folder_navigation_wins_over_a_conflicting_file_path() {
+        let archive = ArchiveInfo {
+            path: PathBuf::from("conflict.zip"),
+            format: ArchiveFormat::Zip,
+            entries: vec![
+                ArchiveEntryInfo {
+                    path: PathBuf::from("docs"),
+                    size: 1,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+                ArchiveEntryInfo {
+                    path: PathBuf::from("docs/readme.txt"),
+                    size: 2,
+                    compressed_size: 2,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+            ],
+            total_size: 3,
+            compressed_size: 3,
+        };
+        let root = browser_entry_page(
+            &archive,
+            Path::new(""),
+            "",
+            0,
+            EntrySort::Name,
+            SortDirection::Ascending,
+        );
+        assert_eq!(root.len(), 1);
+        assert!(root[0].is_directory);
+        assert_eq!(root[0].path.as_ref(), Path::new("docs"));
+
+        let search = browser_entry_page(
+            &archive,
+            Path::new(""),
+            "docs",
+            0,
+            EntrySort::Name,
+            SortDirection::Ascending,
+        );
+        assert_eq!(search.len(), 2);
+    }
+
+    #[test]
+    fn folder_browser_keeps_large_directories_bounded() {
+        let archive = large_archive();
+        let root = browser_entry_page(
+            &archive,
+            Path::new(""),
+            "",
+            0,
+            EntrySort::Name,
+            SortDirection::Ascending,
+        );
+        assert_eq!(root.len(), 1);
+        assert_eq!(root[0].path.as_ref(), Path::new("folder"));
+
+        let folder = browser_entry_page(
+            &archive,
+            Path::new("folder"),
+            "",
+            0,
+            EntrySort::Name,
+            SortDirection::Descending,
+        );
+        assert_eq!(folder.len(), ENTRIES_PER_PAGE);
+        assert_eq!(folder[0].path.as_ref(), Path::new("folder/file-099999.txt"));
+    }
+
+    #[test]
+    fn breadcrumbs_preserve_each_navigable_parent() {
+        assert_eq!(
+            directory_breadcrumbs(Path::new("docs/reference/api")),
+            vec![
+                ("docs".to_owned(), PathBuf::from("docs")),
+                ("reference".to_owned(), PathBuf::from("docs/reference")),
+                ("api".to_owned(), PathBuf::from("docs/reference/api")),
+            ]
+        );
+        assert!(directory_breadcrumbs(Path::new("")).is_empty());
+    }
+
+    #[test]
+    fn batch_rename_transforms_selected_filenames_in_stable_order() {
+        let archive = ArchiveInfo {
+            path: PathBuf::from("batch.zip"),
+            format: ArchiveFormat::Zip,
+            entries: vec![
+                ArchiveEntryInfo {
+                    path: PathBuf::from("photos/img-02.jpg"),
+                    size: 2,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+                ArchiveEntryInfo {
+                    path: PathBuf::from("photos/img-01.jpg"),
+                    size: 2,
+                    compressed_size: 1,
+                    is_directory: false,
+                    encrypted: false,
+                    checksum: None,
+                    modified: None,
+                },
+            ],
+            total_size: 4,
+            compressed_size: 2,
+        };
+        let selected = HashSet::from([
+            PathBuf::from("photos/img-02.jpg"),
+            PathBuf::from("photos/img-01.jpg"),
+        ]);
+        let mappings = batch_rename_mappings(&archive, &selected, "img-", "photo-", "new-", "-v2")
+            .expect("batch rule should produce mappings");
+        assert_eq!(
+            mappings,
+            vec![
+                ArchiveRename {
+                    from: PathBuf::from("photos/img-01.jpg"),
+                    to: PathBuf::from("photos/new-photo-01.jpg-v2"),
+                },
+                ArchiveRename {
+                    from: PathBuf::from("photos/img-02.jpg"),
+                    to: PathBuf::from("photos/new-photo-02.jpg-v2"),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn batch_rename_skips_unchanged_entries_and_rejects_empty_selection() {
+        let archive = large_archive();
+        let empty = HashSet::new();
+        assert_eq!(
+            batch_rename_mappings(&archive, &empty, "", "", "", ""),
+            Err(BatchRenameError::NoSelection)
+        );
+        let selected = HashSet::from([PathBuf::from("folder/file-000000.txt")]);
+        assert_eq!(
+            batch_rename_mappings(&archive, &selected, "", "", "", ""),
+            Err(BatchRenameError::NoChanges)
+        );
+    }
+
+    #[test]
+    fn batch_rename_rejects_stale_or_directory_selection() {
+        let archive = large_archive();
+        let stale = HashSet::from([PathBuf::from("missing.txt")]);
+        assert_eq!(
+            batch_rename_mappings(&archive, &stale, "", "", "new-", ""),
+            Err(BatchRenameError::InvalidSelection(PathBuf::from(
+                "missing.txt"
+            )))
+        );
+        let directory = HashSet::from([PathBuf::from("folder")]);
+        assert_eq!(
+            batch_rename_mappings(&archive, &directory, "", "", "new-", ""),
+            Err(BatchRenameError::InvalidSelection(PathBuf::from("folder")))
+        );
     }
 }

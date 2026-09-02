@@ -1,4 +1,5 @@
 use std::fs;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use zifile_core::{ArchiveFormat, CreateOptions, create_archive, test_archive};
@@ -14,19 +15,67 @@ fn archive_throughput(criterion: &mut Criterion) {
     let mut create_group = criterion.benchmark_group("create archive");
     create_group.throughput(Throughput::Bytes(payload.len() as u64));
     create_group.sample_size(10);
+    let zip_iteration = AtomicUsize::new(0);
     create_group.bench_function("zip deflate 8 MiB", |bencher| {
         bencher.iter(|| {
-            let archive = temp.path().join("benchmark.zip");
+            let iteration = zip_iteration.fetch_add(1, Ordering::Relaxed);
+            let archive = temp.path().join(format!("benchmark-{iteration}.zip"));
             create_archive(
                 std::slice::from_ref(&source),
-                archive,
+                &archive,
                 ArchiveFormat::Zip,
                 &CreateOptions::default(),
             )
             .unwrap();
+            fs::remove_file(archive).unwrap();
         });
     });
     create_group.finish();
+
+    let mut tar_payload = Vec::with_capacity(1024 * 1024);
+    let mut tar_noise = 0x9E37_79B9_u32;
+    for _ in 0..1024 * 1024 {
+        tar_noise ^= tar_noise << 13;
+        tar_noise ^= tar_noise >> 17;
+        tar_noise ^= tar_noise << 5;
+        tar_payload.push(tar_noise as u8);
+    }
+    let tar_source = temp.path().join("tar-payload.bin");
+    fs::write(&tar_source, &tar_payload).unwrap();
+    let mut tar_create_group = criterion.benchmark_group("create tar archive");
+    tar_create_group.throughput(Throughput::Bytes(tar_payload.len() as u64));
+    tar_create_group.sample_size(10);
+    let tar_iteration = AtomicUsize::new(0);
+    tar_create_group.bench_function("tar lzma 1 MiB", |bencher| {
+        bencher.iter(|| {
+            let iteration = tar_iteration.fetch_add(1, Ordering::Relaxed);
+            let archive = temp.path().join(format!("benchmark-{iteration}.tar.lzma"));
+            create_archive(
+                std::slice::from_ref(&tar_source),
+                &archive,
+                ArchiveFormat::TarLzma,
+                &CreateOptions::default(),
+            )
+            .unwrap();
+            fs::remove_file(archive).unwrap();
+        });
+    });
+    let tar_lz4_iteration = AtomicUsize::new(0);
+    tar_create_group.bench_function("tar lz4 1 MiB", |bencher| {
+        bencher.iter(|| {
+            let iteration = tar_lz4_iteration.fetch_add(1, Ordering::Relaxed);
+            let archive = temp.path().join(format!("benchmark-{iteration}.tar.lz4"));
+            create_archive(
+                std::slice::from_ref(&tar_source),
+                &archive,
+                ArchiveFormat::TarLz4,
+                &CreateOptions::default(),
+            )
+            .unwrap();
+            fs::remove_file(archive).unwrap();
+        });
+    });
+    tar_create_group.finish();
 
     let archive = temp.path().join("verify.zip");
     create_archive(
@@ -62,6 +111,32 @@ fn archive_throughput(criterion: &mut Criterion) {
         bencher.iter(|| test_archive(&rar_archive, None).unwrap());
     });
     read_group.finish();
+    let tar_archive = temp.path().join("verify.tar.lzma");
+    create_archive(
+        std::slice::from_ref(&tar_source),
+        &tar_archive,
+        ArchiveFormat::TarLzma,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    let mut tar_read_group = criterion.benchmark_group("verify tar archive");
+    tar_read_group.throughput(Throughput::Bytes(tar_payload.len() as u64));
+    tar_read_group.sample_size(10);
+    tar_read_group.bench_function("tar lzma 1 MiB", |bencher| {
+        bencher.iter(|| test_archive(&tar_archive, None).unwrap());
+    });
+    let tar_lz4_archive = temp.path().join("verify.tar.lz4");
+    create_archive(
+        std::slice::from_ref(&tar_source),
+        &tar_lz4_archive,
+        ArchiveFormat::TarLz4,
+        &CreateOptions::default(),
+    )
+    .unwrap();
+    tar_read_group.bench_function("tar lz4 1 MiB", |bencher| {
+        bencher.iter(|| test_archive(&tar_lz4_archive, None).unwrap());
+    });
+    tar_read_group.finish();
 }
 
 criterion_group!(benches, archive_throughput);

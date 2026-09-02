@@ -1,10 +1,13 @@
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use zifile_core::COMPOUND_ARCHIVE_EXTENSIONS;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StartupRequest {
     Home,
     OpenArchive(PathBuf),
+    ExtractHere(PathBuf),
     CreateFrom(Vec<PathBuf>),
 }
 
@@ -17,11 +20,46 @@ where
         let sources = values.into_iter().skip(1).map(PathBuf::from).collect();
         return StartupRequest::CreateFrom(sources);
     }
+    if values
+        .first()
+        .is_some_and(|value| value == "--extract-here")
+    {
+        return values
+            .into_iter()
+            .nth(1)
+            .map(PathBuf::from)
+            .map_or(StartupRequest::Home, StartupRequest::ExtractHere);
+    }
     values
         .into_iter()
         .next()
         .map(PathBuf::from)
         .map_or(StartupRequest::Home, StartupRequest::OpenArchive)
+}
+
+pub fn extraction_destination(archive: &Path) -> PathBuf {
+    archive
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(extraction_folder_name(archive))
+}
+
+fn extraction_folder_name(archive: &Path) -> OsString {
+    if let Some(file_name) = archive.file_name().and_then(|value| value.to_str()) {
+        let lowercase = file_name.to_ascii_lowercase();
+        if let Some((suffix, _)) = COMPOUND_ARCHIVE_EXTENSIONS
+            .iter()
+            .filter(|(_, format)| format.is_tar_composition())
+            .find(|(suffix, _)| lowercase.ends_with(*suffix))
+        {
+            let stem_length = file_name.len() - suffix.len();
+            if stem_length > 0 {
+                return OsString::from(&file_name[..stem_length]);
+            }
+        }
+    }
+
+    archive.file_stem().unwrap_or_default().to_os_string()
 }
 
 #[cfg(test)]
@@ -53,6 +91,69 @@ mod tests {
                 PathBuf::from(r"C:\资料\甲.txt"),
                 PathBuf::from(r"C:\资料\乙 folder"),
             ])
+        );
+    }
+
+    #[test]
+    fn extract_here_requires_and_preserves_one_archive_path() {
+        assert_eq!(
+            parse([
+                OsString::from("--extract-here"),
+                OsString::from(r"C:\资料\示例.zip"),
+            ]),
+            StartupRequest::ExtractHere(PathBuf::from(r"C:\资料\示例.zip"))
+        );
+        assert_eq!(
+            parse([OsString::from("--extract-here")]),
+            StartupRequest::Home
+        );
+    }
+
+    #[test]
+    fn extract_here_destination_is_a_matching_sibling_folder() {
+        assert_eq!(
+            extraction_destination(Path::new(r"C:\资料\示例.zip")),
+            PathBuf::from(r"C:\资料\示例")
+        );
+        assert_eq!(
+            extraction_destination(Path::new(r"C:\资料\backup.tar.gz")),
+            PathBuf::from(r"C:\资料\backup")
+        );
+    }
+
+    #[test]
+    fn extract_here_destination_collapses_tar_stream_aliases() {
+        for archive_name in [
+            "backup.tar.gz",
+            "backup.TAR.ZST",
+            "backup.tar.xz",
+            "backup.tar.lzma",
+            "backup.tar.bz2",
+            "backup.tar.lz4",
+            "backup.tlz4",
+            "backup.tgz",
+            "backup.tzst",
+            "backup.txz",
+            "backup.tbz",
+            "backup.tbz2",
+        ] {
+            assert_eq!(
+                extraction_destination(Path::new(archive_name)),
+                PathBuf::from("backup"),
+                "unexpected destination for {archive_name}"
+            );
+        }
+        assert_eq!(
+            extraction_destination(Path::new("backup.tar.br")),
+            PathBuf::from("backup.tar")
+        );
+        assert_eq!(
+            extraction_destination(Path::new("backup.tar.bz")),
+            PathBuf::from("backup.tar")
+        );
+        assert_eq!(
+            extraction_destination(Path::new("backup.tar.zip")),
+            PathBuf::from("backup.tar")
         );
     }
 }

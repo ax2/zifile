@@ -38,4 +38,4 @@ Artifact Signing 价格是 2026-08-25 的公开页面快照，只用于路线选
 
 ## CI 凭据边界
 
-`production-signing` GitHub Environment 保存审批和生产范围。构建阶段需要的 `ZIFILE_MSIX_IDENTITY` 与 `ZIFILE_MSIX_PUBLISHER` 是仓库级非秘密变量；只在签名阶段需要的 `SM_HOST` 与 `SM_KEYPAIR_ALIAS` 是 Environment 非秘密变量。`SM_API_KEY`、客户端认证证书的 Base64 和密码是 Environment Secret。客户端认证证书只用于访问服务，不是可导出的代码签名私钥，并在 Runner 临时目录使用后删除。标签必须走云签名；手动 Release 可选择 `none` 做无签名构建，或选择 `digicert-stm` 做受保护的真实签名演练。
+`production-signing` GitHub Environment 保存审批和生产范围。构建阶段需要的 `ZIFILE_MSIX_IDENTITY`、`ZIFILE_MSIX_PUBLISHER` 与 `ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME` 是仓库级非秘密变量；只在签名阶段需要的 `SM_HOST` 与 `SM_KEYPAIR_ALIAS` 是 Environment 非秘密变量。`SM_API_KEY`、客户端认证证书的 Base64 和密码是 Environment Secret。客户端认证证书只用于访问服务，不是可导出的代码签名私钥，并在 Runner 临时目录使用后删除。标签必须走云签名；手动 Release 可选择 `none` 做无签名构建，或选择 `digicert-stm` 做受保护的真实签名演练。

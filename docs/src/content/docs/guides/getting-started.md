@@ -3,20 +3,22 @@ title: 快速上手
 description: 使用 ZiFile 浏览、校验、解压和创建压缩文件。
 ---
 
-ZiFile 目前仍是 Alpha 候选，尚未发布 Microsoft Store 或 WinGet 正式版本。只使用本仓库 GitHub Releases 或项目维护者提供的候选产物；稳定版发布后，本页会补充精确的安装渠道。不要为了安装开发包而导入未知根证书或关闭 Windows 安全检查。
+ZiFile 目前是 Stage 4 公开版本，尚未发布 Microsoft Store 或 WinGet 正式版本。GitHub 用户可从当前的 [v0.1.15 Release](https://github.com/ax2/zifile/releases/tag/v0.1.15) 获取未签名 Windows 构建，并应先按 Release 中的 `SHA256SUMS.txt` 校验文件。需要安装时只需选择包含 x64 与 ARM64 的一体化 `ZiFile-0.1.15.0-windows.msixbundle`；便携版文件为 `zifile-windows-x64.exe` 和 `zifile-windows-arm64.exe`，均为可独立运行的自包含程序，不需要额外的 Worker 或 DLL。不要为了安装开发包而导入未知根证书或关闭 Windows 安全检查。
 
 ## 打开和检查归档
 
 1. 启动 ZiFile，选择“打开归档”，或按 `Ctrl+O`。
-2. 选择 ZIP、7z、RAR、TAR 或受支持的压缩流。也可以把已知归档拖入窗口。
-3. 使用搜索框过滤路径；大型归档每页显示 500 项。
+2. 选择 ZIP、7z、RAR、CAB、TAR 或受支持的压缩流。也可以把已知归档拖入窗口。
+3. 使用带有持久“搜索”标签的输入框过滤路径；输入内容后标签不会消失。大型归档每页显示 500 项。
 4. 解压前可先运行“完整性校验”。如果 7z 或 RAR 连文件列表也已加密，首次打开失败后会保留所选文件并显示密码重试界面；密码不会写入设置，打开其他归档时也会清空。
 
 格式由文件签名和扩展名共同识别。扩展名不等于真实内容时，ZiFile 会报告检测或解析错误，不会强行按扩展名解码。
 
+归档标题同时显示展开大小、压缩后大小和缩小比例；如果归档封装开销使文件变大，则明确显示“增大”比例，空归档不显示无意义的百分比。
+
 ## 安全解压
 
-选择全部或部分条目，指定目标文件夹和冲突策略，然后开始解压。ZiFile 默认拒绝路径穿越、绝对路径、Windows 设备名、大小写冲突、不安全链接以及超过条目数、展开大小或压缩倍率限制的内容。遇到这类拒绝时，应核对归档来源，不要通过关闭安全边界重试。
+选择全部或部分条目，在明确标注的“文件冲突策略”中选择重命名、覆盖、跳过或报错，指定目标文件夹，然后开始解压。ZiFile 默认拒绝路径穿越、绝对路径、Windows 设备名、大小写冲突、不安全链接、包含符号链接/junction/reparse point 的目标路径以及超过条目数、展开大小或压缩倍率限制的内容。遇到这类拒绝时，应核对归档来源，不要通过关闭安全边界重试。
 
 任务在隔离 Worker 中运行。按 `Escape` 或选择“取消”会先请求协作取消，必要时终止 Worker；已经完整写入的文件不会被误报为事务式回滚。
 
@@ -26,11 +28,17 @@ ZiFile 目前仍是 Alpha 候选，尚未发布 Microsoft Store 或 WinGet 正�
 2. 添加文件或文件夹，也可以把来源拖入窗口。
 3. 选择格式、压缩等级和可选密码，再选择保存位置。
 
-ZIP、7z 和 TAR 组合支持多个文件与文件夹。gzip、Zstandard、XZ、Bzip2、LZ4 和 Brotli 是单文件流，必须恰好选择一个现有文件；需要压缩目录时，请改用对应 TAR 组合。RAR 只支持读取，不支持创建。
+ZIP、7z、RAR、CAB 和 TAR 组合支持多个文件与文件夹。RAR 创建 RAR 5、等级 0–5 的归档并可加密文件头，但不能保存空目录或原地更新；CAB 使用固定 MSZIP 压缩，不能保存空目录。gzip、Zstandard、XZ、LZMA、Bzip2、LZ4 和 Brotli 是单文件流，必须恰好选择一个现有文件；需要压缩目录时，请改用对应 TAR 组合。
+
+打开 ZIP、7z 或 TAR 组合后，可以选择“添加到压缩文件”或“将文件夹添加到压缩文件”更新原归档，也可以选择条目后使用“移除所选项目”。更新和移除都会在原文件旁的临时工作区中完成解包、合并或删除及重建，只有成功后才替换原文件；单文件流、RAR 和 CAB 不支持更新。
+
+在同一类可更新归档中选择至少两个普通文件后，可以使用“批量重命名”。分别填写文件名查找/替换文字，以及可选的前缀和后缀；空的查找文字表示不执行替换。ZiFile 会先生成变更映射，跳过没有变化的项目，再沿用单项重命名的归档内路径校验、冲突检查和原子重建保护。
 
 ## 队列与设置
 
-任务运行时仍可提交打开、校验、解压或创建，ZiFile 最多保存 32 项并按顺序执行。“清空队列”只移除等待项，“取消”只作用于当前任务。语言与深浅主题保存在 `%LOCALAPPDATA%\ZiFile\settings.conf`；路径、最近记录和密码不会保存。
+任务运行时仍可提交打开、校验、解压、创建或更新，ZiFile 最多保存 32 项并按顺序执行。“清空队列”只移除等待项，“取消”只作用于当前任务。语言与深浅主题保存在 `%LOCALAPPDATA%\ZiFile\settings.conf`；路径、最近记录和密码不会保存。
+
+“关于”页显示当前运行版本、MIT 许可证、格式系列数量、项目地址和本地处理隐私边界，可按 `F1` 直接打开。页面还可用默认浏览器打开项目主页、中文使用文档和中文隐私政策；若系统拒绝启动链接，底部状态区会显示错误。报告问题时请从这里核对版本，不要仅依赖安装文件名。
 
 ## 命令行
 
@@ -39,8 +47,12 @@ zifile formats
 zifile list archive.zip
 zifile test archive.7z
 zifile extract archive.zip output --conflict rename
-zifile create output.7z files --format seven-zip
+zifile create output.7z files --format seven-zip --level 9
+zifile update archive.zip new-files --level 6
+zifile update archive.zip --remove folder/old.txt --remove folder/cache
 ```
+
+`zifile formats` 的 `COMPRESSION_LEVEL` 列会列出每种格式允许的闭区间；`fixed` 表示编码器没有可调等级，必须省略 `--level`。可调格式省略该参数时默认使用等级 6；越界时会明确报错，不会用另一个等级继续创建。`update` 至少需要一个来源或一个 `--remove`；`--remove` 使用归档内相对路径，可重复指定，删除目录时会一并删除其后代。
 
 加密操作只接受标准输入，不接受会进入进程参数和普通命令历史的明文密码参数：
 

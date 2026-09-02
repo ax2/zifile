@@ -16,6 +16,7 @@ jobs:
   rust:
     name: Rust quality gates
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - name: Repository policy
@@ -27,9 +28,41 @@ jobs:
           ./scripts/Test-SecurityDocs.ps1
           ./scripts/Test-UserDocs.ps1
           ./scripts/Test-ReleaseReadiness.ps1
+          ./scripts/Test-SignPathFoundationReadiness.ps1
+          ./packaging/msix/Test-Assets.ps1 -VerifyGenerator
+          ./packaging/store/Test-ListingAssets.ps1 -VerifyGenerator
       - name: Packaging policy smoke test
         shell: pwsh
         run: ./tests/smoke/packaging-policy.ps1
+      - name: Build-artifact cleanup smoke test
+        shell: pwsh
+        run: ./tests/smoke/build-cleanup.ps1
+      - name: PowerShell syntax checks
+        shell: pwsh
+        run: |
+          $failures = @()
+          foreach ($root in @('scripts', 'tests', 'packaging')) {
+            foreach ($file in (Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.ps1')) {
+              $tokens = $null
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                $file.FullName,
+                [ref]$tokens,
+                [ref]$errors
+              ) | Out-Null
+              if (@($errors).Count -gt 0) {
+                $failures += [pscustomobject]@{
+                  path = $file.FullName
+                  errors = @($errors | ForEach-Object Message)
+                }
+              }
+            }
+          }
+          if ($failures.Count -gt 0) {
+            $failures | ConvertTo-Json -Depth 5
+            throw 'PowerShell syntax errors detected.'
+          }
+          Write-Host "PowerShell syntax checks passed for $((Get-ChildItem scripts,tests,packaging -Recurse -File -Filter '*.ps1').Count) scripts."
       - name: Install current WinGet validation client
         shell: pwsh
         env:
@@ -53,6 +86,9 @@ jobs:
       - name: Foundation smoke test
         shell: pwsh
         run: ./tests/smoke/foundation.ps1 -SkipDesktopLaunch
+      - name: CLI contract smoke test
+        shell: pwsh
+        run: ./tests/smoke/contract-policy.ps1 -SkipBuild
       - name: Reproducibility diagnostics smoke test
         shell: pwsh
         run: ./tests/smoke/reproducibility-diagnostics.ps1
@@ -65,18 +101,55 @@ jobs:
       - name: Reference-tool interoperability
         shell: pwsh
         run: |
-          ./tests/interoperability/windows-tools.ps1 -SkipBuild
+          ./tests/interoperability/windows-tools.ps1 -SkipBuild -EvidencePath target/windows-tools-interoperability.json
+          ./tests/interoperability/cab-windows.ps1 -SkipBuild
           ./tests/interoperability/sevenzip-corpus.ps1 -SkipBuild
+          ./tests/interoperability/zip-method-corpus.ps1 -SkipBuild
+          ./tests/interoperability/zip-legacy-corpus.ps1 -SkipBuild
+          ./tests/interoperability/zip-zstd-corpus.ps1 -SkipBuild
+      - name: Upload Windows reference-tool interoperability evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-tools-interoperability
+          path: target/windows-tools-interoperability.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Upload CAB interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: cab-interoperability
+          path: target/cab-interoperability.json
+          retention-days: 30
       - name: Upload 7-Zip interoperability evidence
         uses: actions/upload-artifact@v6
         with:
           name: sevenzip-corpus
           path: target/sevenzip-corpus.json
           retention-days: 30
+      - name: Upload ZIP method interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: zip-method-corpus
+          path: target/zip-method-corpus.json
+          retention-days: 30
+      - name: Upload ZIP legacy interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: zip-legacy-corpus
+          path: target/zip-legacy-corpus.json
+          retention-days: 30
+      - name: Upload ZIP Zstandard interoperability evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: zip-zstd-corpus
+          path: target/zip-zstd-corpus.json
+          retention-days: 30
 
   rar-interoperability:
     name: RAR reference interoperability
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.93.0
@@ -97,9 +170,44 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  performance:
+    name: Rust performance benchmarks
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.93.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Run format-detection benchmark
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path target/benchmarks -Force | Out-Null
+          cargo bench -p zifile-core --bench format_detection --locked -- `
+            --noplot --sample-size 10 --save-baseline ci `
+            2>&1 | Tee-Object -FilePath target/benchmarks/format-detection.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run archive-throughput benchmark
+        shell: pwsh
+        run: |
+          cargo bench -p zifile-core --bench archive_throughput --locked -- `
+            --noplot --sample-size 10 --save-baseline ci `
+            2>&1 | Tee-Object -FilePath target/benchmarks/archive-throughput.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload performance evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: rust-performance
+          path: |
+            target/benchmarks/*
+            target/criterion
+          if-no-files-found: warn
+          retention-days: 30
+
   licenses:
     name: Dependency policy
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -107,6 +215,7 @@ jobs:
   fuzz:
     name: Fuzz targets compile
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
@@ -118,9 +227,10 @@ jobs:
   repair-helper:
     name: MSIX Repair helper
     runs-on: windows-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
           cache: true
@@ -147,6 +257,7 @@ jobs:
   docs:
     name: Documentation build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6

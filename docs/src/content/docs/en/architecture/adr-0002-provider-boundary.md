@@ -8,7 +8,7 @@ description: Isolating archive implementations behind capability-driven interfac
 
 ## Decision
 
-Every archive format is integrated through one Provider boundary. A Provider explicitly reports its browse, extract, create, test, encryption, multipart, and create-input-shape capabilities. Create input distinguishes files-and-directories from exactly one file; read-only formats such as RAR report that creation is unavailable.
+Every archive format is integrated through one Provider boundary. A Provider explicitly reports its browse, extract, create, test, encryption, multipart, and create-input-shape capabilities. Create input distinguishes files-and-directories from exactly one file; RAR reports RAR 5 creation, while CAB reports fixed-MSZIP creation without encryption.
 
 ## Consequences
 
@@ -16,5 +16,5 @@ Every archive format is integrated through one Provider boundary. A Provider exp
 - The CLI and desktop share capability and error models.
 - Both desktop UIs can reject invalid creation sources before opening a destination dialog or starting a Worker.
 - A backend with security or maintenance issues can be replaced.
-- Formats with separate compatibility or licensing questions, including RAR, remain isolated for review.
+- Formats with separate compatibility or licensing questions, including RAR and CAB's limited fixed-layout writer, remain isolated for review.
 - Benchmarks, interoperability tests, and fuzzing can run per Provider.

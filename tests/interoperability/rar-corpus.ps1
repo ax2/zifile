@@ -102,6 +102,10 @@ $rejectedCases = @(
     [ordered]@{ name = 'rar5-hardlink'; path = 'rar50/wild/hardlink.rar'; sha256 = '2A0494AFAD63DCF7A5522AFD593BDE0CB42F53744888397FEBF112C00853F3D0' },
     [ordered]@{ name = 'rar5-redirection-hardlink'; path = 'rar50/wild/rarfile_hlink.rar'; sha256 = 'C7C2DB6FB021E89198DA80D4B903D4A46B692C2F31FEC64CB53C7E37AF7A51F4' }
 )
+$malformedCases = @(
+    [ordered]@{ name = 'rar5-default-truncated-half'; source_case = 'rar5-default'; transform = 'truncate-half'; expected_rejection = 'truncated-archive'; listing_succeeds = $false },
+    [ordered]@{ name = 'rar5-default-corrupt-middle'; source_case = 'rar5-default'; transform = 'flip-middle-byte'; expected_rejection = 'corrupt-payload'; listing_succeeds = $true }
+)
 
 Push-Location $repoRoot
 try {
@@ -171,6 +175,51 @@ try {
         }
     }
 
+    foreach ($case in $malformedCases) {
+        $sourceArchive = Join-Path $testRoot ($case.source_case + '.rar')
+        $sourceBytes = [IO.File]::ReadAllBytes($sourceArchive)
+        $archive = Join-Path $testRoot ($case.name + '.rar')
+        switch ($case.transform) {
+            'truncate-half' {
+                $truncatedLength = [Math]::Max(8, [int][Math]::Floor($sourceBytes.Length / 2))
+                $truncatedBytes = [byte[]]$sourceBytes[0..($truncatedLength - 1)]
+                [IO.File]::WriteAllBytes($archive, $truncatedBytes)
+            }
+            'flip-middle-byte' {
+                $corruptedBytes = [byte[]]$sourceBytes.Clone()
+                $middle = [int][Math]::Floor($corruptedBytes.Length / 2)
+                $corruptedBytes[$middle] = $corruptedBytes[$middle] -bxor 0xFF
+                [IO.File]::WriteAllBytes($archive, $corruptedBytes)
+            }
+            default { throw "Unknown malformed RAR transformation: $($case.transform)" }
+        }
+
+        if ($case.listing_succeeds) {
+            & $cli list $archive | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "ZiFile could not list the metadata of malformed RAR case $($case.name)." }
+        }
+
+        & $cli test $archive 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { throw "ZiFile accepted malformed RAR case $($case.name) during integrity testing." }
+        $global:LASTEXITCODE = 0
+
+        $rejectedOutput = Join-Path $testRoot ($case.name + '-rejected')
+        & $cli extract $archive $rejectedOutput 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { throw "ZiFile extracted malformed RAR case $($case.name)." }
+        $global:LASTEXITCODE = 0
+        if ((Test-Path -LiteralPath $rejectedOutput) -and @(Get-ChildItem -LiteralPath $rejectedOutput -Recurse -File).Count -ne 0) {
+            throw "ZiFile wrote output for malformed RAR case $($case.name)."
+        }
+        $results += [ordered]@{
+            name = $case.name
+            derived_from = $case.source_case
+            transform = $case.transform
+            expected_rejection = $case.expected_rejection
+            archive_bytes = (Get-Item -LiteralPath $archive).Length
+            archive_sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+        }
+    }
+
     foreach ($case in $rejectedCases) {
         $archive = Join-Path $testRoot ($case.name + '.rar')
         Receive-RarFixture -RelativePath $case.path -Destination $archive
@@ -189,6 +238,51 @@ try {
             expected_rejection = 'link-or-redirection'
             archive_bytes = (Get-Item -LiteralPath $archive).Length
             archive_sha256 = $actualArchiveHash
+        }
+    }
+
+    $createdSource = Join-Path $testRoot 'created-input'
+    New-Item -ItemType Directory -Path (Join-Path $createdSource 'nested') -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $createdSource 'hello.txt') -Value 'ZiFile RAR reference' -NoNewline
+    Set-Content -LiteralPath (Join-Path $createdSource 'nested\unicode-测试.txt') -Value 'RAR 5 创建' -NoNewline
+    foreach ($createdCase in @(
+        [ordered]@{ name = 'zifile-created-rar5'; password = $null },
+        [ordered]@{ name = 'zifile-created-rar5-encrypted'; password = 'Reference password' }
+    )) {
+        $archive = Join-Path $testRoot ($createdCase.name + '.rar')
+        if ($null -eq $createdCase.password) {
+            & $cli create $archive $createdSource --format rar --level 3 | Out-Null
+        } else {
+            $createdCase.password | & $cli create $archive $createdSource --format rar --level 3 --password-stdin | Out-Null
+        }
+        if ($LASTEXITCODE -ne 0) { throw "ZiFile could not create RAR case $($createdCase.name)." }
+        $zifileOutput = Join-Path $testRoot ($createdCase.name + '-zifile')
+        if ($null -eq $createdCase.password) {
+            & $cli test $archive | Out-Null
+        } else {
+            $createdCase.password | & $cli test $archive --password-stdin | Out-Null
+        }
+        if ($LASTEXITCODE -ne 0) { throw "ZiFile could not test created RAR case $($createdCase.name)." }
+        if ($null -eq $createdCase.password) {
+            & $cli extract $archive $zifileOutput | Out-Null
+        } else {
+            $createdCase.password | & $cli extract $archive $zifileOutput --password-stdin | Out-Null
+        }
+        if ($LASTEXITCODE -ne 0) { throw "ZiFile could not extract created RAR case $($createdCase.name)." }
+        $sevenZipOutput = Join-Path $testRoot ($createdCase.name + '-7zip')
+        $sevenZipArguments = @('x', $archive, "-o$sevenZipOutput", '-y')
+        if ($null -ne $createdCase.password) { $sevenZipArguments += "-p$($createdCase.password)" }
+        & $sevenZip @sevenZipArguments | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "7-Zip could not extract created RAR case $($createdCase.name)." }
+        $count = Assert-TreesMatch -ExpectedRoot $zifileOutput -ActualRoot $sevenZipOutput
+        $results += [ordered]@{
+            name = $createdCase.name
+            source_path = 'ZiFile CLI RAR 5 writer'
+            reference_tool = '7-Zip'
+            encrypted = $null -ne $createdCase.password
+            files = $count
+            archive_bytes = (Get-Item -LiteralPath $archive).Length
+            archive_sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
         }
     }
 

@@ -6,6 +6,7 @@ param(
     [Parameter(Mandatory)][string]$ExpectedVersion,
     [Parameter(Mandatory)][string]$ExpectedIdentityName,
     [Parameter(Mandatory)][string]$ExpectedPublisher,
+    [Parameter(Mandatory)][string]$ExpectedPublisherDisplayName,
     [ValidateSet('digicert-stm')]
     [Parameter(Mandatory)][string]$Provider
 )
@@ -17,7 +18,7 @@ if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
 }
 
 $requiredFiles = @(
-    "zifile-desktop-windows-$Architecture.exe",
+    "zifile-windows-$Architecture.exe",
     "zifile-cli-windows-$Architecture.exe",
     "zifile-worker-windows-$Architecture.exe",
     "zifile-shell-windows-$Architecture.dll",
@@ -63,6 +64,7 @@ $packageAuditPath = Join-Path $directory "ZiFile-$ExpectedVersion-windows-$Archi
     -ExpectedVersion $ExpectedVersion `
     -ExpectedIdentityName $ExpectedIdentityName `
     -ExpectedPublisher $ExpectedPublisher `
+    -ExpectedPublisherDisplayName $ExpectedPublisherDisplayName `
     -ExpectedMinimumVersion '10.0.19041.0' `
     -EvidencePath $packageAuditPath `
     -RequireSignature
@@ -74,6 +76,7 @@ $evidence = [pscustomobject]@{
     expected_version = $ExpectedVersion
     identity = $ExpectedIdentityName
     publisher = $ExpectedPublisher
+    publisher_display_name = $ExpectedPublisherDisplayName
     signatures_valid = $true
     timestamped = $true
     artifacts = @($signatures)

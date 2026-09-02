@@ -33,6 +33,7 @@ $sharedTokens = @(
     'signing_provider=digicert-stm',
     'ZIFILE_MSIX_IDENTITY',
     'ZIFILE_MSIX_PUBLISHER',
+    'ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME',
     'SM_HOST',
     'SM_KEYPAIR_ALIAS',
     'SM_API_KEY',
@@ -65,7 +66,7 @@ Assert-Tokens -Path $releaseWorkflowPath -Tokens @(
     schema_version = 1
     locale_pages = 2
     shared_tokens = $sharedTokens.Count
-    credential_classes = 7
+    credential_classes = 8
     rotation_runbook = $true
     emergency_stop_runbook = $true
     revocation_runbook = $true

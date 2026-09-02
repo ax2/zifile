@@ -6,6 +6,7 @@ fn detect_extensions(criterion: &mut Criterion) {
         "release.zip",
         "source.tar.gz",
         "backup.tar.zst",
+        "compressed.tar.lzma",
         "dataset.7z",
         "legacy.rar",
     ];

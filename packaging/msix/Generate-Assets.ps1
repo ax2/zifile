@@ -1,5 +1,7 @@
 param(
-    [string]$OutputDirectory = (Join-Path $PSScriptRoot 'Assets')
+    [string]$OutputDirectory = (Join-Path $PSScriptRoot 'Assets'),
+    [string]$StoreOutputDirectory = (Join-Path $PSScriptRoot '..\store\listing-assets'),
+    [switch]$SkipStoreListingAsset
 )
 
 $ErrorActionPreference = 'Stop'
@@ -59,12 +61,83 @@ function New-ZiFileBitmap {
     return $bitmap
 }
 
-$assets = @{
+function New-ZiFileIcon {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $sizes = @(16, 24, 32, 48, 256)
+    $frames = @()
+    foreach ($size in $sizes) {
+        $bitmap = New-ZiFileBitmap -Size $size
+        $memory = [IO.MemoryStream]::new()
+        try {
+            $bitmap.Save($memory, [Drawing.Imaging.ImageFormat]::Png)
+            $frames += ,$memory.ToArray()
+        }
+        finally {
+            $memory.Dispose()
+            $bitmap.Dispose()
+        }
+    }
+
+    $stream = [IO.File]::Create($Path)
+    $writer = [IO.BinaryWriter]::new($stream)
+    try {
+        $writer.Write([uint16]0) # reserved
+        $writer.Write([uint16]1) # icon
+        $writer.Write([uint16]$frames.Count)
+        $offset = 6 + (16 * $frames.Count)
+        for ($index = 0; $index -lt $frames.Count; $index++) {
+            $size = $sizes[$index]
+            $encodedSize = if ($size -eq 256) { [byte]0 } else { [byte]$size }
+            $writer.Write($encodedSize)
+            $writer.Write($encodedSize)
+            $writer.Write([byte]0) # color count
+            $writer.Write([byte]0) # reserved
+            $writer.Write([uint16]1) # planes
+            $writer.Write([uint16]32) # bits per pixel
+            $writer.Write([uint32]$frames[$index].Length)
+            $writer.Write([uint32]$offset)
+            $offset += $frames[$index].Length
+        }
+        foreach ($frame in $frames) {
+            $writer.Write([byte[]]$frame)
+        }
+    }
+    finally {
+        $writer.Dispose()
+        $stream.Dispose()
+    }
+}
+
+$assets = [ordered]@{
     'Square44x44Logo.png' = 44
     'Square50x50Logo.png' = 50
     'Square150x150Logo.png' = 150
     'Square310x310Logo.png' = 310
     'StoreLogo.png' = 50
+
+    # Microsoft recommends 100%, 200%, and 400% package visual assets for
+    # Square44x44Logo and Square150x150Logo. StoreLogo requires all five
+    # published Store scale variants.
+    'Square44x44Logo.scale-100.png' = 44
+    'Square44x44Logo.scale-200.png' = 88
+    'Square44x44Logo.scale-400.png' = 176
+    'Square150x150Logo.scale-100.png' = 150
+    'Square150x150Logo.scale-200.png' = 300
+    'Square150x150Logo.scale-400.png' = 600
+    'StoreLogo.scale-100.png' = 50
+    'StoreLogo.scale-125.png' = 63
+    'StoreLogo.scale-150.png' = 75
+    'StoreLogo.scale-200.png' = 100
+    'StoreLogo.scale-400.png' = 200
+}
+
+$appListTargetSizes = @(16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 256)
+$appListForms = @('', '_altform-unplated', '_altform-lightunplated')
+foreach ($size in $appListTargetSizes) {
+    foreach ($form in $appListForms) {
+        $assets["Square44x44Logo.targetsize-$size$form.png"] = $size
+    }
 }
 
 foreach ($asset in $assets.GetEnumerator()) {
@@ -73,13 +146,19 @@ foreach ($asset in $assets.GetEnumerator()) {
     $bitmap.Dispose()
 }
 
-$iconBitmap = New-ZiFileBitmap -Size 256
-$iconHandle = $iconBitmap.GetHicon()
-$icon = [System.Drawing.Icon]::FromHandle($iconHandle)
-$stream = [System.IO.File]::Create((Join-Path $OutputDirectory 'ZiFile.ico'))
-$icon.Save($stream)
-$stream.Dispose()
-$icon.Dispose()
-$iconBitmap.Dispose()
+if (-not $SkipStoreListingAsset) {
+    New-Item -ItemType Directory -Path $StoreOutputDirectory -Force | Out-Null
+    $storeBitmap = New-ZiFileBitmap -Size 300
+    $storeBitmap.Save(
+        (Join-Path $StoreOutputDirectory 'AppTile300x300.png'),
+        [System.Drawing.Imaging.ImageFormat]::Png
+    )
+    $storeBitmap.Dispose()
+}
+
+New-ZiFileIcon -Path (Join-Path $OutputDirectory 'ZiFile.ico')
 
 Write-Host "Generated ZiFile package assets in $OutputDirectory"
+if (-not $SkipStoreListingAsset) {
+    Write-Host "Generated ZiFile Store listing asset in $StoreOutputDirectory"
+}

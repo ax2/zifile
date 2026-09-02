@@ -11,6 +11,11 @@ on:
         options:
           - none
           - digicert-stm
+      require_release_ready:
+        description: Require all formal 1.0, Store, and Partner Center gates before building
+        required: true
+        type: boolean
+        default: false
   push:
     tags:
       - v*
@@ -24,6 +29,7 @@ jobs:
     # Pin VS 2022 while the Windows 2025/VS 2026 image has known ARM64
     # toolset compatibility regressions.
     runs-on: windows-2022
+    timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
@@ -33,6 +39,7 @@ jobs:
       CARGO_BUILD_JOBS: 1
       ZIFILE_MSIX_IDENTITY: ${{ vars.ZIFILE_MSIX_IDENTITY }}
       ZIFILE_MSIX_PUBLISHER: ${{ vars.ZIFILE_MSIX_PUBLISHER }}
+      ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME }}
     strategy:
       fail-fast: false
       matrix:
@@ -48,21 +55,22 @@ jobs:
         shell: pwsh
         run: |
           $arguments = @{}
-          if ('${{ github.event_name }}' -ne 'workflow_dispatch') {
+          if ('${{ github.ref }}' -like 'refs/tags/v*') {
             $arguments.ExpectedVersion = '${{ github.ref_name }}'
           }
           $version = ./scripts/Test-VersionConsistency.ps1 @arguments | ConvertFrom-Json
           ./scripts/Test-ReleaseNotes.ps1 @arguments
           $readinessArguments = @{}
-          if ('${{ github.event_name }}' -ne 'workflow_dispatch' -and '${{ github.ref_name }}' -notmatch '-') {
+          if ('${{ inputs.require_release_ready }}' -eq 'true') {
             $readinessArguments.RequireReleaseReady = $true
           }
           ./scripts/Test-ReleaseReadiness.ps1 @readinessArguments
           $identityArguments = @{
             IdentityName = $env:ZIFILE_MSIX_IDENTITY
             Publisher = $env:ZIFILE_MSIX_PUBLISHER
+            PublisherDisplayName = $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME
           }
-          if ('${{ github.event_name }}' -ne 'workflow_dispatch' -or
+          if ('${{ inputs.require_release_ready }}' -eq 'true' -or
               '${{ inputs.signing_provider }}' -eq 'digicert-stm') {
             $identityArguments.RequireConfigured = $true
           }
@@ -73,7 +81,7 @@ jobs:
         if: matrix.architecture == 'x64'
         run: cargo test --workspace --all-targets --all-features --locked
       - name: Enforce tagged-release store evidence
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: inputs.require_release_ready == true
         shell: pwsh
         run: ./packaging/store/Test-Screenshots.ps1 -RequireComplete
       - name: Build MSIX and runnable executables
@@ -83,17 +91,39 @@ jobs:
             Version = '${{ steps.version.outputs.msix }}'
             Architecture = '${{ matrix.architecture }}'
           }
-          if ($env:ZIFILE_MSIX_IDENTITY) { $arguments.IdentityName = $env:ZIFILE_MSIX_IDENTITY }
-          if ($env:ZIFILE_MSIX_PUBLISHER) { $arguments.Publisher = $env:ZIFILE_MSIX_PUBLISHER }
+          $useFormalIdentity = ('${{ inputs.require_release_ready }}' -eq 'true' -or
+            '${{ inputs.signing_provider }}' -eq 'digicert-stm')
+          if ($useFormalIdentity) {
+            if ($env:ZIFILE_MSIX_IDENTITY) { $arguments.IdentityName = $env:ZIFILE_MSIX_IDENTITY }
+            if ($env:ZIFILE_MSIX_PUBLISHER) { $arguments.Publisher = $env:ZIFILE_MSIX_PUBLISHER }
+            if ($env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME) {
+              $arguments.PublisherDisplayName = $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME
+            }
+          }
           ./packaging/msix/Build-Package.ps1 @arguments
       - name: Build accessible UI candidate package
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-'))
         shell: pwsh
         run: |
           ./packaging/msix/Build-Package.ps1 `
             -Version '${{ steps.version.outputs.msix }}' `
             -Architecture '${{ matrix.architecture }}' `
             -AccessibleUi
+      - name: Smoke test standalone x64 executable
+        if: matrix.architecture == 'x64'
+        shell: pwsh
+        run: |
+          ./tests/smoke/portable-exe.ps1 `
+            -ExecutablePath "dist/ZiFile-${{ steps.version.outputs.msix }}-windows-x64/zifile-desktop.exe" `
+            -Architecture x64
+      - name: Audit standalone ARM64 executable
+        if: matrix.architecture == 'arm64'
+        shell: pwsh
+        run: |
+          ./tests/smoke/portable-exe.ps1 `
+            -ExecutablePath "dist/ZiFile-${{ steps.version.outputs.msix }}-windows-arm64/zifile-desktop.exe" `
+            -Architecture arm64 `
+            -SkipExecution
       - name: Stage release files
         shell: pwsh
         run: |
@@ -102,7 +132,7 @@ jobs:
           $source = "dist/ZiFile-$version-windows-$arch"
           $output = "artifacts-$arch"
           New-Item -ItemType Directory -Path $output -Force | Out-Null
-          Copy-Item -LiteralPath "$source/zifile-desktop.exe" -Destination "$output/zifile-desktop-windows-$arch.exe"
+          Copy-Item -LiteralPath "$source/zifile-desktop.exe" -Destination "$output/zifile-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile.exe" -Destination "$output/zifile-cli-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile-worker.exe" -Destination "$output/zifile-worker-windows-$arch.exe"
           Copy-Item -LiteralPath "$source/zifile-shell.dll" -Destination "$output/zifile-shell-windows-$arch.dll"
@@ -127,10 +157,81 @@ jobs:
           name: windows-${{ matrix.architecture }}
           path: artifacts-${{ matrix.architecture }}/*
           if-no-files-found: error
+      - name: Clean generated build directories
+        if: always()
+        shell: pwsh
+        run: ./scripts/Clean-BuildArtifacts.ps1
+
+  bundle:
+    name: Windows all-in-one MSIX bundle
+    needs: [windows, sign]
+    if: >-
+      always() &&
+      needs.windows.result == 'success' &&
+      (needs.sign.result == 'success' || needs.sign.result == 'skipped')
+    runs-on: windows-2022
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download unsigned x64 package
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-x64
+          path: release
+      - name: Download unsigned ARM64 package
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-arm64
+          path: release
+      - name: Resolve package version
+        id: version
+        shell: pwsh
+        run: |
+          $version = ./scripts/Test-VersionConsistency.ps1 | ConvertFrom-Json
+          "msix=$($version.msix_version)" >> $env:GITHUB_OUTPUT
+      - name: Download signed architecture packages
+        if: inputs.signing_provider == 'digicert-stm'
+        uses: actions/download-artifact@v7
+        with:
+          pattern: signed-windows-*
+          path: signed-release
+          merge-multiple: true
+      - name: Overlay signed MSIX packages into bundle input
+        if: inputs.signing_provider == 'digicert-stm'
+        shell: pwsh
+        run: |
+          foreach ($architecture in @('x64', 'arm64')) {
+            $name = "ZiFile-${{ steps.version.outputs.msix }}-windows-$architecture.msix"
+            $source = Join-Path 'signed-release' $name
+            $destination = Join-Path 'release' $name
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+              throw "Signed package is missing: $source"
+            }
+            Copy-Item -LiteralPath $source -Destination $destination -Force
+          }
+      - name: Build all-in-one MSIX bundle
+        shell: pwsh
+        run: |
+          $output = 'all-in-one'
+          New-Item -ItemType Directory -Path $output -Force | Out-Null
+          ./packaging/msix/Build-Bundle.ps1 `
+            -Version '${{ steps.version.outputs.msix }}' `
+            -InputDirectory release `
+            -OutputPath "$output/ZiFile-${{ steps.version.outputs.msix }}-windows.msixbundle"
+          Get-FileHash -LiteralPath (Get-ChildItem -LiteralPath $output -Filter '*.msixbundle').FullName -Algorithm SHA256 |
+            ForEach-Object { "{0}  {1}" -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf) } |
+            Set-Content -LiteralPath "$output/SHA256SUMS.txt"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: windows-all-in-one
+          path: all-in-one/*
+          if-no-files-found: error
 
   sign:
     name: Sign Windows ${{ matrix.architecture }}
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.signing_provider == 'digicert-stm'
+    if: inputs.signing_provider == 'digicert-stm'
     needs: windows
     runs-on: windows-2022
     timeout-minutes: 30
@@ -150,6 +251,7 @@ jobs:
       ZIFILE_SIGNING_PROVIDER: digicert-stm
       ZIFILE_MSIX_IDENTITY: ${{ vars.ZIFILE_MSIX_IDENTITY }}
       ZIFILE_MSIX_PUBLISHER: ${{ vars.ZIFILE_MSIX_PUBLISHER }}
+      ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME }}
       SM_HOST: ${{ vars.SM_HOST }}
       SM_API_KEY: ${{ secrets.SM_API_KEY }}
       SM_CLIENT_CERT_FILE_B64: ${{ secrets.SM_CLIENT_CERT_FILE_B64 }}
@@ -195,7 +297,7 @@ jobs:
           $source = "artifacts-$arch"
           $input = "signing-input-$arch"
           New-Item -ItemType Directory -Path $input -Force | Out-Null
-          Copy-Item -LiteralPath "$source/zifile-desktop-windows-$arch.exe" -Destination $input
+          Copy-Item -LiteralPath "$source/zifile-windows-$arch.exe" -Destination $input
           Copy-Item -LiteralPath "$source/zifile-cli-windows-$arch.exe" -Destination $input
           Copy-Item -LiteralPath "$source/zifile-worker-windows-$arch.exe" -Destination $input
           Copy-Item -LiteralPath "$source/zifile-shell-windows-$arch.dll" -Destination $input
@@ -228,7 +330,22 @@ jobs:
             -ExpectedVersion '${{ steps.version.outputs.msix }}' `
             -ExpectedIdentityName $env:ZIFILE_MSIX_IDENTITY `
             -ExpectedPublisher $env:ZIFILE_MSIX_PUBLISHER `
+            -ExpectedPublisherDisplayName $env:ZIFILE_MSIX_PUBLISHER_DISPLAY_NAME `
             -Provider $env:ZIFILE_SIGNING_PROVIDER
+      - name: Refresh signed artifact checksums
+        shell: pwsh
+        run: |
+          $arch = '${{ matrix.architecture }}'
+          $output = "artifacts-$arch"
+          $checksum = Join-Path $output "SHA256SUMS-$arch.txt"
+          Get-ChildItem -LiteralPath $output -File |
+            Where-Object { $_.FullName -ne $checksum } |
+            Sort-Object Name |
+            ForEach-Object {
+              $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              "{0}  {1}" -f $hash, $_.Name
+            } |
+            Set-Content -LiteralPath $checksum
       - name: Remove ephemeral client authentication certificate
         if: always()
         shell: pwsh
@@ -250,6 +367,7 @@ jobs:
   sbom:
     name: CycloneDX SBOM
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -278,44 +396,130 @@ jobs:
 
   publish:
     name: Publish GitHub release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [sign, sbom]
+    if: >-
+      always() &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref_name, '-') &&
+      needs.windows.result == 'success' &&
+      needs.bundle.result == 'success' &&
+      needs.sbom.result == 'success' &&
+      (needs.sign.result == 'success' || needs.sign.result == 'skipped')
+    needs: [windows, bundle, sbom, sign]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       id-token: write
       attestations: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v7
+      - name: Download x64 architecture artifacts
+        uses: actions/download-artifact@v7
         with:
-          pattern: signed-windows-*
+          name: windows-x64
           path: release
-          merge-multiple: true
-      - uses: actions/download-artifact@v7
+      - name: Download ARM64 architecture artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-arm64
+          path: release
+      - name: Download SBOM artifacts
+        uses: actions/download-artifact@v7
         with:
           name: sbom
           path: release
+      - name: Download all-in-one bundle
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-all-in-one
+          path: release
+      - name: Download signed release artifacts
+        if: inputs.signing_provider == 'digicert-stm'
+        uses: actions/download-artifact@v7
+        with:
+          pattern: signed-windows-*
+          path: signed-release
+          merge-multiple: true
+      - name: Overlay signed portable executables
+        if: inputs.signing_provider == 'digicert-stm'
+        shell: pwsh
+        run: |
+          foreach ($architecture in @('x64', 'arm64')) {
+            $name = "zifile-windows-$architecture.exe"
+            $source = Join-Path 'signed-release' $name
+            $destination = Join-Path 'release' $name
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+              throw "Signed portable executable is missing: $source"
+            }
+            Copy-Item -LiteralPath $source -Destination $destination -Force
+          }
       - name: Generate WinGet submission candidate
         shell: pwsh
         run: |
           $version = '${{ github.ref_name }}'.TrimStart('v')
-          $x64 = Get-ChildItem -LiteralPath release -Filter '*windows-x64.msix' | Select-Object -Single
-          $arm64 = Get-ChildItem -LiteralPath release -Filter '*windows-arm64.msix' | Select-Object -Single
+          $bundle = Get-ChildItem -LiteralPath release -Filter '*.msixbundle' | Select-Object -First 1
+          if (-not $bundle) {
+            throw 'Expected the all-in-one MSIX bundle artifact to be downloaded.'
+          }
           $base = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
           ./packaging/winget/Generate-Manifests.ps1 `
             -Version $version `
-            -X64InstallerUrl "$base/$($x64.Name)" `
-            -X64InstallerSha256 (Get-FileHash -LiteralPath $x64.FullName -Algorithm SHA256).Hash `
-            -Arm64InstallerUrl "$base/$($arm64.Name)" `
-            -Arm64InstallerSha256 (Get-FileHash -LiteralPath $arm64.FullName -Algorithm SHA256).Hash
+            -BundleInstallerUrl "$base/$($bundle.Name)" `
+            -BundleInstallerSha256 (Get-FileHash -LiteralPath $bundle.FullName -Algorithm SHA256).Hash
           $manifestDirectory = "target/winget/manifests/z/ZiCode/ZiFile/$version"
-          ./packaging/winget/Test-Manifests.ps1 `
-            -ManifestDirectory $manifestDirectory `
-            -Version $version `
-            -X64InstallerPath $x64.FullName `
-            -Arm64InstallerPath $arm64.FullName
-          Copy-Item -Path "$manifestDirectory/*.yaml" -Destination release
+          $verificationArguments = @{
+            ManifestDirectory = $manifestDirectory
+            Version = $version
+            BundleInstallerPath = $bundle.FullName
+          }
+          if ('${{ inputs.signing_provider }}' -eq 'none' -and
+              '${{ inputs.require_release_ready }}' -ne 'true') {
+            # Ordinary GitHub evidence intentionally uses the isolated .Dev
+            # identity; this switch is never used for a WinGet submission.
+            $verificationArguments.AllowDevelopmentIdentity = $true
+          }
+          ./packaging/winget/Test-Manifests.ps1 @verificationArguments
+          New-Item -ItemType Directory -Path release-support -Force | Out-Null
+          Copy-Item -Path "$manifestDirectory/*.yaml" -Destination release-support
+      - name: Upload WinGet submission candidate
+        uses: actions/upload-artifact@v6
+        with:
+          name: winget-manifest-candidate
+          path: release-support/*.yaml
+          if-no-files-found: error
+          retention-days: 30
+      - name: Prepare user-facing release assets
+        shell: pwsh
+        run: |
+          $public = 'public-release'
+          New-Item -ItemType Directory -Path $public -Force | Out-Null
+          $installers = @(Get-ChildItem -LiteralPath release -File | Where-Object { $_.Extension -ieq '.msixbundle' })
+          if ($installers.Count -eq 0) {
+            throw 'No all-in-one MSIX bundle was staged for the public release.'
+          }
+          $installers | Copy-Item -Destination $public -Force
+          $portableExecutables = @(Get-ChildItem -LiteralPath release -File | Where-Object {
+            $_.Name -in @(
+              'zifile-windows-x64.exe',
+              'zifile-windows-arm64.exe'
+            )
+          })
+          if ($portableExecutables.Count -ne 2) {
+            throw 'Expected one standalone x64 and one standalone ARM64 portable executable for the public release.'
+          }
+          $portableExecutables | Copy-Item -Destination $public -Force
+          Get-FileHash -LiteralPath @(
+            (Get-ChildItem -LiteralPath $public -Filter '*.msixbundle').FullName
+            (Get-ChildItem -LiteralPath $public -Filter '*.exe').FullName
+          ) -Algorithm SHA256 |
+            Sort-Object Path |
+            ForEach-Object { "{0}  {1}" -f $_.Hash.ToLowerInvariant(), (Split-Path $_.Path -Leaf) } |
+            Set-Content -LiteralPath "$public/SHA256SUMS.txt"
+      - name: Audit user-facing release assets
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          ./tests/smoke/public-release-assets.ps1 -Directory public-release -Version $version
       - name: Attest SBOM
         uses: actions/attest-build-provenance@v4
         with:
@@ -324,5 +528,60 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          files: release/*
+          body: |
+            ${{ inputs.signing_provider == 'digicert-stm' && 'This GitHub release uses the protected cloud-signing path. Verify the included SHA256SUMS file before installing; it is not a Microsoft Store-certified package.' || 'This is a public unsigned Windows build for GitHub distribution. It is not a Microsoft Store-certified package. Verify the included SHA256SUMS file before installing.' }}
+          prerelease: false
+          files: public-release/*
+
+  publish-stage:
+    name: Publish stage GitHub release
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')
+    needs: [windows, bundle, sbom]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: windows-*
+          path: release
+          merge-multiple: true
+      - uses: actions/download-artifact@v7
+        with:
+          name: sbom
+          path: release
+      - name: Prepare user-facing stage release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public-release
+          find release -maxdepth 1 -type f -iname '*.msixbundle' -exec cp -f {} public-release/ \;
+          test -n "$(find public-release -maxdepth 1 -type f -iname '*.msixbundle' -print -quit)"
+          for executable in \
+            zifile-windows-x64.exe \
+            zifile-windows-arm64.exe; do
+            test -f "release/$executable"
+            cp -f "release/$executable" public-release/
+          done
+          (cd public-release && sha256sum ./*.msixbundle ./*.exe) > public-release/SHA256SUMS.txt
+      - name: Audit user-facing stage assets
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          ./tests/smoke/public-release-assets.ps1 -Directory public-release -Version $version
+      - name: Attest stage build assets
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: release/*
+      - name: Publish stage GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          body: |
+            Free code signing provided by SignPath.io, certificate by SignPath Foundation.
+          prerelease: true
+          files: public-release/*

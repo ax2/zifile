@@ -10,7 +10,7 @@ members = [
 resolver = "3"
 
 [workspace.package]
-version = "0.1.0-alpha.1"
+version = "0.1.15"
 edition = "2024"
 rust-version = "1.93"
 authors = ["ZiCode <ax2@zicode.com>"]
@@ -22,6 +22,7 @@ homepage = "https://ax2.github.io/zifile/"
 clap = { version = "4.6.6", features = ["derive"] }
 criterion = { version = "0.8.2", features = ["html_reports"] }
 dioxus = { version = "0.7.10", default-features = false, features = ["desktop", "minimal"] }
+dioxus-document = "0.7.10"
 dioxus-html = "0.7.10"
 tokio = { version = "1.53.1", features = ["rt", "time"] }
 iced = { version = "0.14.0", features = ["tokio"] }
@@ -29,9 +30,10 @@ rfd = "0.17.2"
 rars = "0.9.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10.9"
 sys-locale = "0.3.2"
 thiserror = "2.0.20"
-zip = "8.2.0"
+zip = { version = "8.2.0", features = ["legacy-zip"] }
 sevenz-rust2 = { version = "0.22.0", features = ["deflate"] }
 tar = { version = "0.4.46", default-features = false }
 flate2 = "1.1.9"
@@ -39,14 +41,19 @@ zstd = "0.13.3"
 xz2 = { version = "0.1.7", features = ["static"] }
 bzip2 = "0.6.1"
 lz4_flex = "0.14.0"
+lzma-rust2 = { version = "0.20.0", default-features = false, features = ["encoder", "std"] }
 brotli = "8.0.4"
+cab = "0.6.0"
 walkdir = "2.5.0"
 tempfile = "3.27.0"
+filetime = "0.2.29"
+time = "0.3.55"
 winresource = "0.1.31"
 windows = "0.62.2"
 windows-core = "0.62.2"
-zifile-core = { path = "crates/zifile-core", version = "0.1.0-alpha.1" }
-zifile-worker-protocol = { path = "crates/zifile-worker-protocol", version = "0.1.0-alpha.1" }
+zifile-core = { path = "crates/zifile-core", version = "0.1.15" }
+zifile-worker-protocol = { path = "crates/zifile-worker-protocol", version = "0.1.15" }
+zifile-worker = { path = "apps/zifile-worker", version = "0.1.15" }
 
 [profile.release]
 codegen-units = 1

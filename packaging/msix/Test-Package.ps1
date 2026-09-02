@@ -6,6 +6,7 @@ param(
     [Parameter(Mandatory)][string]$ExpectedVersion,
     [Parameter(Mandatory)][string]$ExpectedIdentityName,
     [Parameter(Mandatory)][string]$ExpectedPublisher,
+    [Parameter(Mandatory)][string]$ExpectedPublisherDisplayName,
     [Parameter(Mandatory)][string]$ExpectedMinimumVersion,
     [string]$EvidencePath,
     [switch]$RequireSignature
@@ -97,6 +98,14 @@ try {
     if ($identity.Publisher -cne $ExpectedPublisher) {
         throw "Publisher mismatch: expected '$ExpectedPublisher', found '$($identity.Publisher)'."
     }
+    $publisherDisplayName = $manifest.SelectSingleNode(
+        '/f:Package/f:Properties/f:PublisherDisplayName',
+        $namespace
+    )
+    if (-not $publisherDisplayName) { throw 'MSIX manifest has no PublisherDisplayName.' }
+    if ($publisherDisplayName.InnerText -cne $ExpectedPublisherDisplayName) {
+        throw "PublisherDisplayName mismatch: expected '$ExpectedPublisherDisplayName', found '$($publisherDisplayName.InnerText)'."
+    }
     if ($identity.Version -cne $ExpectedVersion) {
         throw "Version mismatch: expected '$ExpectedVersion', found '$($identity.Version)'."
     }
@@ -132,6 +141,16 @@ try {
         }
         $machineEvidence[$relativePath] = ('0x{0:X4}' -f $machine)
     }
+    $embeddedIconAuditPath = Join-Path $PSScriptRoot 'Test-EmbeddedIcon.ps1'
+    if (-not (Test-Path -LiteralPath $embeddedIconAuditPath -PathType Leaf)) {
+        throw 'The embedded desktop icon audit is unavailable during package audit.'
+    }
+    $embeddedIconEvidence = & $embeddedIconAuditPath `
+        -ExecutablePath (Join-Path $auditRoot 'ZiFile\zifile-desktop.exe') | ConvertFrom-Json
+    if (-not $embeddedIconEvidence.validated -or $embeddedIconEvidence.frame_count -ne 5 -or
+        (@($embeddedIconEvidence.frames | ForEach-Object size) -join ',') -cne '16,24,32,48,256') {
+        throw 'Packaged desktop executable did not pass the reviewed embedded icon audit.'
+    }
 
     $alias = $manifest.SelectSingleNode(
         "//uap3:AppExecutionAlias/desktop:ExecutionAlias[@Alias='zifile.exe']",
@@ -153,13 +172,35 @@ try {
             $namespace
         ) | ForEach-Object { $_.Type }
     )
-    foreach ($itemType in @('*', 'Directory')) {
+    foreach ($itemType in @('*', 'Directory', 'Directory\Background')) {
         if ($shellItemTypes -cnotcontains $itemType) {
             throw "MSIX manifest is missing ZiFile shell command item type: $itemType"
         }
     }
+    $extractShellClsid = '2D39AD2E-1B36-4F4F-8E09-589F0B1D2BC3'
+    $extractShellClass = $manifest.SelectSingleNode(
+        "//com:SurrogateServer/com:Class[@Id='$extractShellClsid']",
+        $namespace
+    )
+    if (-not $extractShellClass -or $extractShellClass.Path -cne 'ZiFile\zifile-shell.dll' -or
+        $extractShellClass.ThreadingModel -cne 'STA') {
+        throw 'MSIX manifest does not register the ZiFile extract STA shell COM class.'
+    }
+    $extractShellItemTypes = @(
+        $manifest.SelectNodes(
+            "//desktop4:FileExplorerContextMenus/desktop5:ItemType[desktop5:Verb[@Clsid='$extractShellClsid']]",
+            $namespace
+        ) | ForEach-Object { $_.Type }
+    )
+    if ($extractShellItemTypes -cnotcontains '*') {
+        throw 'MSIX manifest does not register the ZiFile extract command for file selections.'
+    }
 
-    $requiredExtensions = @('.zip', '.7z', '.rar', '.tar', '.gz', '.tgz', '.zst', '.xz', '.bz2', '.lz4', '.br')
+    $requiredExtensions = @(
+        '.zip', '.zipx', '.7z', '.cbz', '.cb7', '.rar', '.cbr', '.cab', '.tar', '.cbt',
+        '.gz', '.tgz', '.zst', '.tzst', '.xz', '.txz', '.lzma', '.bz', '.bz2', '.tbz',
+        '.tbz2', '.lz4', '.br'
+    )
     $declaredExtensions = @(
         $manifest.SelectNodes('//uap:FileTypeAssociation/uap:SupportedFileTypes/uap:FileType', $namespace) |
             ForEach-Object { $_.InnerText }
@@ -168,6 +209,47 @@ try {
         if ($declaredExtensions -cnotcontains $extension) {
             throw "MSIX manifest is missing file association: $extension"
         }
+    }
+
+    $assetCatalogPath = Join-Path $PSScriptRoot 'assets.json'
+    if (-not (Test-Path -LiteralPath $assetCatalogPath -PathType Leaf)) {
+        throw 'The reviewed MSIX asset catalog is unavailable during package audit.'
+    }
+    $assetCatalog = Get-Content -Raw -LiteralPath $assetCatalogPath | ConvertFrom-Json
+    if ($assetCatalog.schema_version -ne 2) {
+        throw 'The reviewed MSIX asset catalog schema is unsupported during package audit.'
+    }
+    $packagedAssetEvidence = @()
+    foreach ($asset in @($assetCatalog.assets)) {
+        $packagedAssetPath = Join-Path $auditRoot (Join-Path 'Assets' ([string]$asset.name))
+        if (-not (Test-Path -LiteralPath $packagedAssetPath -PathType Leaf)) {
+            throw "MSIX package is missing reviewed visual asset: $($asset.name)"
+        }
+        $packagedAssetHash = (Get-FileHash -LiteralPath $packagedAssetPath -Algorithm SHA256).Hash
+        if ($packagedAssetHash -cne [string]$asset.sha256) {
+            throw "MSIX package visual asset differs from its reviewed hash: $($asset.name)"
+        }
+        $packagedAssetEvidence += [pscustomobject]@{
+            name = [string]$asset.name
+            sha256 = $packagedAssetHash
+        }
+    }
+    if ($packagedAssetEvidence.Count -ne 58) {
+        throw "MSIX package must contain 58 reviewed PNG assets, found $($packagedAssetEvidence.Count)."
+    }
+    $reviewedIcon = $assetCatalog.icon
+    $packagedIconPath = Join-Path $auditRoot (Join-Path 'Assets' ([string]$reviewedIcon.name))
+    if (-not (Test-Path -LiteralPath $packagedIconPath -PathType Leaf)) {
+        throw "MSIX package is missing reviewed desktop icon: $($reviewedIcon.name)"
+    }
+    $packagedIconHash = (Get-FileHash -LiteralPath $packagedIconPath -Algorithm SHA256).Hash
+    if ($packagedIconHash -cne [string]$reviewedIcon.sha256) {
+        throw "MSIX package desktop icon differs from its reviewed hash: $($reviewedIcon.name)"
+    }
+    $packagedIconEvidence = [pscustomobject]@{
+        name = [string]$reviewedIcon.name
+        frames = @($reviewedIcon.frames)
+        sha256 = $packagedIconHash
     }
 
     $forbiddenFiles = @(Get-ChildItem -LiteralPath $auditRoot -Recurse -File | Where-Object {
@@ -188,17 +270,25 @@ try {
         sha256 = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash
         identity = $identity.Name
         publisher = $identity.Publisher
+        publisher_display_name = $publisherDisplayName.InnerText
         version = $identity.Version
         architecture = $identity.ProcessorArchitecture
         minimum_windows_version = $targetFamily.MinVersion
         pe_machines = $machineEvidence
         file_associations = $declaredExtensions
+        reviewed_visual_assets = $packagedAssetEvidence
+        reviewed_desktop_icon = $packagedIconEvidence
+        embedded_desktop_icon = $embeddedIconEvidence
         app_execution_alias = 'zifile.exe'
         shell_extension = [pscustomobject]@{
             clsid = $shellClsid
             path = $shellClass.Path
             threading_model = $shellClass.ThreadingModel
             item_types = $shellItemTypes
+            extract_clsid = $extractShellClsid
+            extract_path = $extractShellClass.Path
+            extract_threading_model = $extractShellClass.ThreadingModel
+            extract_item_types = $extractShellItemTypes
         }
         forbidden_file_count = $forbiddenFiles.Count
         signature_required = [bool]$RequireSignature

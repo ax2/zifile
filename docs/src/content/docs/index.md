@@ -19,7 +19,7 @@ hero:
 
 ZiFile 由 ZiCode 发起，采用 MIT 协议。首个版本聚焦安全地浏览、创建和解压主流压缩格式，长期扩展为一组可信赖的文件操作能力。
 
-当前处于 **Stage 1 — Alpha 开发**：ZIP、7z、TAR 组合和主要单流格式已经打通真实创建、浏览、完整性校验与安全解压；桌面 UI 和 CLI 共用同一套 Rust 核心。任务取消、隔离 Worker、Windows 集成、安装签名与上架认证仍在推进。
+当前处于 **Stage 4 — 公开版本与 1.0 准备**：ZIP、7z、RAR 5、TAR 组合、Windows CAB（固定 MSZIP 创建）和主要单流格式已经打通真实创建、浏览、完整性校验与安全解压；RAR 1.3–7 提供 Beta 支持。桌面 UI 和 CLI 共用同一套 Rust 核心，x64/ARM64 构建、包审计、可复现性检查和发布演练已经自动化；可信签名、真实前台验证、实体 ARM64、WACK、Partner Center、Store 与 WinGet 仍是 1.0 外部门禁。
 
 第一次使用请从[快速上手](/zifile/guides/getting-started/)开始；遇到格式、安全拒绝、Worker 或开发包问题时参阅[故障排查](/zifile/guides/troubleshooting/)。
 

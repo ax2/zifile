@@ -420,13 +420,29 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'cargo -V failed' }
     $commit = (& git -C $repository rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0) { throw 'git rev-parse HEAD failed' }
-    $dirty = -not [string]::IsNullOrWhiteSpace((& git -C $repository status --porcelain) -join "`n")
+    $dirtyEntries = @(& git -C $repository status --porcelain=v1 --untracked-files=all)
+    if ($LASTEXITCODE -ne 0) { throw 'git status failed' }
+    $untrackedEntries = @(
+        $dirtyEntries |
+            Where-Object { $_ -match '^\?\? ' }
+    )
+    $contentDirty = $false
+    if ($dirtyEntries.Count -gt 0) {
+        & git -C $repository diff --quiet --ignore-space-at-eol --
+        $contentDirty = $LASTEXITCODE -ne 0
+    }
+    $lineEndingOnlyDirty = $dirtyEntries.Count -gt 0 -and
+        -not $contentDirty -and
+        $untrackedEntries.Count -eq 0
+    $dirty = $contentDirty -or $untrackedEntries.Count -gt 0
 
     $evidence = [ordered]@{
         schema_version = 2
         generated_at_utc = [DateTime]::UtcNow.ToString('o')
         source_commit = $commit
         source_dirty = $dirty
+        source_dirty_entries = $dirtyEntries
+        source_line_ending_only_entries = if ($lineEndingOnlyDirty) { $dirtyEntries } else { @() }
         architecture = $Architecture
         target_triple = $targetTriple
         command = "cargo build --workspace --release --locked --all-features --jobs 1 --target $targetTriple"
@@ -438,7 +454,7 @@ try {
         cargo = $cargoVersion
         builds = 2
         artifacts = @($comparisons)
-        reproducible = $allMatch
+        reproducible = $allMatch -and -not $dirty
     }
     $evidence | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $EvidencePath -Encoding utf8
     Write-Host "Reproducibility evidence: $EvidencePath"
@@ -447,6 +463,9 @@ try {
     }
     if (-not $allMatch) {
         throw 'One or more release artifacts differ between isolated builds.'
+    }
+    if ($dirty) {
+        throw "The source checkout is dirty: $($dirtyEntries -join '; ')"
     }
 } finally {
     if ($null -eq $originalTargetDirectory) {

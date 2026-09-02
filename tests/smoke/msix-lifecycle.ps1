@@ -9,6 +9,7 @@ param(
     [Parameter(Mandatory)][string]$UpgradeVersion,
     [Parameter(Mandatory)][string]$IdentityName,
     [Parameter(Mandatory)][string]$Publisher,
+    [Parameter(Mandatory)][string]$PublisherDisplayName,
     [Parameter(Mandatory)][string]$MinimumWindowsVersion,
     [string]$EvidencePath,
     [string]$RepairHelper,
@@ -65,6 +66,7 @@ function Invoke-PackageAudit {
         -ExpectedVersion $Version `
         -ExpectedIdentityName $IdentityName `
         -ExpectedPublisher $Publisher `
+        -ExpectedPublisherDisplayName $PublisherDisplayName `
         -ExpectedMinimumVersion $MinimumWindowsVersion `
         -RequireSignature
     if ($LASTEXITCODE -ne 0) {
@@ -100,8 +102,10 @@ function Assert-InstalledVersion {
 
 $baselineAudit = Invoke-PackageAudit -Path $baseline -Version $BaselineVersion
 $upgradeAudit = Invoke-PackageAudit -Path $upgrade -Version $UpgradeVersion
-if ($baselineAudit.identity -cne $upgradeAudit.identity -or $baselineAudit.publisher -cne $upgradeAudit.publisher) {
-    throw 'Baseline and upgrade packages do not share the same identity and publisher.'
+if ($baselineAudit.identity -cne $upgradeAudit.identity -or
+    $baselineAudit.publisher -cne $upgradeAudit.publisher -or
+    $baselineAudit.publisher_display_name -cne $upgradeAudit.publisher_display_name) {
+    throw 'Baseline and upgrade packages do not share the same identity, publisher, and publisher display name.'
 }
 
 $preExisting = @(Get-InstalledIdentity)
@@ -233,6 +237,7 @@ $evidence = [ordered]@{
     generated_at_utc = [DateTime]::UtcNow.ToString('o')
     identity = $IdentityName
     publisher = $Publisher
+    publisher_display_name = $PublisherDisplayName
     architecture = $Architecture
     baseline = [ordered]@{
         version = $BaselineVersion
