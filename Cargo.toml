@@ -42,7 +42,7 @@ xz2 = { version = "0.1.7", features = ["static"] }
 bzip2 = "0.6.1"
 lz4_flex = "0.14.0"
 lzma-rust2 = { version = "0.20.0", default-features = false, features = ["encoder", "std"] }
-brotli = "8.0.4"
+brotli = "9.0.0"
 cab = "0.6.0"
 walkdir = "2.5.0"
 tempfile = "3.27.0"
