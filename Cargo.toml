@@ -37,7 +37,7 @@ zip = { version = "8.2.0", features = ["legacy-zip"] }
 sevenz-rust2 = { version = "0.22.0", features = ["deflate"] }
 tar = { version = "0.4.46", default-features = false }
 flate2 = "1.1.9"
-zstd = "0.13.3"
+zstd = "0.14.0"
 xz2 = { version = "0.1.7", features = ["static"] }
 bzip2 = "0.6.1"
 lz4_flex = "0.14.0"
