@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use crate::i18n::Locale;
+use zifile_core::ArchiveFormat;
 
 pub const MAX_RECENT_ARCHIVES: usize = 8;
 
@@ -11,6 +12,8 @@ pub struct AppSettings {
     pub locale: Locale,
     pub dark: bool,
     pub recent_archives: Vec<PathBuf>,
+    pub default_create_format: ArchiveFormat,
+    pub default_compression_level: u8,
 }
 
 impl Default for AppSettings {
@@ -19,6 +22,8 @@ impl Default for AppSettings {
             locale: Locale::detect(),
             dark: true,
             recent_archives: Vec::new(),
+            default_create_format: ArchiveFormat::Zip,
+            default_compression_level: 6,
         }
     }
 }
@@ -46,6 +51,19 @@ impl AppSettings {
                 ("language", "en-US") => self.locale = Locale::En,
                 ("theme", "light") => self.dark = false,
                 ("theme", "dark") => self.dark = true,
+                ("default_create_format", encoded) => {
+                    if let Some(format) = parse_format(encoded) {
+                        self.default_create_format = format;
+                        self.default_compression_level =
+                            format.clamp_compression_level(self.default_compression_level);
+                    }
+                }
+                ("default_compression_level", encoded) => {
+                    if let Ok(level) = encoded.parse::<u8>() {
+                        self.default_compression_level =
+                            self.default_create_format.clamp_compression_level(level);
+                    }
+                }
                 ("recent_archive", encoded) if self.recent_archives.len() < MAX_RECENT_ARCHIVES => {
                     if let Some(path) = decode_path(encoded)
                         && !self
@@ -113,7 +131,12 @@ impl AppSettings {
 
     fn contents(&self) -> String {
         let theme = if self.dark { "dark" } else { "light" };
-        let mut contents = format!("language={}\ntheme={theme}\n", self.locale.code());
+        let mut contents = format!(
+            "language={}\ntheme={theme}\ndefault_create_format={}\ndefault_compression_level={}\n",
+            self.locale.code(),
+            format_key(self.default_create_format),
+            self.default_compression_level,
+        );
         for path in &self.recent_archives {
             contents.push_str("recent_archive=");
             contents.push_str(&encode_path(path));
@@ -121,6 +144,35 @@ impl AppSettings {
         }
         contents
     }
+}
+
+fn format_key(format: ArchiveFormat) -> &'static str {
+    match format {
+        ArchiveFormat::Zip => "zip",
+        ArchiveFormat::SevenZip => "seven-zip",
+        ArchiveFormat::Tar => "tar",
+        ArchiveFormat::TarGzip => "tar-gzip",
+        ArchiveFormat::TarZstd => "tar-zstd",
+        ArchiveFormat::TarXz => "tar-xz",
+        ArchiveFormat::TarLzma => "tar-lzma",
+        ArchiveFormat::TarBzip2 => "tar-bzip2",
+        ArchiveFormat::TarLz4 => "tar-lz4",
+        ArchiveFormat::Gzip => "gzip",
+        ArchiveFormat::Zstandard => "zstandard",
+        ArchiveFormat::Xz => "xz",
+        ArchiveFormat::Lzma => "lzma",
+        ArchiveFormat::Bzip2 => "bzip2",
+        ArchiveFormat::Lz4 => "lz4",
+        ArchiveFormat::Brotli => "brotli",
+        ArchiveFormat::Rar => "rar",
+        ArchiveFormat::Cab => "cab",
+    }
+}
+
+fn parse_format(value: &str) -> Option<ArchiveFormat> {
+    ArchiveFormat::ALL
+        .into_iter()
+        .find(|format| format_key(*format) == value)
 }
 
 fn encode_path(path: &Path) -> String {
@@ -214,6 +266,8 @@ mod tests {
             locale: Locale::En,
             dark: true,
             recent_archives: Vec::new(),
+            default_create_format: ArchiveFormat::Zip,
+            default_compression_level: 6,
         };
         settings.apply_contents("language=zh-CN\ntheme=light\nfuture=value\n");
         assert_eq!(settings.locale, Locale::ZhCn);
@@ -226,8 +280,13 @@ mod tests {
             locale: Locale::ZhCn,
             dark: false,
             recent_archives: Vec::new(),
+            default_create_format: ArchiveFormat::SevenZip,
+            default_compression_level: 9,
         };
-        assert_eq!(settings.contents(), "language=zh-CN\ntheme=light\n");
+        assert_eq!(
+            settings.contents(),
+            "language=zh-CN\ntheme=light\ndefault_create_format=seven-zip\ndefault_compression_level=9\n"
+        );
     }
 
     #[test]
@@ -240,13 +299,15 @@ mod tests {
             locale: Locale::ZhCn,
             dark: false,
             recent_archives: Vec::new(),
+            default_create_format: ArchiveFormat::Zip,
+            default_compression_level: 6,
         }
         .save_to_path(&path)
         .unwrap();
 
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
-            "language=zh-CN\ntheme=light\n"
+            "language=zh-CN\ntheme=light\ndefault_create_format=zip\ndefault_compression_level=6\n"
         );
         assert!(!path.with_extension("conf.tmp").exists());
     }
@@ -258,6 +319,8 @@ mod tests {
             locale: Locale::ZhCn,
             dark: true,
             recent_archives: Vec::new(),
+            default_create_format: ArchiveFormat::Zip,
+            default_compression_level: 6,
         };
         settings.record_recent_archive(path.clone());
         let contents = settings.contents();

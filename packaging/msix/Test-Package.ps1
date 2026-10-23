@@ -177,6 +177,26 @@ try {
             throw "MSIX manifest is missing ZiFile shell command item type: $itemType"
         }
     }
+    $quickCreateShellClsid = '6F5F0F9D-4C3E-4A6A-9F16-6BFF5C1E2D77'
+    $quickCreateShellClass = $manifest.SelectSingleNode(
+        "//com:SurrogateServer/com:Class[@Id='$quickCreateShellClsid']",
+        $namespace
+    )
+    if (-not $quickCreateShellClass -or $quickCreateShellClass.Path -cne 'ZiFile\zifile-shell.dll' -or
+        $quickCreateShellClass.ThreadingModel -cne 'STA') {
+        throw 'MSIX manifest does not register the ZiFile quick-create STA shell COM class.'
+    }
+    $quickCreateItemTypes = @(
+        $manifest.SelectNodes(
+            "//desktop4:FileExplorerContextMenus/desktop5:ItemType[desktop5:Verb[@Clsid='$quickCreateShellClsid']]",
+            $namespace
+        ) | ForEach-Object { $_.Type }
+    )
+    foreach ($itemType in @('*', 'Directory', 'Directory\Background')) {
+        if ($quickCreateItemTypes -cnotcontains $itemType) {
+            throw "MSIX manifest is missing ZiFile quick-create item type: $itemType"
+        }
+    }
     $extractShellClsid = '2D39AD2E-1B36-4F4F-8E09-589F0B1D2BC3'
     $extractShellClass = $manifest.SelectSingleNode(
         "//com:SurrogateServer/com:Class[@Id='$extractShellClsid']",
@@ -289,6 +309,10 @@ try {
             extract_path = $extractShellClass.Path
             extract_threading_model = $extractShellClass.ThreadingModel
             extract_item_types = $extractShellItemTypes
+            quick_create_clsid = $quickCreateShellClsid
+            quick_create_path = $quickCreateShellClass.Path
+            quick_create_threading_model = $quickCreateShellClass.ThreadingModel
+            quick_create_item_types = $quickCreateItemTypes
         }
         forbidden_file_count = $forbiddenFiles.Count
         signature_required = [bool]$RequireSignature

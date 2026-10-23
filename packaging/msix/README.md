@@ -77,7 +77,8 @@ Implemented packaging features:
 - complete runnable directories and standalone EXEs without ZIP output; the desktop EXE embeds the Worker protocol runtime;
 - the architecture-matched `zifile-worker.exe` beside the desktop executable and inside MSIX.
 - an architecture-matched Rust `IExplorerCommand` COM DLL registered for the Windows 11 modern
-  File Explorer menu, with its CLSID, item types and PE machine covered by the package audit.
+  File Explorer menu, with its CLSIDs, item types and PE machine covered by the package audit;
+  the menu provides both a UI-assisted create command and a direct quick-create command.
 
 The desktop executable embeds the Worker protocol runtime and launches itself in an internal
 worker mode for archive operations. GitHub Release therefore publishes one standalone
@@ -107,7 +108,10 @@ defined in `docs/src/content/docs/development/signing-operations.md` and machine
 The MSIX also registers `zifile.exe` as an App Execution Alias. Users can disable aliases in
 Windows Settings, so automation must not assume that the alias is always enabled. The packaged
 shell DLL exposes “Create archive with ZiFile” for files, directories, and folder backgrounds, then launches the
-desktop create page with the selected paths. A second command is visible for one supported archive
+desktop create page with the selected paths. “Quickly create archive with ZiFile” uses the saved
+format and compression-level defaults and creates an archive without opening the UI; selected
+items are written beside the first source, while a folder-background invocation archives the
+current directory's immediate children into that directory. A second command is visible for one supported archive
 and launches `--extract-here`; EPUB is included because it is inspected as ZIP content, while it is
 not registered as the default `.epub` app. After signature-first listing, the desktop extracts all regular files
 to a sibling folder matching the archive stem with rename-on-conflict behavior. Encrypted archives

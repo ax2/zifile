@@ -57,6 +57,8 @@ CLI 密码单测覆盖显式 opt-in、CRLF/LF 删除、前后空格保留和缺�
 
 `tests/performance/operation-queue-foreground.ps1` 使用 100,000 条目 ZIP 在真实前台会话验证 FIFO、取消当前项、继续下一项、清空等待项和 Worker 回收；它支持默认 Iced 与可访问 Dioxus 候选并同时识别中英文 UI。`tests/performance/extraction-cancellation-foreground.ps1` 使用确定大小的多条目 ZIP，通过 `--extract-here` 启动真实解压取消流程，检查 Worker 退出，并确认已提交的文件都是完整条目大小、没有部分输出文件。两者都必须在未被用户占用的交互桌面运行；缺少语义 Document UIA 树或未运行前台会话时，证据保持未完成。
 
+`tests/smoke/portable-exe.ps1` 除了通过内置 Worker 验证独立 EXE 的创建、列出和解压，还用隔离的 `LOCALAPPDATA` 启动同一个桌面 EXE 的 `--quick-create` 与 `--quick-create-here` 入口，确认默认 ZIP 参数、选中来源和文件夹背景来源都能在无主界面的情况下生成可读取归档。该检查随 x64 发布构建运行；ARM64 在没有可执行硬件的 runner 上只做 PE 架构审计。
+
 核心测试 `active_cancellation_does_not_commit_a_partial_zip_output` 在首个解压进度数据块后取消 ZIP 解压，要求返回 `Cancelled` 且原子目标文件不存在；本地重复五次通过。该单测增强了核心层证据，但不能替代真实桌面队列验收。
 
 创建流程的路径回归会拒绝与来源相同或位于来源目录内部的目标，先解析已存在祖先目录并进行 Windows 大小写无关的路径关系判断，再创建目标父目录；因此不会把临时输出重新遍历为输入，也不会在可恢复错误上留下空目录。

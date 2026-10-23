@@ -11,6 +11,7 @@
 )]
 
 use std::collections::HashSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -71,9 +72,31 @@ const SECURITY_HEAD: &str = r#"<meta http-equiv="Content-Security-Policy" conten
 const CREATE_FORMATS: [ArchiveFormat; 18] = ArchiveFormat::CREATABLE;
 
 fn main() {
-    if std::env::args_os().any(|argument| argument == zifile_worker::WORKER_MODE_ARGUMENT) {
+    let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
+    if arguments
+        .iter()
+        .any(|argument| argument == zifile_worker::WORKER_MODE_ARGUMENT)
+    {
         zifile_worker::run_process();
         return;
+    }
+    match startup::parse(arguments) {
+        StartupRequest::QuickCreate(sources) => {
+            if let Err(error) = run_quick_create(sources, None, None) {
+                show_quick_create_error(&error.to_string());
+            }
+            return;
+        }
+        StartupRequest::QuickCreateHere(directory) => {
+            if let Err(error) = run_quick_create_here(directory) {
+                show_quick_create_error(&error.to_string());
+            }
+            return;
+        }
+        StartupRequest::Home
+        | StartupRequest::OpenArchive(_)
+        | StartupRequest::ExtractHere(_)
+        | StartupRequest::CreateFrom(_) => {}
     }
     use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
     let window = WindowBuilder::new()
@@ -90,6 +113,93 @@ fn main() {
                 .with_navigation_handler(|_| false),
         )
         .launch(App);
+}
+
+fn run_quick_create(
+    sources: Vec<PathBuf>,
+    output_directory: Option<PathBuf>,
+    name_hint: Option<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if sources.is_empty() {
+        return Err("at least one source is required".into());
+    }
+    let settings = AppSettings::load();
+    let format = settings.default_create_format;
+    let output_directory =
+        output_directory.unwrap_or_else(|| startup::default_create_output_directory(&sources));
+    if !output_directory.is_dir() {
+        return Err(format!(
+            "the output directory does not exist: {}",
+            output_directory.display()
+        )
+        .into());
+    }
+    let stem = name_hint
+        .as_deref()
+        .and_then(Path::file_name)
+        .or_else(|| {
+            (sources.len() == 1)
+                .then(|| sources.first().and_then(|source| source.file_stem()))
+                .flatten()
+        })
+        .map(|value| value.to_string_lossy().into_owned())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "archive".to_owned());
+    let destination = quick_create_destination(&output_directory, &stem, format);
+    let request = WorkerRequest::Create {
+        sources,
+        destination,
+        format,
+        compression_level: format.clamp_compression_level(settings.default_compression_level),
+        password: None,
+    };
+    run_worker(
+        request,
+        OperationProgress::default(),
+        CancellationToken::default(),
+    )
+    .map(|_| ())
+    .map_err(|error| error.into())
+}
+
+fn run_quick_create_here(directory: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    if !directory.is_dir() {
+        return Err(format!(
+            "the current directory does not exist: {}",
+            directory.display()
+        )
+        .into());
+    }
+    let sources = fs::read_dir(&directory)?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()?;
+    if sources.is_empty() {
+        return Err("the current directory has no items to archive".into());
+    }
+    run_quick_create(sources, Some(directory.clone()), Some(directory))
+}
+
+fn quick_create_destination(directory: &Path, stem: &str, format: ArchiveFormat) -> PathBuf {
+    let extension = format.canonical_extension();
+    let first = directory.join(format!("{stem}.{extension}"));
+    if !first.exists() {
+        return first;
+    }
+    for suffix in 2..=10_000 {
+        let candidate = directory.join(format!("{stem} ({suffix}).{extension}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    directory.join(format!("{stem}-new.{extension}"))
+}
+
+fn show_quick_create_error(message: &str) {
+    let _ = rfd::MessageDialog::new()
+        .set_title("ZiFile")
+        .set_description(message)
+        .set_level(rfd::MessageLevel::Error)
+        .show();
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,6 +273,7 @@ struct UiState {
     password_visible: bool,
     conflict: ConflictPolicy,
     create_sources: Vec<PathBuf>,
+    create_output_directory: PathBuf,
     create_format: ArchiveFormat,
     create_password: String,
     create_password_confirmation: String,
@@ -210,12 +321,15 @@ impl Default for UiState {
             password_visible: false,
             conflict: ConflictPolicy::Rename,
             create_sources: Vec::new(),
-            create_format: ArchiveFormat::Zip,
+            create_output_directory: startup::default_create_output_directory(&[]),
+            create_format: settings.default_create_format,
             create_password: String::new(),
             create_password_confirmation: String::new(),
             create_password_confirmation_touched: false,
             create_password_visible: false,
-            compression_level: 6,
+            compression_level: settings
+                .default_create_format
+                .clamp_compression_level(settings.default_compression_level),
             status: settings.locale.text(Text::Ready).to_owned(),
             status_kind: StatusKind::Informational,
             busy: false,
@@ -315,8 +429,11 @@ fn App() -> Element {
                 StartupRequest::CreateFrom(sources) => {
                     let mut value = state.write();
                     value.page = Page::Create;
+                    value.create_output_directory =
+                        startup::default_create_output_directory(&sources);
                     append_unique(&mut value.create_sources, sources);
                 }
+                StartupRequest::QuickCreate(_) | StartupRequest::QuickCreateHere(_) => {}
             }
         }
     });
@@ -982,14 +1099,23 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
     let show_password_mismatch = view.create_password_confirmation_touched && password_mismatch;
     rsx! { section { class: "create-page", "aria-labelledby": "create-title",
         div { class: "page-heading", div { h2 { id: "create-title", {locale.text(Text::CreateHeading)} } p { {locale.text(Text::CreateHelp)} } }
-            div { class: "button-row", button { onclick: move |_| add_files(state), {locale.text(Text::AddFiles)} }
-                button { disabled: single_file_format, "aria-describedby": "create-format-help", onclick: move |_| add_folder(state), {locale.text(Text::AddFolder)} }
-                button { disabled: view.create_sources.is_empty(), "aria-describedby": "create-source-summary", onclick: move |_| clear_create_sources(state), {locale.text(Text::Clear)} } } }
+            button { class: "primary", disabled: source_issue.is_some() || password_mismatch, "aria-describedby": "create-source-summary create-format-help create-password-mismatch", onclick: move |_| create_archive(state), {locale.text(Text::CreateAction)} }
+        }
+        div { class: "button-row", button { onclick: move |_| add_files(state), {locale.text(Text::AddFiles)} }
+            button { disabled: single_file_format, "aria-describedby": "create-format-help", onclick: move |_| add_folder(state), {locale.text(Text::AddFolder)} }
+            button { disabled: view.create_sources.is_empty(), "aria-describedby": "create-source-summary", onclick: move |_| clear_create_sources(state), {locale.text(Text::Clear)} } }
         section { class: "source-list", "aria-label": choose(locale, "Archive sources", "压缩来源"), "aria-describedby": "create-source-summary",
             output { id: "create-source-summary", class: "source-summary", role: "status", "aria-live": "polite", "aria-atomic": "true", {source_summary} }
             if view.create_sources.is_empty() { p { class: "muted", {locale.text(Text::NoSources)} } }
             ul { for source in view.create_sources.iter() { li { key: "{source.display()}", span { {source.to_string_lossy().to_string()} }
                 button { "aria-label": create_source_remove_label(locale, &source.to_string_lossy()), onclick: { let source = source.clone(); move |_| remove_create_source(state, source.clone()) }, {locale.text(Text::Remove)} } } } }
+        }
+        div { class: "output-directory",
+            div { class: "field-label", {locale.text(Text::OutputDirectory)} }
+            div { class: "button-row",
+                code { {view.create_output_directory.to_string_lossy().to_string()} }
+                button { onclick: move |_| choose_create_output_directory(state), {locale.text(Text::ChooseOutputDirectory)} }
+            }
         }
         div { class: "form-grid",
             label { span { {locale.text(Text::Format)} } select { value: format_value(view.create_format), "aria-describedby": "create-format-help",
@@ -997,7 +1123,7 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
                 for format in CREATE_FORMATS { option { value: format_value(format), "{format}" } } } }
             if let Some((minimum, maximum)) = compression_range {
                 label { span { "{locale.text(Text::CompressionLevel)} · {view.compression_level}" } input { r#type: "range", min: "{minimum}", max: "{maximum}", value: "{view.compression_level}",
-                    oninput: move |event| { let mut value = state.write(); value.compression_level = value.create_format.clamp_compression_level(event.value().parse().unwrap_or(6)); } } }
+                    oninput: move |event| { let mut value = state.write(); set_compression_level(&mut value, event.value().parse().unwrap_or(6)); } } }
             } else {
                 p { class: "muted", {locale.text(Text::CompressionFixed)} }
             }
@@ -1016,7 +1142,6 @@ fn CreatePage(mut state: Signal<UiState>) -> Element {
             }
         }
         output { id: "create-format-help", class: "muted", role: "status", "aria-live": "off", {input_help} }
-        div { class: "create-actions", button { class: "primary", disabled: source_issue.is_some() || password_mismatch, "aria-describedby": "create-source-summary create-format-help create-password-mismatch", onclick: move |_| create_archive(state), {locale.text(Text::CreateAction)} } }
     } }
 }
 
@@ -1754,7 +1879,12 @@ fn add_files(mut state: Signal<UiState>) {
         let mut value = state.write();
         value.dialog_open = false;
         if let Some(paths) = paths {
+            let was_empty = value.create_sources.is_empty();
             let added = append_unique(&mut value.create_sources, paths);
+            if was_empty && added > 0 {
+                value.create_output_directory =
+                    startup::default_create_output_directory(&value.create_sources);
+            }
             let status = create_sources_added_status(locale, added, value.create_sources.len());
             value.set_status(status);
         }
@@ -1783,7 +1913,12 @@ fn add_folder(mut state: Signal<UiState>) {
         let mut value = state.write();
         value.dialog_open = false;
         if let Some(path) = path {
+            let was_empty = value.create_sources.is_empty();
             let added = append_unique(&mut value.create_sources, vec![path]);
+            if was_empty && added > 0 {
+                value.create_output_directory =
+                    startup::default_create_output_directory(&value.create_sources);
+            }
             let status = create_sources_added_status(locale, added, value.create_sources.len());
             value.set_status(status);
         }
@@ -1796,6 +1931,9 @@ fn remove_create_source(mut state: Signal<UiState>, path: PathBuf) {
     value.create_sources.retain(|source| source != &path);
     if value.create_sources.len() == before {
         return;
+    }
+    if value.create_sources.is_empty() {
+        value.create_output_directory = startup::default_create_output_directory(&[]);
     }
     let status = create_source_removed_status(
         value.locale,
@@ -1810,7 +1948,32 @@ fn clear_create_sources(mut state: Signal<UiState>) {
     let cleared = value.create_sources.len();
     let locale = value.locale;
     value.create_sources.clear();
+    value.create_output_directory = startup::default_create_output_directory(&[]);
     value.set_status(create_sources_cleared_status(locale, cleared));
+}
+
+fn choose_create_output_directory(mut state: Signal<UiState>) {
+    if state.read().dialog_open {
+        return;
+    }
+    let locale = state.read().locale;
+    let directory = state.read().create_output_directory.clone();
+    state.write().dialog_open = true;
+    let dialog = AsyncFileDialog::new()
+        .set_title(locale.text(Text::OutputDirectoryDialog))
+        .set_directory(directory);
+    spawn(async move {
+        let selected = dialog
+            .pick_folder()
+            .await
+            .map(|folder| folder.path().to_path_buf());
+        let mut value = state.write();
+        value.dialog_open = false;
+        if let Some(directory) = selected {
+            value.create_output_directory = directory;
+            value.set_status(locale.text(Text::OutputDirectory).to_owned());
+        }
+    });
 }
 
 fn create_archive(mut state: Signal<UiState>) {
@@ -1832,6 +1995,7 @@ fn create_archive(mut state: Signal<UiState>) {
     let sources = value.create_sources.clone();
     let compression_level = value.compression_level;
     let password = non_empty(&value.create_password);
+    let output_directory = value.create_output_directory.clone();
     drop(value);
     if state.read().dialog_open {
         return;
@@ -1841,6 +2005,7 @@ fn create_archive(mut state: Signal<UiState>) {
     let dialog = AsyncFileDialog::new()
         .set_title(locale.text(Text::CreateDialog))
         .add_filter(format.to_string(), &[extension])
+        .set_directory(output_directory)
         .set_file_name(format!("archive.{extension}"));
     spawn(async move {
         let destination = dialog
@@ -1887,6 +2052,12 @@ fn set_create_format(state: &mut UiState, format: ArchiveFormat) {
         state.clear_create_password();
     }
     state.set_status(create_input_help(state.locale, format).to_owned());
+    save_settings(state);
+}
+
+fn set_compression_level(state: &mut UiState, level: u8) {
+    state.compression_level = state.create_format.clamp_compression_level(level);
+    save_settings(state);
 }
 
 fn create_source_issue_text(locale: Locale, issue: CreateSourceIssue) -> &'static str {
@@ -2454,6 +2625,8 @@ fn save_settings(state: &mut UiState) {
         locale: state.locale,
         dark: state.dark,
         recent_archives: state.recent_archives.clone(),
+        default_create_format: state.create_format,
+        default_compression_level: state.compression_level,
     }
     .save())
     {
@@ -2469,6 +2642,8 @@ fn record_recent_archive(state: &mut UiState, path: PathBuf) {
         locale: state.locale,
         dark: state.dark,
         recent_archives: std::mem::take(&mut state.recent_archives),
+        default_create_format: state.create_format,
+        default_compression_level: state.compression_level,
     };
     settings.record_recent_archive(path);
     state.recent_archives = settings.recent_archives;
@@ -2511,6 +2686,8 @@ fn remove_recent_archive(mut state: Signal<UiState>, path: PathBuf) {
         locale: value.locale,
         dark: value.dark,
         recent_archives: std::mem::take(&mut value.recent_archives),
+        default_create_format: value.create_format,
+        default_compression_level: value.compression_level,
     };
     settings.remove_recent_archive(&path);
     value.recent_archives = settings.recent_archives;

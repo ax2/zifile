@@ -43,6 +43,8 @@ use zifile_core::detect_format;
 
 pub const CREATE_COMMAND_CLSID: GUID = GUID::from_u128(0x2f86f25d_3b76_4cd2_8fe8_9d7a2eefb531);
 pub const EXTRACT_COMMAND_CLSID: GUID = GUID::from_u128(0x2d39ad2e_1b36_4f4f_8e09_589f0b1d2bc3);
+pub const QUICK_CREATE_COMMAND_CLSID: GUID =
+    GUID::from_u128(0x6f5f0f9d_4c3e_4a6a_9f16_6bff5c1e2d77);
 const E_PENDING: HRESULT = HRESULT(0x8000_000A_u32 as i32);
 const MAX_SELECTED_ITEMS: u32 = 256;
 const MAX_ARGUMENT_UTF16_UNITS: usize = 24_000;
@@ -246,6 +248,121 @@ impl ZiFileCreateCommand_Impl {
     }
 }
 
+#[implement(IExplorerCommand, IObjectWithSite)]
+struct ZiFileQuickCreateCommand {
+    _lifetime: ModuleLifetime,
+    site: ExplorerSite,
+}
+
+impl IObjectWithSite_Impl for ZiFileQuickCreateCommand_Impl {
+    fn SetSite(&self, site: Ref<IUnknown>) -> Result<()> {
+        self.site.set(site)
+    }
+
+    fn GetSite(&self, interface_id: *const GUID, site: *mut *mut c_void) -> Result<()> {
+        self.site.get(interface_id, site)
+    }
+}
+
+impl IExplorerCommand_Impl for ZiFileQuickCreateCommand_Impl {
+    fn GetTitle(&self, _items: Ref<IShellItemArray>) -> Result<PWSTR> {
+        allocate_shell_string(if user_locale_is_chinese() {
+            "在当前目录快速创建压缩文件"
+        } else {
+            "Quickly create archive with ZiFile"
+        })
+    }
+
+    fn GetIcon(&self, _items: Ref<IShellItemArray>) -> Result<PWSTR> {
+        shell_icon_resource()
+    }
+
+    fn GetToolTip(&self, _items: Ref<IShellItemArray>) -> Result<PWSTR> {
+        allocate_shell_string(if user_locale_is_chinese() {
+            "使用已保存的默认参数直接创建压缩文件，不打开 ZiFile 界面"
+        } else {
+            "Create an archive with saved defaults without opening the ZiFile window"
+        })
+    }
+
+    fn GetCanonicalName(&self) -> Result<GUID> {
+        Ok(QUICK_CREATE_COMMAND_CLSID)
+    }
+
+    fn GetState(&self, items: Ref<IShellItemArray>, ok_to_be_slow: BOOL) -> Result<u32> {
+        if !ok_to_be_slow.as_bool() {
+            return Err(E_PENDING.into());
+        }
+        let enabled = self.quick_create_context(items).is_ok();
+        Ok(if enabled {
+            ECS_ENABLED.0
+        } else {
+            ECS_DISABLED.0
+        } as u32)
+    }
+
+    fn Invoke(&self, items: Ref<IShellItemArray>, _bind_context: Ref<IBindCtx>) -> Result<()> {
+        let desktop = sibling_desktop_path()?;
+        let mut command = Command::new(desktop);
+        if let Some(items) = items.as_ref() {
+            // SAFETY: `items` is a live COM interface borrowed for this call.
+            let count = unsafe { items.GetCount()? };
+            if count > 0 {
+                let paths = self.selected_sources(items)?;
+                command.arg("--quick-create").args(paths);
+            } else {
+                let directory = self.current_directory()?;
+                command.arg("--quick-create-here").arg(directory);
+            }
+        } else {
+            let directory = self.current_directory()?;
+            command.arg("--quick-create-here").arg(directory);
+        }
+        command.spawn().map(|_| ()).map_err(|_| E_FAIL.into())
+    }
+
+    fn GetFlags(&self) -> Result<u32> {
+        Ok(0)
+    }
+
+    fn EnumSubCommands(&self) -> Result<IEnumExplorerCommand> {
+        Err(E_NOTIMPL.into())
+    }
+}
+
+impl ZiFileQuickCreateCommand_Impl {
+    fn current_directory(&self) -> Result<PathBuf> {
+        self.site.current_folder_path()
+    }
+
+    fn selected_sources(&self, items: &IShellItemArray) -> Result<Vec<PathBuf>> {
+        // SAFETY: `items` is a live COM interface borrowed for this command call.
+        let count = unsafe { items.GetCount()? };
+        if !create_selection_enabled(count) {
+            return Err(E_FAIL.into());
+        }
+        validate_create_paths(collect_paths(items)?)
+    }
+
+    fn quick_create_context(&self, items: Ref<IShellItemArray>) -> Result<()> {
+        if let Some(items) = items.as_ref() {
+            // SAFETY: `items` is a live COM interface borrowed for this command call.
+            let count = unsafe { items.GetCount()? };
+            if count > 0 {
+                self.selected_sources(items).map(|_| ())
+            } else {
+                self.current_directory()
+                    .and_then(|path| validate_create_paths(vec![path]))
+                    .map(|_| ())
+            }
+        } else {
+            self.current_directory()
+                .and_then(|path| validate_create_paths(vec![path]))
+                .map(|_| ())
+        }
+    }
+}
+
 #[implement(IExplorerCommand)]
 struct ZiFileExtractCommand {
     _lifetime: ModuleLifetime,
@@ -351,6 +468,39 @@ impl IClassFactory_Impl for ZiFileCreateClassFactory_Impl {
 }
 
 #[implement(IClassFactory)]
+struct ZiFileQuickCreateClassFactory {
+    _lifetime: ModuleLifetime,
+}
+
+impl IClassFactory_Impl for ZiFileQuickCreateClassFactory_Impl {
+    fn CreateInstance(
+        &self,
+        outer: Ref<IUnknown>,
+        iid: *const GUID,
+        object: *mut *mut c_void,
+    ) -> Result<()> {
+        if outer.as_ref().is_some() {
+            return Err(CLASS_E_NOAGGREGATION.into());
+        }
+        if iid.is_null() || object.is_null() {
+            return Err(E_POINTER.into());
+        }
+        let unknown: IUnknown = ZiFileQuickCreateCommand {
+            _lifetime: ModuleLifetime::acquire(),
+            site: ExplorerSite::new(),
+        }
+        .into();
+        // SAFETY: both output pointers were checked above and `unknown` owns a live COM object.
+        unsafe { unknown.query(iid, object).ok() }
+    }
+
+    fn LockServer(&self, lock: BOOL) -> Result<()> {
+        update_server_locks(lock);
+        Ok(())
+    }
+}
+
+#[implement(IClassFactory)]
 struct ZiFileExtractClassFactory {
     _lifetime: ModuleLifetime,
 }
@@ -424,6 +574,10 @@ fn dll_get_class_object(
     // SAFETY: `class_id` was checked for null and COM requires it to point to a GUID.
     let factory: IClassFactory = match unsafe { *class_id } {
         CREATE_COMMAND_CLSID => ZiFileCreateClassFactory {
+            _lifetime: ModuleLifetime::acquire(),
+        }
+        .into(),
+        QUICK_CREATE_COMMAND_CLSID => ZiFileQuickCreateClassFactory {
             _lifetime: ModuleLifetime::acquire(),
         }
         .into(),
@@ -621,6 +775,10 @@ mod tests {
             EXTRACT_COMMAND_CLSID,
             GUID::from_u128(0x2d39ad2e_1b36_4f4f_8e09_589f0b1d2bc3)
         );
+        assert_eq!(
+            QUICK_CREATE_COMMAND_CLSID,
+            GUID::from_u128(0x6f5f0f9d_4c3e_4a6a_9f16_6bff5c1e2d77)
+        );
     }
 
     #[test]
@@ -783,7 +941,7 @@ mod tests {
         let title = unsafe { command.GetTitle(None::<&IShellItemArray>) }.unwrap();
         let title_text = unsafe { title.to_string() }.unwrap();
         unsafe { CoTaskMemFree(Some(title.0.cast())) };
-        assert!(title_text.contains("ZiFile"));
+        assert!(title_text.contains("ZiFile") || title_text.contains("创建"));
     }
 
     #[test]
@@ -804,6 +962,31 @@ mod tests {
         let error = unsafe { site.GetSite::<IUnknown>() }
             .expect_err("a command without an Explorer site should report no interface");
         assert_eq!(error.code(), E_NOINTERFACE);
+    }
+
+    #[test]
+    fn dll_factory_creates_the_quick_create_command() {
+        let mut factory_raw = std::ptr::null_mut();
+        let status = DllGetClassObject(
+            &QUICK_CREATE_COMMAND_CLSID,
+            &IClassFactory::IID,
+            &mut factory_raw,
+        );
+        assert!(status.is_ok());
+        let factory = unsafe { IClassFactory::from_raw(factory_raw) };
+        let command: IExplorerCommand = unsafe {
+            factory
+                .CreateInstance(None::<&IUnknown>)
+                .expect("class factory should create the quick create command")
+        };
+        assert_eq!(
+            unsafe { command.GetCanonicalName() }.unwrap(),
+            QUICK_CREATE_COMMAND_CLSID
+        );
+        let title = unsafe { command.GetTitle(None::<&IShellItemArray>) }.unwrap();
+        let title_text = unsafe { title.to_string() }.unwrap();
+        unsafe { CoTaskMemFree(Some(title.0.cast())) };
+        assert!(title_text.contains("ZiFile") || title_text.contains("创建"));
     }
 
     #[test]

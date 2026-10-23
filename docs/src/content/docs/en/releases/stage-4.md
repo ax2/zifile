@@ -13,7 +13,7 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 ## Current Unreleased increment
 
-There is no pending feature increment. RAR 5 creation and fixed-MSZIP CAB creation shipped in v0.1.15; TAR + LZ4 shipped in v0.1.13, and the professional grouped archive toolbar shipped in v0.1.14.
+The current worktree contains a pending create-flow and Explorer quick-create increment. RAR 5 creation and fixed-MSZIP CAB creation shipped in v0.1.15; TAR + LZ4 shipped in v0.1.13, and the professional grouped archive toolbar shipped in v0.1.14.
 
 ## Prepared
 
@@ -32,6 +32,14 @@ There is no pending feature increment. RAR 5 creation and fixed-MSZIP CAB creati
 ## Release result
 
 Stable 1.0 has not been published; `v0.1.15` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+
+## 2026-10-23 — Create output directories, defaults, and Explorer quick create
+
+- Both desktop UIs now start the create save dialog in the first source's parent directory after sources are added; a folder source uses that folder's parent, and users can choose another output directory. Removing the final source or clearing the form restores the current working directory used by an empty create page.
+- The selected archive format and compression level are persisted in local settings and become the defaults for the next create operation and Explorer quick create; passwords and output directories are never persisted.
+- The Shell extension adds a separate quick-create CLSID for files, directories, and `Directory\\Background`. Selected items are archived beside the first source, while a folder-background invocation archives the directory's immediate children in that directory without opening the main window; the existing UI-assisted create entry remains available.
+- The default Iced UI, accessible Dioxus UI, MSIX manifest, package audit, PowerShell packaging policy, and bilingual user documentation are synchronized. Quick create now uses the same versioned Worker and Job Object path as ordinary desktop operations, so long work does not occupy the desktop process. The local x64 MSIX `0.1.15.4` audit confirms the new Shell CLSID, all three item types, and zero sensitive files. Trusted signing and Explorer lifecycle evidence remain external release gates.
+- Verification: 58 Iced desktop tests, 41 desktop-library tests, 21 Shell tests, accessible-UI compilation, packaging policy, MSIX audit, and standalone-EXE file/background quick-create smoke tests passed; the smoke uses an isolated `LOCALAPPDATA`, fixes the default ZIP settings, and reads both generated archives back through Worker IPC. A real window review also confirmed the create page and save-dialog default directory.
 
 ## 2026-09-01 — v0.1.15 RAR 5/CAB creation and public release result
 

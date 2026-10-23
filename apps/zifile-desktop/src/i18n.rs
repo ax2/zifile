@@ -51,8 +51,8 @@ impl Locale {
             ),
             Text::OpenArchive => ("Open an archive", "打开压缩文件"),
             Text::OpenDescription => (
-                "Browse, verify and safely extract ZIP, 7z and TAR-family archives.",
-                "浏览、校验并安全解压 ZIP、7z 和 TAR 系列文件。",
+                "Browse, verify and safely extract ZIP, 7z, RAR, CAB, TAR-family archives and common streams.",
+                "浏览、校验并安全解压 ZIP、7z、RAR、CAB、TAR 系列文件和常用压缩流。",
             ),
             Text::OpenAction => ("Open archive", "打开文件"),
             Text::CreateArchive => ("Create an archive", "创建压缩文件"),
@@ -217,6 +217,9 @@ impl Locale {
                 "两次输入的密码不一致。",
             ),
             Text::CreateAction => ("Create archive", "创建压缩文件"),
+            Text::OutputDirectory => ("Output directory", "输出目录"),
+            Text::ChooseOutputDirectory => ("Choose another folder", "重新选择输出目录"),
+            Text::OutputDirectoryDialog => ("Choose output directory", "选择输出目录"),
             Text::ChooseExtractionFolder => ("Choose extraction folder", "选择解压目录"),
             Text::AddFilesDialog => ("Add files to archive", "添加要压缩的文件"),
             Text::AddFolderDialog => ("Add folder to archive", "添加要压缩的文件夹"),
@@ -558,6 +561,9 @@ pub enum Text {
     ConfirmPassword,
     PasswordMismatch,
     CreateAction,
+    OutputDirectory,
+    ChooseOutputDirectory,
+    OutputDirectoryDialog,
     ChooseExtractionFolder,
     AddFilesDialog,
     AddFolderDialog,
@@ -602,6 +608,13 @@ mod tests {
         assert_eq!(Locale::ZhCn.text(Text::ClearSearch), "清除搜索");
         assert_eq!(Locale::En.text(Text::ConflictPolicy), "Conflict policy");
         assert_eq!(Locale::ZhCn.text(Text::ConflictPolicy), "文件冲突策略");
+        assert!(Locale::En.text(Text::OpenDescription).contains("RAR"));
+        assert!(Locale::En.text(Text::OpenDescription).contains("CAB"));
+        assert!(
+            Locale::ZhCn
+                .text(Text::OpenDescription)
+                .contains("常用压缩流")
+        );
         assert_eq!(
             archive_size_summary(Locale::En, 1_000, 500),
             "1000 B expanded · 500 B packed · 50.0% smaller"

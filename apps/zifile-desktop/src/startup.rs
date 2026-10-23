@@ -9,6 +9,8 @@ pub enum StartupRequest {
     OpenArchive(PathBuf),
     ExtractHere(PathBuf),
     CreateFrom(Vec<PathBuf>),
+    QuickCreate(Vec<PathBuf>),
+    QuickCreateHere(PathBuf),
 }
 
 pub fn parse<I>(arguments: I) -> StartupRequest
@@ -16,6 +18,23 @@ where
     I: IntoIterator<Item = OsString>,
 {
     let values = arguments.into_iter().collect::<Vec<_>>();
+    if values
+        .first()
+        .is_some_and(|value| value == "--quick-create-here")
+    {
+        return values
+            .into_iter()
+            .nth(1)
+            .map(PathBuf::from)
+            .map_or(StartupRequest::Home, StartupRequest::QuickCreateHere);
+    }
+    if values
+        .first()
+        .is_some_and(|value| value == "--quick-create")
+    {
+        let sources = values.into_iter().skip(1).map(PathBuf::from).collect();
+        return StartupRequest::QuickCreate(sources);
+    }
     if values.first().is_some_and(|value| value == "--create") {
         let sources = values.into_iter().skip(1).map(PathBuf::from).collect();
         return StartupRequest::CreateFrom(sources);
@@ -35,6 +54,19 @@ where
         .next()
         .map(PathBuf::from)
         .map_or(StartupRequest::Home, StartupRequest::OpenArchive)
+}
+
+/// Chooses the initial output directory for archive creation. A selected file
+/// or folder is written beside that source; an empty create page starts in the
+/// process working directory.
+pub fn default_create_output_directory(sources: &[PathBuf]) -> PathBuf {
+    sources
+        .first()
+        .and_then(|source| source.parent())
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map(Path::to_path_buf)
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."))
 }
 
 pub fn extraction_destination(archive: &Path) -> PathBuf {
@@ -91,6 +123,36 @@ mod tests {
                 PathBuf::from(r"C:\资料\甲.txt"),
                 PathBuf::from(r"C:\资料\乙 folder"),
             ])
+        );
+    }
+
+    #[test]
+    fn quick_create_modes_preserve_sources_and_background_directory() {
+        assert_eq!(
+            parse([
+                OsString::from("--quick-create"),
+                OsString::from(r"C:\资料\甲.txt"),
+            ]),
+            StartupRequest::QuickCreate(vec![PathBuf::from(r"C:\资料\甲.txt")])
+        );
+        assert_eq!(
+            parse([
+                OsString::from("--quick-create-here"),
+                OsString::from(r"C:\资料\当前目录"),
+            ]),
+            StartupRequest::QuickCreateHere(PathBuf::from(r"C:\资料\当前目录"))
+        );
+    }
+
+    #[test]
+    fn default_create_output_directory_uses_source_parent() {
+        assert_eq!(
+            default_create_output_directory(&[PathBuf::from(r"C:\资料\项目")]),
+            PathBuf::from(r"C:\资料")
+        );
+        assert_eq!(
+            default_create_output_directory(&[PathBuf::from(r"C:\资料\项目.txt")]),
+            PathBuf::from(r"C:\资料")
         );
     }
 

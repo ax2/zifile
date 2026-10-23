@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![cfg_attr(
     not(test),
     deny(
@@ -11,6 +12,7 @@
 
 use std::collections::HashSet;
 use std::fmt;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -58,9 +60,31 @@ const ARCHIVE_TABLE_MIN_WIDTH: f32 = 1_040.0;
 const ARCHIVE_SEARCH_ID: &str = "archive-search";
 
 pub fn main() -> iced::Result {
-    if std::env::args_os().any(|argument| argument == zifile_worker::WORKER_MODE_ARGUMENT) {
+    let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
+    if arguments
+        .iter()
+        .any(|argument| argument == zifile_worker::WORKER_MODE_ARGUMENT)
+    {
         zifile_worker::run_process();
         return Ok(());
+    }
+    match startup::parse(arguments) {
+        StartupRequest::QuickCreate(sources) => {
+            if let Err(error) = run_quick_create(sources, None, None) {
+                show_quick_create_error(&error.to_string());
+            }
+            return Ok(());
+        }
+        StartupRequest::QuickCreateHere(directory) => {
+            if let Err(error) = run_quick_create_here(directory) {
+                show_quick_create_error(&error.to_string());
+            }
+            return Ok(());
+        }
+        StartupRequest::Home
+        | StartupRequest::OpenArchive(_)
+        | StartupRequest::ExtractHere(_)
+        | StartupRequest::CreateFrom(_) => {}
     }
     iced::application(initialize, update, view)
         .title(title)
@@ -69,6 +93,93 @@ pub fn main() -> iced::Result {
         .window(window_settings())
         .antialiasing(true)
         .run()
+}
+
+fn run_quick_create(
+    sources: Vec<PathBuf>,
+    output_directory: Option<PathBuf>,
+    name_hint: Option<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if sources.is_empty() {
+        return Err("at least one source is required".into());
+    }
+    let settings = AppSettings::load();
+    let format = settings.default_create_format;
+    let output_directory =
+        output_directory.unwrap_or_else(|| startup::default_create_output_directory(&sources));
+    if !output_directory.is_dir() {
+        return Err(format!(
+            "the output directory does not exist: {}",
+            output_directory.display()
+        )
+        .into());
+    }
+    let stem = name_hint
+        .as_deref()
+        .and_then(Path::file_name)
+        .or_else(|| {
+            (sources.len() == 1)
+                .then(|| sources.first().and_then(|source| source.file_stem()))
+                .flatten()
+        })
+        .map(|value| value.to_string_lossy().into_owned())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "archive".to_owned());
+    let destination = quick_create_destination(&output_directory, &stem, format);
+    let request = WorkerRequest::Create {
+        sources,
+        destination,
+        format,
+        compression_level: format.clamp_compression_level(settings.default_compression_level),
+        password: None,
+    };
+    run_worker(
+        request,
+        OperationProgress::default(),
+        CancellationToken::default(),
+    )
+    .map(|_| ())
+    .map_err(|error| error.into())
+}
+
+fn run_quick_create_here(directory: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    if !directory.is_dir() {
+        return Err(format!(
+            "the current directory does not exist: {}",
+            directory.display()
+        )
+        .into());
+    }
+    let sources = fs::read_dir(&directory)?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()?;
+    if sources.is_empty() {
+        return Err("the current directory has no items to archive".into());
+    }
+    run_quick_create(sources, Some(directory.clone()), Some(directory))
+}
+
+fn quick_create_destination(directory: &Path, stem: &str, format: ArchiveFormat) -> PathBuf {
+    let extension = format.canonical_extension();
+    let first = directory.join(format!("{stem}.{extension}"));
+    if !first.exists() {
+        return first;
+    }
+    for suffix in 2..=10_000 {
+        let candidate = directory.join(format!("{stem} ({suffix}).{extension}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    directory.join(format!("{stem}-new.{extension}"))
+}
+
+fn show_quick_create_error(message: &str) {
+    let _ = rfd::MessageDialog::new()
+        .set_title("ZiFile")
+        .set_description(message)
+        .set_level(rfd::MessageLevel::Error)
+        .show();
 }
 
 fn window_settings() -> iced::window::Settings {
@@ -91,9 +202,11 @@ fn initialize() -> (ZiFile, Task<Message>) {
         }
         StartupRequest::CreateFrom(sources) => {
             state.page = Page::Create;
+            state.create_output_directory = startup::default_create_output_directory(&sources);
             append_unique(&mut state.create_sources, sources);
             Task::none()
         }
+        StartupRequest::QuickCreate(_) | StartupRequest::QuickCreateHere(_) => Task::none(),
     };
     (state, task)
 }
@@ -124,6 +237,7 @@ struct ZiFile {
     password_visible: bool,
     conflict: ConflictChoice,
     create_sources: Vec<PathBuf>,
+    create_output_directory: PathBuf,
     create_format: ArchiveFormat,
     create_password: String,
     create_password_confirmation: String,
@@ -170,12 +284,15 @@ impl Default for ZiFile {
             password_visible: false,
             conflict: ConflictChoice::Rename,
             create_sources: Vec::new(),
-            create_format: ArchiveFormat::Zip,
+            create_output_directory: startup::default_create_output_directory(&[]),
+            create_format: settings.default_create_format,
             create_password: String::new(),
             create_password_confirmation: String::new(),
             create_password_confirmation_touched: false,
             create_password_visible: false,
-            compression_level: 6,
+            compression_level: settings
+                .default_create_format
+                .clamp_compression_level(settings.default_compression_level),
             status: settings.locale.text(Text::Ready).to_owned(),
             status_kind: StatusKind::Informational,
             busy: false,
@@ -261,6 +378,8 @@ enum Message {
     AddFolderDialogFinished(Option<PathBuf>),
     RemoveSource(usize),
     ClearSources,
+    ChooseCreateOutputDirectory,
+    CreateOutputDirectoryDialogFinished(Option<PathBuf>),
     CreateFormatChanged(ArchiveFormat),
     CreatePasswordChanged(String),
     CreatePasswordConfirmationChanged(String),
@@ -472,6 +591,8 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                     locale: state.locale,
                     dark: state.dark,
                     recent_archives: std::mem::take(&mut state.recent_archives),
+                    default_create_format: state.create_format,
+                    default_compression_level: state.compression_level,
                 };
                 settings.remove_recent_archive(&path);
                 state.recent_archives = settings.recent_archives;
@@ -1102,7 +1223,12 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::AddFilesDialogFinished(paths) => {
             state.dialog_open = false;
             if let Some(paths) = paths {
+                let was_empty = state.create_sources.is_empty();
                 let added = append_unique(&mut state.create_sources, paths);
+                if was_empty && added > 0 {
+                    state.create_output_directory =
+                        startup::default_create_output_directory(&state.create_sources);
+                }
                 set_status(
                     state,
                     create_sources_added_status(state.locale, added, state.create_sources.len()),
@@ -1129,7 +1255,12 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::AddFolderDialogFinished(path) => {
             state.dialog_open = false;
             if let Some(path) = path {
+                let was_empty = state.create_sources.is_empty();
                 let added = append_unique(&mut state.create_sources, vec![path]);
+                if was_empty && added > 0 {
+                    state.create_output_directory =
+                        startup::default_create_output_directory(&state.create_sources);
+                }
                 set_status(
                     state,
                     create_sources_added_status(state.locale, added, state.create_sources.len()),
@@ -1140,6 +1271,9 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::RemoveSource(index) => {
             if index < state.create_sources.len() {
                 let path = state.create_sources.remove(index);
+                if state.create_sources.is_empty() {
+                    state.create_output_directory = startup::default_create_output_directory(&[]);
+                }
                 set_status(
                     state,
                     create_source_removed_status(
@@ -1153,10 +1287,36 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         Message::ClearSources => {
             let cleared = state.create_sources.len();
             state.create_sources.clear();
+            state.create_output_directory = startup::default_create_output_directory(&[]);
             set_status(state, create_sources_cleared_status(state.locale, cleared));
+        }
+        Message::ChooseCreateOutputDirectory => {
+            if state.dialog_open {
+                return Task::none();
+            }
+            state.dialog_open = true;
+            let dialog = FileDialog::new()
+                .set_title(state.locale.text(Text::OutputDirectoryDialog))
+                .set_directory(&state.create_output_directory);
+            return Task::perform(
+                async move {
+                    tokio::task::spawn_blocking(move || dialog.pick_folder())
+                        .await
+                        .unwrap_or(None)
+                },
+                Message::CreateOutputDirectoryDialogFinished,
+            );
+        }
+        Message::CreateOutputDirectoryDialogFinished(directory) => {
+            state.dialog_open = false;
+            if let Some(directory) = directory {
+                state.create_output_directory = directory;
+                set_status(state, state.locale.text(Text::OutputDirectory));
+            }
         }
         Message::CreateFormatChanged(format) => {
             apply_create_format(state, format);
+            save_settings(state);
         }
         Message::CreatePasswordChanged(password) => {
             state.create_password = password;
@@ -1173,6 +1333,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
         }
         Message::CompressionLevelChanged(level) => {
             state.compression_level = state.create_format.clamp_compression_level(level);
+            save_settings(state);
         }
         Message::Create => {
             if state.dialog_open {
@@ -1192,6 +1353,7 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
             let dialog = FileDialog::new()
                 .set_title(state.locale.text(Text::CreateDialog))
                 .add_filter(state.create_format.to_string(), &[extension])
+                .set_directory(&state.create_output_directory)
                 .set_file_name(format!("archive.{extension}"));
             return Task::perform(
                 async move {
@@ -1302,7 +1464,12 @@ fn update(state: &mut ZiFile, message: Message) -> Task<Message> {
                 state.automatic_extract_destination = None;
                 return begin_load(state, path);
             } else if path.exists() {
+                let was_empty = state.create_sources.is_empty();
                 let added = append_unique(&mut state.create_sources, vec![path]);
+                if was_empty && added > 0 {
+                    state.create_output_directory =
+                        startup::default_create_output_directory(&state.create_sources);
+                }
                 state.page = Page::Create;
                 set_status(
                     state,
@@ -1429,6 +1596,8 @@ fn save_settings(state: &mut ZiFile) {
         locale: state.locale,
         dark: state.dark,
         recent_archives: state.recent_archives.clone(),
+        default_create_format: state.create_format,
+        default_compression_level: state.compression_level,
     }
     .save())
     {
@@ -1447,6 +1616,8 @@ fn record_recent_archive(state: &mut ZiFile, path: PathBuf) {
         locale: state.locale,
         dark: state.dark,
         recent_archives: std::mem::take(&mut state.recent_archives),
+        default_create_format: state.create_format,
+        default_compression_level: state.compression_level,
     };
     settings.record_recent_archive(path);
     state.recent_archives = settings.recent_archives;
@@ -2865,8 +3036,20 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
         };
 
     column![
-        text(state.locale.text(Text::CreateHeading)).size(32),
-        text(state.locale.text(Text::CreateHelp)),
+        row![
+            column![
+                text(state.locale.text(Text::CreateHeading)).size(32),
+                text(state.locale.text(Text::CreateHelp)),
+            ]
+            .width(Fill),
+            button(state.locale.text(Text::CreateAction))
+                .style(button::primary)
+                .on_press_maybe(
+                    (source_issue.is_none() && !password_mismatch).then_some(Message::Create),
+                ),
+        ]
+        .spacing(20)
+        .align_y(iced::Alignment::Center),
         row![
             button(state.locale.text(Text::AddFiles)).on_press(Message::AddFiles),
             button(state.locale.text(Text::AddFolder))
@@ -2883,6 +3066,19 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
             state.create_sources.len()
         ))
         .size(13),
+        row![
+            column![
+                text(state.locale.text(Text::OutputDirectory)).size(13),
+                text(state.create_output_directory.display().to_string()).width(Fill),
+            ]
+            .width(Fill)
+            .spacing(4),
+            button(state.locale.text(Text::ChooseOutputDirectory))
+                .style(button::secondary)
+                .on_press(Message::ChooseCreateOutputDirectory),
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center),
         validation_notice,
         container(scrollable(sources).height(Length::Fixed(240.0)))
             .padding(16)
@@ -2946,14 +3142,6 @@ fn create_view(state: &ZiFile) -> Element<'_, Message> {
         .padding(18)
         .width(Fill)
         .style(container::rounded_box),
-        row![
-            space().width(Fill),
-            button(state.locale.text(Text::CreateAction))
-                .style(button::primary)
-                .on_press_maybe(
-                    (source_issue.is_none() && !password_mismatch).then_some(Message::Create),
-                ),
-        ],
     ]
     .spacing(14)
     .height(Fill)

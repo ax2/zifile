@@ -58,8 +58,13 @@ $temporaryBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd(
 $temporaryRoot = Join-Path $temporaryBase "zifile-portable-smoke-$([Guid]::NewGuid().ToString('N'))"
 $portableExecutable = Join-Path $temporaryRoot 'zifile.exe'
 $workerExecutable = Join-Path $temporaryRoot 'zifile-worker.exe'
+$localAppData = Join-Path $temporaryRoot 'localappdata'
 $sourceRoot = Join-Path $temporaryRoot 'source'
 $sourceFile = Join-Path $sourceRoot 'hello.txt'
+$backgroundRoot = Join-Path $temporaryRoot 'background'
+$backgroundFile = Join-Path $backgroundRoot 'background.txt'
+$quickCreateArchive = Join-Path $sourceRoot 'hello.zip'
+$quickCreateHereArchive = Join-Path $backgroundRoot 'background.zip'
 $archivePath = Join-Path $temporaryRoot 'sample.zip'
 $extractRoot = Join-Path $temporaryRoot 'extracted'
 
@@ -118,13 +123,58 @@ function Invoke-StandaloneWorker {
     )
 }
 
+function Invoke-DesktopCommand {
+    param(
+        [Parameter(Mandatory)][string]$Executable,
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [Parameter(Mandatory)][string]$OperationName,
+        [Parameter(Mandatory)][string]$LocalAppData
+    )
+
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $Executable
+    foreach ($argument in $Arguments) {
+        $startInfo.ArgumentList.Add($argument)
+    }
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.Environment['LOCALAPPDATA'] = $LocalAppData
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+
+    if (-not $process.Start()) {
+        throw "The standalone desktop executable did not start for $OperationName."
+    }
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+        $process.Kill($true)
+        $process.WaitForExit()
+        throw "The standalone $OperationName operation did not finish within $TimeoutSeconds seconds."
+    }
+    $stderr = $stderrTask.GetAwaiter().GetResult()
+    $exitCode = $process.ExitCode
+    $process.Dispose()
+
+    if ($exitCode -ne 0) {
+        throw "The standalone $OperationName operation exited with code $exitCode`: $stderr"
+    }
+}
+
 try {
-    New-Item -ItemType Directory -Path $sourceRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $sourceRoot, $backgroundRoot, $localAppData -Force | Out-Null
     Copy-Item -LiteralPath $executable -Destination $portableExecutable
 
     if (Test-Path -LiteralPath $workerExecutable) {
         throw 'The standalone portable smoke directory unexpectedly contains a separate Worker executable.'
     }
+
+    $settingsDirectory = Join-Path $localAppData 'ZiFile'
+    New-Item -ItemType Directory -Path $settingsDirectory -Force | Out-Null
+    [IO.File]::WriteAllText(
+        (Join-Path $settingsDirectory 'settings.conf'),
+        "language=en-US`ntheme=dark`ndefault_create_format=zip`ndefault_compression_level=6`n"
+    )
 
     if ($SkipExecution) {
         [ordered]@{
@@ -144,6 +194,26 @@ try {
 
     $expectedContents = 'ZiFile standalone create-list-extract smoke test'
     [IO.File]::WriteAllText($sourceFile, $expectedContents)
+    [IO.File]::WriteAllText($backgroundFile, 'ZiFile folder-background quick-create smoke test')
+
+    Invoke-DesktopCommand `
+        -Executable $portableExecutable `
+        -Arguments @('--quick-create', $sourceFile) `
+        -OperationName 'quick-create' `
+        -LocalAppData $localAppData
+    if (-not (Test-Path -LiteralPath $quickCreateArchive -PathType Leaf)) {
+        throw 'The standalone desktop executable did not create the selected-source quick-create archive.'
+    }
+
+    Invoke-DesktopCommand `
+        -Executable $portableExecutable `
+        -Arguments @('--quick-create-here', $backgroundRoot) `
+        -OperationName 'quick-create-here' `
+        -LocalAppData $localAppData
+    if (-not (Test-Path -LiteralPath $quickCreateHereArchive -PathType Leaf)) {
+        throw 'The standalone desktop executable did not create the folder-background quick-create archive.'
+    }
+
     $createEvents = Invoke-StandaloneWorker -Executable $portableExecutable -OperationName 'create' -Payload @{
         operation = 'create'
         sources = @($sourceFile)
@@ -178,6 +248,22 @@ try {
         throw "The standalone portable executable did not return the expected archive entry. Entries: $($entryPaths -join ', ')"
     }
 
+    foreach ($quickArchive in @($quickCreateArchive, $quickCreateHereArchive)) {
+        $quickEvents = Invoke-StandaloneWorker -Executable $portableExecutable -OperationName 'quick-create-list' -Payload @{
+            operation = 'list'
+            archive = $quickArchive
+            password = $null
+        }
+        $quickEntryPaths = @(
+            $quickEvents |
+                Where-Object { $_.payload.event -eq 'archive_entry' } |
+                ForEach-Object { [string]$_.payload.entry.path }
+        )
+        if ($quickEntryPaths.Count -lt 1) {
+            throw "The quick-create archive has no readable entries: $quickArchive"
+        }
+    }
+
     $extractEvents = Invoke-StandaloneWorker -Executable $portableExecutable -OperationName 'extract' -Payload @{
         operation = 'extract'
         archive = $archivePath
@@ -207,7 +293,7 @@ try {
             worker_mode = '--zifile-worker'
             separate_worker_present = $false
             archive_entry = 'hello.txt'
-            operations = @('create', 'list', 'extract')
+            operations = @('create', 'list', 'extract', 'quick-create', 'quick-create-here')
             round_trip_verified = $true
             passed = $true
     } | ConvertTo-Json -Compress

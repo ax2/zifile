@@ -6,7 +6,20 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Added
+
+- Add create-page output-directory defaults based on the first selected source,
+  with a native directory picker for choosing another destination.
+- Add persisted default create format and compression-level settings, plus
+  Windows Explorer quick-create commands for selected sources and folder
+  backgrounds.
+
+### Changed
+
+- Route Explorer quick-create work through the versioned isolated Worker and
+  Job Object path instead of running archive work in the desktop process.
+- Extend the standalone Windows smoke test to exercise both quick-create
+  entry points and read their generated archives back through Worker IPC.
 
 ## [0.1.15] - 2026-09-01
 

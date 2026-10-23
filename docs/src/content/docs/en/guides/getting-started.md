@@ -26,7 +26,9 @@ Work runs in an isolated Worker. Pressing `Escape` or choosing **Cancel** reques
 
 1. Choose **Create archive** or press `Ctrl+N`.
 2. Add files or folders, or drop sources onto the window.
-3. Choose a format, compression level, optional password, and output path.
+3. Choose a format, compression level, optional password, and output path. After the first source is added, the save dialog starts in the first source's parent directory; for a folder source this is the folder's parent. Use **Choose another folder** to change it.
+
+The format and compression level selected on the create page are saved as defaults. Explorer's **Quickly create archive with ZiFile** uses those defaults without opening the main window: selected items are written beside the first source, while a folder-background invocation archives the current directory's immediate children in that directory. The existing **Create archive with ZiFile** entry still opens the full create page for changing sources, output location, password, and other options.
 
 ZIP, 7z, RAR, CAB, and TAR compositions accept multiple files and folders. RAR creates RAR 5 archives at levels 0–5 and can encrypt headers, but cannot preserve empty directories or be updated in place; CAB uses fixed MSZIP compression and cannot preserve empty directories. gzip, Zstandard, XZ, LZMA, Bzip2, LZ4, and Brotli are single-file streams and require exactly one existing file; use the matching TAR composition for a directory.
 
@@ -36,7 +38,7 @@ In the same updateable archive types, select at least two regular files and choo
 
 ## Queue and settings
 
-Open, test, extract, create, or update requests can be submitted while another operation runs. ZiFile keeps at most 32 operations and executes them in order. **Clear queue** removes only waiting work; **Cancel** affects only the active operation. Language and light/dark theme are stored in `%LOCALAPPDATA%\ZiFile\settings.conf`; paths, recent history, and passwords are not stored.
+Open, test, extract, create, or update requests can be submitted while another operation runs. ZiFile keeps at most 32 operations and executes them in order. **Clear queue** removes only waiting work; **Cancel** affects only the active operation. Language, light/dark theme, default create format, and default compression level are stored in `%LOCALAPPDATA%\ZiFile\settings.conf`; output directories, paths, and passwords are not stored, and passwords are never used by the quick-create command.
 
 The **About** page identifies the running version, MIT license, format-family count, project address, and local-processing privacy boundary; press `F1` to open it directly. It can also open the project home, English documentation, and English privacy policy in the default browser; the footer reports an error if Windows cannot launch a link. Use this version when reporting a problem rather than relying only on the installer filename.
 

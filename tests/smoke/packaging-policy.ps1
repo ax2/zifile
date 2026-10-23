@@ -967,6 +967,9 @@ foreach ($requiredVisualAssetAuditToken in @(
 $shellSource = Get-Content -Raw -LiteralPath (Join-Path $repoRoot 'apps\zifile-shell\src\lib.rs')
 foreach ($requiredExtractShellToken in @(
     'EXTRACT_COMMAND_CLSID',
+    'QUICK_CREATE_COMMAND_CLSID',
+    '--quick-create',
+    '--quick-create-here',
     '--extract-here',
     'ECS_HIDDEN',
     'E_PENDING',

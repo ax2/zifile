@@ -81,6 +81,10 @@
                 Path="ZiFile\zifile-shell.dll"
                 ThreadingModel="STA" />
               <com:Class
+                Id="6F5F0F9D-4C3E-4A6A-9F16-6BFF5C1E2D77"
+                Path="ZiFile\zifile-shell.dll"
+                ThreadingModel="STA" />
+              <com:Class
                 Id="2D39AD2E-1B36-4F4F-8E09-589F0B1D2BC3"
                 Path="ZiFile\zifile-shell.dll"
                 ThreadingModel="STA" />
@@ -94,6 +98,9 @@
                 Id="CreateArchiveWithZiFile"
                 Clsid="2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531" />
               <desktop5:Verb
+                Id="QuickCreateArchiveWithZiFile"
+                Clsid="6F5F0F9D-4C3E-4A6A-9F16-6BFF5C1E2D77" />
+              <desktop5:Verb
                 Id="ExtractArchiveWithZiFile"
                 Clsid="2D39AD2E-1B36-4F4F-8E09-589F0B1D2BC3" />
             </desktop5:ItemType>
@@ -101,11 +108,17 @@
               <desktop5:Verb
                 Id="CreateArchiveWithZiFile"
                 Clsid="2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531" />
+              <desktop5:Verb
+                Id="QuickCreateArchiveWithZiFile"
+                Clsid="6F5F0F9D-4C3E-4A6A-9F16-6BFF5C1E2D77" />
             </desktop5:ItemType>
             <desktop5:ItemType Type="Directory\Background">
               <desktop5:Verb
                 Id="CreateArchiveWithZiFile"
                 Clsid="2F86F25D-3B76-4CD2-8FE8-9D7A2EEFB531" />
+              <desktop5:Verb
+                Id="QuickCreateArchiveWithZiFile"
+                Clsid="6F5F0F9D-4C3E-4A6A-9F16-6BFF5C1E2D77" />
             </desktop5:ItemType>
           </desktop4:FileExplorerContextMenus>
         </desktop4:Extension>

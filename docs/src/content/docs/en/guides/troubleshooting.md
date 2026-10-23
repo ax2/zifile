@@ -26,6 +26,14 @@ ZiFile also rejects an extraction root or existing parent directory that is a sy
 - Creation is blocked before the save dialog when sources are empty, no longer exist, are symbolic links, or the output is invalid.
 - RAR creation emits RAR 5 archives at levels 0–5; RAR update and rename are not supported.
 
+After the first source is added, the create page chooses its parent directory automatically; a folder source uses the folder's parent. Use **Choose another folder** when the archive should be written elsewhere. Format and compression-level changes are saved as defaults for later creates and Explorer quick create.
+
+## Explorer quick create does not work
+
+After a formal package installs and activates the Shell extension, Explorer exposes both the full create-page command and the direct quick-create command for files, folders, and folder backgrounds. Quick create uses the saved format and compression level without opening the main window. Selected items are archived beside the first item; a folder-background invocation archives the current directory's immediate children into that directory.
+
+If quick create reports an error, confirm that the saved format accepts the source shape. gzip, zstd, xz, lzma, bzip2, lz4, and Brotli accept one existing file only; use ZIP, 7z, or a TAR composition for folders. Errors are shown in a short dialog and do not open the full create page.
+
 ## An operation is slow or cancelled
 
 Large archives are protected by entry-count, expanded-size, compression-ratio, and memory limits; lists are paged in groups of 500. Cancellation waits for a Worker cancellation point and terminates the Worker after a timeout. Save the error text and reopen the application after a failure rather than repeatedly retrying the same suspicious archive.
