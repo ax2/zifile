@@ -21,7 +21,7 @@ The current worktree has completed the create-flow and Explorer quick-create inc
 - `tests/smoke/contract-policy.ps1` now wires the candidate CLI commands, seventeen creation formats, eighteen capability rows, bilingual contract pages, and exit codes into Windows CI; the final freeze remains reserved for the 1.0 release commit.
 - `release/readiness.json` binds stable tags to accessibility, queue, trusted-install, ARM64, screenshot, WACK, WinGet, Store, Partner Center, and signing evidence.
 - The Release workflow derives dual-architecture builds, audits, checksums, SBOMs, provenance, and GitHub Releases from the workspace version; ordinary public releases use unsigned artifacts, while formal signing can be enabled explicitly through workflow inputs.
-- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, `v0.1.8`, `v0.1.9`, `v0.1.10`, `v0.1.11`, `v0.1.12`, `v0.1.13`, `v0.1.14`, and `v0.1.15` have been published as public GitHub Releases from matching tags.
+- `v0.1.0-alpha.1` is publicly available as a prerelease; `v0.1.0`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`, `v0.1.8`, `v0.1.9`, `v0.1.10`, `v0.1.11`, `v0.1.12`, `v0.1.13`, `v0.1.14`, `v0.1.15`, and `v0.1.17` have been published as public GitHub Releases from matching tags; `v0.1.16` did not publish because of a WinGet candidate preflight defect.
 
 ## Required to finish
 
@@ -31,7 +31,7 @@ The current worktree has completed the create-flow and Explorer quick-create inc
 
 ## Release result
 
-Stable 1.0 has not been published; `v0.1.16` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+Stable 1.0 has not been published; `v0.1.17` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
 
 ## 2026-10-23 — Create output directories, defaults, and Explorer quick create
 

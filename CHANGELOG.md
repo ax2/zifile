@@ -6,6 +6,14 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-10-23
+
+### Fixed
+
+- Fix tag-triggered unsigned Release validation so the generated WinGet
+  candidate correctly recognizes the isolated development MSIX identity while
+  continuing to reject that identity for real community submission.
+
 ## [0.1.16] - 2026-10-23
 
 ### Added

@@ -472,10 +472,12 @@ jobs:
             Version = $version
             BundleInstallerPath = $bundle.FullName
           }
-          if ('${{ inputs.signing_provider }}' -eq 'none' -and
-              '${{ inputs.require_release_ready }}' -ne 'true') {
-            # Ordinary GitHub evidence intentionally uses the isolated .Dev
-            # identity; this switch is never used for a WinGet submission.
+          $formalRelease = '${{ github.event_name }}' -eq 'workflow_dispatch' -and
+            ('${{ inputs.require_release_ready }}' -eq 'true' -or
+             '${{ inputs.signing_provider }}' -eq 'digicert-stm')
+          if (-not $formalRelease) {
+            # Tag-triggered unsigned evidence uses the isolated .Dev identity.
+            # A real WinGet submission still requires a formal package identity.
             $verificationArguments.AllowDevelopmentIdentity = $true
           }
           ./packaging/winget/Test-Manifests.ps1 @verificationArguments
