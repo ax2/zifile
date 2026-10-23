@@ -195,9 +195,11 @@ fn quick_create_destination(directory: &Path, stem: &str, format: ArchiveFormat)
 }
 
 fn show_quick_create_error(message: &str) {
+    let locale = AppSettings::load().locale;
+    let message = format_worker_error(locale, message);
     let _ = rfd::MessageDialog::new()
         .set_title("ZiFile")
-        .set_description(message)
+        .set_description(&message)
         .set_level(rfd::MessageLevel::Error)
         .show();
 }

@@ -319,6 +319,34 @@ pub fn format_worker_error(locale: Locale, error: &str) -> String {
             format!("The requested operation is not supported for {details}")
         };
     }
+    if error.eq_ignore_ascii_case("at least one source is required") {
+        return if locale == Locale::ZhCn {
+            "至少需要一个压缩来源。".to_owned()
+        } else {
+            "At least one source is required.".to_owned()
+        };
+    }
+    if let Some(details) = error.strip_prefix("the output directory does not exist: ") {
+        return if locale == Locale::ZhCn {
+            format!("输出目录不存在：{details}")
+        } else {
+            format!("The output directory does not exist: {details}")
+        };
+    }
+    if let Some(details) = error.strip_prefix("the current directory does not exist: ") {
+        return if locale == Locale::ZhCn {
+            format!("当前目录不存在：{details}")
+        } else {
+            format!("The current directory does not exist: {details}")
+        };
+    }
+    if error.eq_ignore_ascii_case("the current directory has no items to archive") {
+        return if locale == Locale::ZhCn {
+            "当前目录没有可压缩的项目。".to_owned()
+        } else {
+            "The current directory has no items to archive.".to_owned()
+        };
+    }
     error.to_owned()
 }
 
@@ -791,6 +819,21 @@ mod tests {
         assert_eq!(
             format_worker_error(Locale::ZhCn, "the archive format could not be identified"),
             "无法识别压缩文件格式。"
+        );
+        assert_eq!(
+            format_worker_error(Locale::ZhCn, "at least one source is required"),
+            "至少需要一个压缩来源。"
+        );
+        assert_eq!(
+            format_worker_error(
+                Locale::ZhCn,
+                "the output directory does not exist: C:\\资料"
+            ),
+            "输出目录不存在：C:\\资料"
+        );
+        assert_eq!(
+            format_worker_error(Locale::En, "the current directory has no items to archive"),
+            "The current directory has no items to archive."
         );
     }
 }
