@@ -31,7 +31,7 @@ The current worktree has completed the create-flow and Explorer quick-create inc
 
 ## Release result
 
-Stable 1.0 has not been published; `v0.1.15` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
+Stable 1.0 has not been published; `v0.1.16` is the current usable public GitHub version, while formal Store, WinGet, and trusted-signing gates remain incomplete. Stage 4 remains active.
 
 ## 2026-10-23 — Create output directories, defaults, and Explorer quick create
 

@@ -6,6 +6,8 @@ All notable changes to ZiFile are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-10-23
+
 ### Added
 
 - Add create-page output-directory defaults based on the first selected source,

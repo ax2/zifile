@@ -31,7 +31,7 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 发布结果
 
-稳定 1.0 尚未发布；`v0.1.15` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
+稳定 1.0 尚未发布；`v0.1.16` 是当前面向 GitHub 的公开可用版本，但正式 Store、WinGet 和可信签名门禁仍未完成。Stage 4 保持进行中。
 
 ## 2026-10-23 — 创建输出目录、默认参数与 Explorer 快速创建
 
