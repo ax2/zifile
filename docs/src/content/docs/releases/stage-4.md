@@ -13,7 +13,11 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 当前 Unreleased 增量
 
-当前工作区已完成创建流程与 Explorer 快速创建增量，并通过本地 x64 构建和独立 EXE 冒烟；固定 MSZIP CAB 创建已随 v0.1.15 发布，RAR 在当前契约中保持 Beta 只读；TAR + LZ4 已随 v0.1.13 发布，v0.1.14 已发布归档操作栏专业化分组。下一次 tag 发布仍需由 Release workflow 生成公开资产。
+当前工作区已完成创建流程与 Explorer 快速创建增量，并通过本地 x64 构建和独立 EXE 冒烟；固定 MSZIP CAB 创建已随 v0.1.15 发布，RAR 在当前契约中保持 Beta 只读；TAR + LZ4 已随 v0.1.13 发布，v0.1.14 已发布归档操作栏专业化分组。v0.1.17 已由 Release workflow 生成公开资产，作为当前 GitHub 可用版本。
+
+- Release workflow [39959643852](https://github.com/ax2/zifile/actions/runs/39959643852) 于 `2026-10-23T13:43:59Z` 成功完成；[v0.1.17 Release](https://github.com/ax2/zifile/releases/tag/v0.1.17) 为非草稿、非预发布版本。
+- 公开资产严格为 `ZiFile-0.1.17.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`；没有单独发布 DLL、JSON、YAML、SBOM 或 ZIP。WinGet 清单候选作为 workflow artifact 保留。
+- 下载后的 bundle 与两个独立 EXE 已重新计算 SHA-256，并与 Release 的 `SHA256SUMS.txt` 和 GitHub digest 一致。Release Notes 保留 SignPath Foundation 代码签名说明，同时明确该版本仍是未签名 GitHub 构建，不是 Microsoft Store 认证包。
 
 ## 已准备
 

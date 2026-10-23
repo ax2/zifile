@@ -13,7 +13,11 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 ## Current Unreleased increment
 
-The current worktree has completed the create-flow and Explorer quick-create increment, with local x64 packaging and standalone-EXE smoke evidence. Fixed-MSZIP CAB creation shipped in v0.1.15; RAR remains a read-only Beta provider under the current contract. TAR + LZ4 shipped in v0.1.13, and the professional grouped archive toolbar shipped in v0.1.14. The next tag release still needs the Release workflow to generate public assets.
+The current worktree has completed the create-flow and Explorer quick-create increment, with local x64 packaging and standalone-EXE smoke evidence. Fixed-MSZIP CAB creation shipped in v0.1.15; RAR remains a read-only Beta provider under the current contract. TAR + LZ4 shipped in v0.1.13, and the professional grouped archive toolbar shipped in v0.1.14. The v0.1.17 Release workflow generated the public assets and is the current usable GitHub version.
+
+- Release workflow [39959643852](https://github.com/ax2/zifile/actions/runs/39959643852) completed successfully at `2026-10-23T13:43:59Z`; the [v0.1.17 Release](https://github.com/ax2/zifile/releases/tag/v0.1.17) is neither a draft nor a prerelease.
+- Public assets are exactly `ZiFile-0.1.17.0-windows.msixbundle`, `zifile-windows-x64.exe`, `zifile-windows-arm64.exe`, and `SHA256SUMS.txt`; standalone DLLs, JSON/YAML, SBOM, and ZIP files are not published. The WinGet manifest candidate remains a workflow artifact.
+- The downloaded bundle and both standalone EXEs were rehashed and matched the Release `SHA256SUMS.txt` and GitHub digests. Release Notes retain the SignPath Foundation code-signing disclosure while stating that this remains an unsigned GitHub build and is not Microsoft Store-certified.
 
 ## Prepared
 
