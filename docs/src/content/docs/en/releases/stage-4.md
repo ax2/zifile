@@ -13,7 +13,7 @@ Stage 4 is not complete. A public-contract candidate, the 1.0 readiness manifest
 
 ## Current Unreleased increment
 
-The current worktree contains a pending create-flow and Explorer quick-create increment. Fixed-MSZIP CAB creation shipped in v0.1.15; RAR remains a read-only Beta provider under the current contract. TAR + LZ4 shipped in v0.1.13, and the professional grouped archive toolbar shipped in v0.1.14.
+The current worktree has completed the create-flow and Explorer quick-create increment, with local x64 packaging and standalone-EXE smoke evidence. Fixed-MSZIP CAB creation shipped in v0.1.15; RAR remains a read-only Beta provider under the current contract. TAR + LZ4 shipped in v0.1.13, and the professional grouped archive toolbar shipped in v0.1.14. The next tag release still needs the Release workflow to generate public assets.
 
 ## Prepared
 
@@ -120,7 +120,7 @@ Stable 1.0 has not been published; `v0.1.15` is the current usable public GitHub
 - The locale check now requires all 31 Chinese/English page pairs to exist and have a non-empty body after front matter is removed; a present-but-blank Markdown page fails the check.
 - `cargo test --workspace --all-targets --all-features --locked` passed across the CLI, core, 42 archive regressions, Iced, accessible candidate, Shell, Worker, protocol, and Criterion targets.
 - The default Iced window now starts centered and enforces a 920×620 minimum so archive tables, search controls, and creation fields remain usable while resizing; a window-settings regression test covers the contract.
-- The Astro static build generated 63 pages with 0 errors/warnings/hints; user documentation, Node/PowerShell syntax, packaging policy, and worktree hygiene checks passed.
+- The Astro static build generated 67 pages with 0 errors/warnings/hints; user documentation, Node/PowerShell syntax, packaging policy, and worktree hygiene checks passed.
 - This is local code and documentation evidence. It does not change the 11 external release gates from `pending` and does not replace trusted signing, Store/WinGet, physical ARM64, WACK, or real assistive-technology validation.
 
 ## 2026-08-30 — 0.1.2 release preparation
