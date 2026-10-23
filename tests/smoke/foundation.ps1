@@ -28,7 +28,7 @@ try {
         $formats -notmatch '(?m)^TAR \+ LZMA\tyes\tyes\tyes\tfiles-or-directories\t0-9\tno\tAlpha$' -or
         $formats -notmatch '(?m)^TAR \+ LZ4\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tAlpha$' -or
         $formats -notmatch '(?m)^LZ4\tyes\tyes\tyes\tsingle-file\tfixed\tno\tAlpha$' -or
-        $formats -notmatch '(?m)^RAR\tyes\tyes\tyes\tfiles-or-directories\t0-5\tyes\tBeta$' -or
+        $formats -notmatch '(?m)^RAR\tyes\tyes\tno\tnone\tnone\tyes\tBeta$' -or
         $formats -notmatch '(?m)^CAB\tyes\tyes\tyes\tfiles-or-directories\tfixed\tno\tBeta$'
     ) {
         throw 'CLI format registry smoke test failed.'
@@ -126,7 +126,6 @@ try {
         @{ Format = 'tar-xz'; ArchiveName = 'smoke.tar.xz'; Output = 'tar-xz-output' },
         @{ Format = 'tar-bzip2'; ArchiveName = 'smoke.tar.bz2'; Output = 'tar-bzip2-output' },
         @{ Format = 'tar-lz4'; ArchiveName = 'smoke.tar.lz4'; Output = 'tar-lz4-output' },
-        @{ Format = 'rar'; ArchiveName = 'smoke.rar'; Output = 'rar-output' },
         @{ Format = 'cab'; ArchiveName = 'smoke.cab'; Output = 'cab-output' }
     )) {
         Invoke-CliRoundTrip `
@@ -136,6 +135,15 @@ try {
             -OutputDirectory $case.Output `
             -ExpectedRelativePath 'input\nested\unicode-测试.txt' `
             -ExpectedContent 'archive smoke'
+    }
+
+    $unsupportedRarArchive = Join-Path $smokeRoot 'unsupported.rar'
+    $unsupportedRarError = (& $cliPath create $unsupportedRarArchive `
+        (Join-Path $smokeRoot 'input\hello.txt') 2>&1) -join "`n"
+    if ($LASTEXITCODE -ne 1 -or
+        $unsupportedRarError -notmatch 'RAR does not support creation' -or
+        (Test-Path -LiteralPath $unsupportedRarArchive)) {
+        throw "CLI RAR read-only contract failed: $unsupportedRarError"
     }
 
     foreach ($case in @(

@@ -16,6 +16,9 @@ All notable changes to ZiFile are documented here. The format follows
 
 ### Changed
 
+- Restrict RAR to the reviewed read-only provider contract; remove RAR from
+  creation menus and reject RAR creation instead of advertising an unsupported
+  writer.
 - Route Explorer quick-create work through the versioned isolated Worker and
   Job Object path instead of running archive work in the desktop process.
 - Localize common Explorer quick-create errors in both desktop UI entry points

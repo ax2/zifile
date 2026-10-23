@@ -13,12 +13,12 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 
 ## 当前 Unreleased 增量
 
-当前工作区包含待发布的创建流程与 Explorer 快速创建增量；RAR 5 创建和固定 MSZIP CAB 创建已随 v0.1.15 发布；TAR + LZ4 已随 v0.1.13 发布，v0.1.14 已发布归档操作栏专业化分组。
+当前工作区包含待发布的创建流程与 Explorer 快速创建增量；固定 MSZIP CAB 创建已随 v0.1.15 发布，RAR 在当前契约中保持 Beta 只读；TAR + LZ4 已随 v0.1.13 发布，v0.1.14 已发布归档操作栏专业化分组。
 
 ## 已准备
 
 - `docs/src/content/docs/development/contracts.md` 定义 CLI 命令、格式值、冲突策略、密码输入、退出码、核心 Provider 和 Worker 协议边界。
-- `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、18 个创建格式、18 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
+- `tests/smoke/contract-policy.ps1` 已将候选 CLI 命令、17 个创建格式、18 行能力矩阵、双语契约页和退出码接入 Windows CI；最终冻结仍保留到 1.0 发布提交。
 - `release/readiness.json` 将稳定标签绑定到辅助功能、队列、可信安装、ARM64、截图、WACK、WinGet、Store、Partner Center 和签名证据。
 - Release workflow 从 workspace 版本生成双架构构建、审计、校验和、SBOM、来源证明和 GitHub Release；普通公开发布使用未签名产物，正式签名可通过 workflow 输入显式开启。
 - `v0.1.0-alpha.1` 已作为公开 prerelease 发布；`v0.1.0`、`v0.1.2`、`v0.1.3`、`v0.1.4`、`v0.1.5`、`v0.1.6`、`v0.1.7`、`v0.1.8`、`v0.1.9`、`v0.1.10`、`v0.1.11`、`v0.1.12`、`v0.1.13`、`v0.1.14` 和 `v0.1.15` 均通过匹配 tag 自动生成公开 GitHub Release。
@@ -39,12 +39,13 @@ Stage 4 尚未完成。公开契约候选、1.0 readiness manifest、发布 work
 - 格式和压缩等级会写入本地设置，并作为下一次创建及 Explorer 快速创建的默认参数；密码和输出目录不会持久化。
 - Shell 扩展新增独立的快速创建 CLSID，覆盖文件、文件夹和 `Directory\\Background`。选中项目时直接在第一个来源旁生成归档，右键当前目录空白区域时将直接子项归档到当前目录，不打开主界面；原有 UI 创建入口保留。
 - 快速创建失败对话框复用双语 Worker 错误格式化入口，常见的空目录、缺失目录和无来源错误会按用户设置显示中文或英文，同时保留后端诊断细节。
-- 默认 Iced UI、可访问 Dioxus UI、MSIX 清单、包审计、PowerShell packaging policy 和中英文用户文档已同步；快速创建现在和普通桌面操作一样通过版本化 Worker 与 Job Object 执行，避免长任务占用桌面进程；x64 本地 MSIX `0.1.15.4` 审计确认新 Shell CLSID、三种项目类型和无敏感文件。真实签名安装和 Explorer 生命周期仍属于外部发布门禁。
-- 验证：Iced 桌面单测 58 项、桌面库单测 41 项、Shell 单测 21 项、无障碍 UI 编译、packaging policy、MSIX 审计，以及独立 EXE 的文件/当前目录快速创建冒烟均通过；该冒烟使用隔离 `LOCALAPPDATA` 验证默认 ZIP 参数、通过 Worker 读取两个结果归档；真实窗口复核确认创建页和保存对话框默认输出目录正确。
+- RAR 能力边界按仓库规则收敛为只读 Beta：保留 1.3–7 浏览、校验和安全解压，移除创建菜单和 RAR writer 路径；新增 ADR-0008 记录 `rars` 0.9.3 的 MIT OR Apache-2.0 许可、锁定 checksum、安全限制和恶意语料证据。
+- 默认 Iced UI、可访问 Dioxus UI、MSIX 清单、包审计、PowerShell packaging policy 和中英文用户文档已同步；快速创建现在和普通桌面操作一样通过版本化 Worker 与 Job Object 执行，避免长任务占用桌面进程；x64 本地 MSIX `0.1.15.6` 审计确认新 Shell CLSID、三种项目类型、RAR 只读关联和无敏感文件。真实签名安装和 Explorer 生命周期仍属于外部发布门禁。
+- 验证：Iced 桌面单测 58 项、桌面库单测 41 项、核心单测 18 项、归档集成 55 项、CLI 10 项、Shell 21 项、Clippy、Starlight 67 页构建、RAR 外部语料互操作、packaging policy、MSIX 审计，以及独立 EXE 的文件/当前目录快速创建冒烟均通过；该冒烟使用隔离 `LOCALAPPDATA` 验证默认 ZIP 参数、通过 Worker 读取两个结果归档；真实窗口复核确认创建页和保存对话框默认输出目录正确。
 
 ## 2026-09-01 v0.1.15 RAR 5/CAB 创建与公开版本结果
 
-- RAR 5 创建支持等级 0–5、密码加密文件头、进度、取消和原子输出；RAR 分卷、恢复记录、更新和重命名限制已明确。Windows CAB 创建使用固定 MSZIP，并与核心、CLI、两套桌面 UI、列表/校验/选择性解压往返测试和双语文档贯通；空目录、密码、更新和重命名限制已明确。
+- 历史 v0.1.15 记录曾包含 RAR 5 创建；当前工作区依据 ADR-0008 已将 RAR 收敛为只读 Beta，保留 RAR 分卷、恢复记录、更新和重命名限制。Windows CAB 创建继续使用固定 MSZIP，并与核心、CLI、两套桌面 UI、列表/校验/选择性解压往返测试和双语文档贯通；空目录、密码、更新和重命名限制已明确。
 - PR [#106](https://github.com/ax2/zifile/pull/106) 合并提交为 `13f1d0e25c3a546ebe2f88b172feb2479de05d67`，tag `v0.1.15` 精确指向该提交。
 - [Release workflow 33502996127](https://github.com/ax2/zifile/actions/runs/33502996127) 成功完成 SBOM、x64/ARM64 测试和构建、独立 EXE 冒烟/审计、all-in-one bundle、资产审计和公开发布。
 - [v0.1.15 Release](https://github.com/ax2/zifile/releases/tag/v0.1.15) 于 `2026-09-01T12:05:59Z` 发布，非草稿、非预发布，严格只公开 `ZiFile-0.1.15.0-windows.msixbundle`、`zifile-windows-x64.exe`、`zifile-windows-arm64.exe` 和 `SHA256SUMS.txt`；没有 DLL、JSON、YAML 或 ZIP。

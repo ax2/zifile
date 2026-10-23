@@ -30,7 +30,7 @@ Goal: safely open, list, create, and extract common archives.
 
 - [x] ZIP read/write, including ZIP64 and AES-encrypted entries.
 - [x] 7z read/write with optional AES encryption.
-- [x] Beta RAR 1.3–7 browse/test/selective extraction with password support, plus RAR 5 creation at levels 0–5 with optional encrypted headers; update and rename remain unsupported.
+- [x] Beta RAR 1.3–7 browse/test/selective extraction with password support; RAR creation, update, and rename remain outside the product boundary after the explicit license/security review.
 - [x] TAR and gzip/zstd/xz/LZMA/bzip2 stream composition; standalone LZMA-alone creation is also available, while lz4/brotli remain single-stream formats.
 - [x] Beta Windows CAB creation with fixed MSZIP compression, plus None/MSZIP/LZX read support; empty directories, passwords, updates, and renames remain explicitly unsupported for CAB.
 - [x] Signature-based format detection.

@@ -200,24 +200,7 @@ fn cab_uncompressed_content_is_supported() {
 #[test]
 fn readonly_archives_restore_file_modified_times() {
     const EXPECTED: u64 = 1_700_000_000;
-    const DOS_DATETIME: u32 = 0x576E_B1AA; // 2023-11-14 22:13:20
     let temp = tempfile::tempdir().unwrap();
-
-    let rar = temp.path().join("dated.rar");
-    let mut rar_builder = rars::Builder::new(rars::ArchiveVersion::Rar50);
-    rar_builder
-        .add_bytes(
-            b"dated.txt".to_vec(),
-            b"RAR timestamp".to_vec(),
-            Some(DOS_DATETIME),
-            None,
-        )
-        .unwrap();
-    rar_builder.write_to_path(&rar, None).unwrap();
-    let rar_output = temp.path().join("rar-dated");
-    assert_listed_mtime(&rar, "dated.txt", ArchiveTimestampOffset::Unspecified);
-    extract_archive(&rar, &rar_output, &ExtractOptions::default()).unwrap();
-    assert_mtime(&rar_output.join("dated.txt"), EXPECTED);
 
     let cab = temp.path().join("dated.cab");
     let mut cab_builder = cab::CabinetBuilder::new();
@@ -962,7 +945,7 @@ fn rar_supports_solid_selected_extraction() {
     assert!(capabilities.list);
     assert!(capabilities.extract);
     assert!(capabilities.encryption);
-    assert!(capabilities.create);
+    assert!(!capabilities.create);
 
     let info = list_archive(&archive, None).unwrap();
     assert_eq!(info.format, ArchiveFormat::Rar);
@@ -987,56 +970,6 @@ fn rar_supports_solid_selected_extraction() {
     assert_eq!(
         fs::read_to_string(output.join("nested/中文.txt")).unwrap(),
         "RAR 安全归档\n"
-    );
-}
-
-#[test]
-fn rar_creation_round_trip_supports_passwords_and_progress() {
-    let temp = tempfile::tempdir().unwrap();
-    let source = temp.path().join("rar-source");
-    fs::create_dir_all(source.join("nested")).unwrap();
-    fs::write(source.join("hello.txt"), "hello from ZiFile RAR\n").unwrap();
-    fs::write(source.join("nested/中文.txt"), "安全 RAR 创建\n").unwrap();
-    let archive = temp.path().join("created.rar");
-    let progress = OperationProgress::default();
-    let summary = create_archive(
-        &[source],
-        &archive,
-        ArchiveFormat::Rar,
-        &CreateOptions {
-            compression_level: 3,
-            password: Some("correct horse".to_owned()),
-            progress: progress.clone(),
-            ..CreateOptions::default()
-        },
-    )
-    .unwrap();
-    assert_eq!(summary.files, 2);
-    assert_eq!(summary.directories, 2);
-    assert_eq!(summary.bytes, 40);
-    assert_eq!(detect_format(&archive).unwrap(), ArchiveFormat::Rar);
-    assert!(list_archive(&archive, None).is_err());
-    assert!(list_archive(&archive, Some("wrong password")).is_err());
-    let info = list_archive(&archive, Some("correct horse")).unwrap();
-    assert_eq!(info.entries.len(), 2);
-    assert!(info.entries.iter().all(|entry| entry.encrypted));
-    assert_eq!(progress.snapshot().processed_entries, 2);
-    assert_eq!(progress.snapshot().processed_bytes, 40);
-
-    let output = temp.path().join("created-rar");
-    let summary = extract_archive(
-        &archive,
-        &output,
-        &ExtractOptions {
-            password: Some("correct horse".to_owned()),
-            ..ExtractOptions::default()
-        },
-    )
-    .unwrap();
-    assert_eq!(summary.files, 2);
-    assert_eq!(
-        fs::read_to_string(output.join("rar-source/nested/中文.txt")).unwrap(),
-        "安全 RAR 创建\n"
     );
 }
 

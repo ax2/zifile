@@ -113,7 +113,7 @@ impl ArchiveFormat {
     ///
     /// Keeping this beside `ALL` prevents the two desktop interfaces from
     /// maintaining subtly different creation menus as new providers arrive.
-    pub const CREATABLE: [Self; 18] = [
+    pub const CREATABLE: [Self; 17] = [
         Self::Zip,
         Self::SevenZip,
         Self::Tar,
@@ -130,13 +130,12 @@ impl ArchiveFormat {
         Self::Bzip2,
         Self::Lz4,
         Self::Brotli,
-        Self::Rar,
         Self::Cab,
     ];
 
     pub const fn capabilities(self) -> FormatCapabilities {
         match self {
-            Self::Rar => FormatCapabilities::read_write(true, ReleaseStage::Beta),
+            Self::Rar => FormatCapabilities::read_only(true, ReleaseStage::Beta),
             Self::Cab => FormatCapabilities::read_write(false, ReleaseStage::Beta),
             Self::SevenZip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
             Self::Zip => FormatCapabilities::read_write(true, ReleaseStage::Alpha),
@@ -160,7 +159,7 @@ impl ArchiveFormat {
     /// Source shape accepted when creating this format.
     pub const fn create_input(self) -> Option<CreateInputKind> {
         match self {
-            Self::Rar => Some(CreateInputKind::FilesAndDirectories),
+            Self::Rar => None,
             Self::Cab => Some(CreateInputKind::FilesAndDirectories),
             Self::Gzip
             | Self::Zstandard
@@ -199,7 +198,7 @@ impl ArchiveFormat {
             Self::TarBzip2 | Self::Bzip2 => Some((1, 9)),
             Self::Brotli => Some((0, 11)),
             Self::Tar | Self::TarLz4 | Self::Lz4 | Self::Cab => None,
-            Self::Rar => Some((0, 5)),
+            Self::Rar => None,
         }
     }
 
@@ -335,6 +334,16 @@ impl FormatCapabilities {
             list: true,
             extract: true,
             create: true,
+            encryption,
+            stage,
+        }
+    }
+
+    const fn read_only(encryption: bool, stage: ReleaseStage) -> Self {
+        Self {
+            list: true,
+            extract: true,
+            create: false,
             encryption,
             stage,
         }
@@ -608,11 +617,11 @@ mod tests {
     }
 
     #[test]
-    fn rar_is_creatable_beta() {
+    fn rar_is_read_only_beta() {
         let capabilities = ArchiveFormat::Rar.capabilities();
         assert!(capabilities.list);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert!(capabilities.encryption);
         assert_eq!(capabilities.stage, ReleaseStage::Beta);
     }
@@ -639,7 +648,6 @@ mod tests {
             ArchiveFormat::TarLzma,
             ArchiveFormat::TarBzip2,
             ArchiveFormat::TarLz4,
-            ArchiveFormat::Rar,
             ArchiveFormat::Cab,
         ] {
             assert_eq!(
@@ -658,15 +666,12 @@ mod tests {
         ] {
             assert_eq!(format.create_input(), Some(CreateInputKind::SingleFile));
         }
-        assert_eq!(
-            ArchiveFormat::Rar.create_input(),
-            Some(CreateInputKind::FilesAndDirectories)
-        );
+        assert_eq!(ArchiveFormat::Rar.create_input(), None);
     }
 
     #[test]
     fn creatable_display_order_matches_capabilities() {
-        assert_eq!(ArchiveFormat::CREATABLE.len(), 18);
+        assert_eq!(ArchiveFormat::CREATABLE.len(), 17);
         for format in ArchiveFormat::CREATABLE {
             assert!(format.capabilities().create);
             assert!(format.create_input().is_some());
